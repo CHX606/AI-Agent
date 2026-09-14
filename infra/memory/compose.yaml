@@ -1,0 +1,26 @@
+name: bit-agent-memory-test
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: bit_agent_test
+      POSTGRES_USER: bit_agent_test
+      POSTGRES_PASSWORD: bit_agent_test
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bit_agent_test -d bit_agent_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

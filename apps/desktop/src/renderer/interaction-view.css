@@ -1,0 +1,41 @@
+.interaction-pause { height: 31px; padding: 0 9px; border-radius: 7px; background: transparent; color: var(--text-soft); font-size: 13px; }
+.interaction-pause:hover:not(:disabled) { background: var(--bg-hover); }
+/* 等待回答是一个单独的状态卡片，不再塞进用户正在打字的输入框。 */
+.task-interaction { margin: 0 0 10px; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--bg-main); box-shadow: var(--surface-shadow); font-size: 13px; line-height: 1.6; }
+.interaction-heading { display: flex; align-items: center; gap: 9px; padding: 10px 13px; background: var(--bg-panel); }
+.interaction-heading > svg { flex: none; width: 16px; height: 16px; color: var(--brand); }
+.interaction-notice { flex: 1; min-width: 0; color: var(--text-soft); font-size: 12px; }
+.interaction-heading .button-secondary { flex: none; min-height: 27px; padding: 0 8px; font-size: 12px; font-weight: 500; }
+.interaction-body { max-height: min(36dvh, 320px); padding: 13px 14px; overflow: auto; overscroll-behavior: contain; border-top: 1px solid var(--border); }
+.interaction-error { margin-bottom: 10px; padding: 8px 10px; border-radius: 6px; background: var(--red-soft); color: var(--red); overflow-wrap: anywhere; font-size: 12px; }
+.question-title { display: block; margin-bottom: 5px; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.question-deadline { margin-bottom: 10px; color: var(--text-muted); font-size: 11px; }
+.question-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 7px; min-width: 0; border: 0; }
+.question-options > label { display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-main); cursor: pointer; }
+.question-options > label:hover { border-color: var(--border-strong); background: var(--bg-panel); }
+.question-options > label:has(input:checked) { border-color: var(--field-focus-border); background: var(--brand-soft); }
+.question-options input { flex: none; margin-top: 4px; accent-color: var(--brand); }
+.question-options > label > span { min-width: 0; overflow-wrap: anywhere; }
+.question-options strong { font-size: 12px; font-weight: 600; }
+.question-options small { display: block; margin-top: 3px; color: var(--text-muted); font-size: 11px; line-height: 1.6; }
+.question-recommendation { display: inline-block; margin-left: 6px; padding: 0 4px; border-radius: 3px; background: var(--bg-panel); color: var(--text-muted); font-size: 10px; font-weight: 400; }
+.question-free-answer { margin-top: 10px; }
+.question-free-answer > summary, .intent-editor > summary, .operation-details > summary { width: fit-content; color: var(--text-soft); cursor: pointer; font-size: 12px; }
+.question-submit-row { display: flex; justify-content: flex-end; margin-top: 10px; }
+.task-interaction textarea { display: block; width: 100%; min-height: 62px; max-height: 140px; margin: 8px 0; padding: 8px 10px; resize: vertical; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--bg-main); color: var(--text); font-size: 13px; line-height: 1.6; }
+.task-interaction textarea::placeholder { color: var(--text-faint); }
+.task-interaction textarea:focus, .task-interaction select:focus { outline: none; border-color: var(--field-focus-border); box-shadow: var(--field-focus-ring); }
+.intent-editor { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.task-interaction[data-status="PAUSED"] .intent-editor { margin-top: 0; padding-top: 0; border-top: 0; }
+.intent-kind-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.intent-kind-row label { flex: none; color: var(--text-muted); font-size: 12px; }
+.intent-kind-row select { width: 100%; min-width: 0; height: 31px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-main); color: var(--text-soft); font: 12px var(--font-sans); }
+.intent-note { margin-top: 5px; color: var(--text-muted); font-size: 11px; }
+.interaction-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.operation-details { margin-bottom: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-panel); }
+.operation-details pre { max-height: 180px; margin-top: 8px; overflow: auto; color: var(--text-soft); white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.7 var(--font-mono); }
+@media (max-width: 720px) {
+  .interaction-heading { flex-wrap: wrap; padding: 9px 10px; }
+  .interaction-body { padding: 10px; }
+  .question-options { grid-template-columns: 1fr; }
+}

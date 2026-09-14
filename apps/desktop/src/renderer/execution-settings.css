@@ -1,0 +1,39 @@
+/* 使用 Web Awesome 的交互、焦点管理和响应式弹窗，仅映射现有产品主题。 */
+.execution-settings-trigger { display: block; width: 100%; margin-bottom: 3px; }
+.execution-settings-trigger::part(base) {
+  justify-content: flex-start; min-height: 34px; padding: 6px 8px;
+  border-radius: 6px; color: var(--text-soft); font: 12px var(--font-sans);
+}
+.execution-settings-trigger::part(base):hover { background: var(--bg-hover); color: var(--text); }
+.execution-settings-trigger svg, .execution-settings-compact svg {
+  display: block; width: 15px; height: 15px; fill: none; stroke: currentColor;
+  stroke-width: 1.7; stroke-linecap: round;
+}
+.execution-settings-compact { display: none; }
+.execution-settings-dialog { --width: 540px; --spacing: 24px; --backdrop-filter: blur(3px); }
+.execution-settings-dialog::part(dialog) {
+  border: 1px solid var(--border-strong); border-radius: 12px;
+  background: var(--bg-main); color: var(--text); box-shadow: var(--shadow-composer);
+}
+.execution-settings-dialog::part(title) { font: 650 18px var(--font-sans); }
+.execution-settings-dialog::part(header) { border-bottom: 1px solid var(--border); }
+.execution-settings-dialog::part(close-button) { display: none; }
+#execution-settings-close svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
+#execution-settings-close::part(base) { padding: 0; min-height: 24px; color: var(--text-muted); }
+.execution-settings-dialog::part(footer) { border-top: 1px solid var(--border); padding-block-start: 16px; }
+.execution-settings-form { display: grid; gap: 20px; }
+.execution-settings-description, .execution-settings-note { color: var(--text-muted); font: 12px/1.75 var(--font-sans); }
+.execution-settings-note { padding: 12px 14px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-panel); }
+.execution-settings-note p + p { margin-top: 6px; }
+.execution-settings-dialog wa-input { --wa-form-control-background-color: var(--bg-main); --wa-form-control-border-color: var(--border-strong); --wa-form-control-value-color: var(--text); }
+.execution-settings-dialog wa-input::part(hint) { color: var(--text-muted); font-size: 12px; line-height: 1.65; }
+.execution-settings-dialog wa-input::part(form-control-label) { color: var(--text); font-size: 13px; }
+.execution-settings-dialog wa-input [slot="end"] { color: var(--text-muted); font-size: 12px; }
+.execution-settings-form .product-feedback { margin: 0; }
+.execution-settings-footer { display: flex; width: 100%; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+#execution-settings-reset { margin-right: auto; }
+@media (max-width: 720px) {
+  .execution-settings-compact { display: block; }
+  .execution-settings-compact::part(base) { width: 32px; min-height: 34px; padding: 0; color: var(--text-soft); }
+  .execution-settings-dialog { --spacing: 16px; }
+}

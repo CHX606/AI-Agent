@@ -1,3 +1,15 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+allowBuilds:
+  esbuild: true
+
+# dependency-cruiser's optional parser must not resolve the applications' TS 7.
+packageExtensions:
+  'dependency-cruiser@18':
+    dependencies:
+      typescript: '^6.0.3'
+
+# One store for this workspace and every package, independent of the shell cwd.
+storeDir: 'D:/myproject/AI Agent.pnpm-store'

@@ -1,0 +1,61 @@
+.agent-mode-controls { display: flex; flex: none; align-items: center; }
+.agent-mode-prefix { color: var(--text-muted); font: 600 12px var(--font-sans); white-space: nowrap; }
+.saved-turn { padding: 20px 0; border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent); }
+.saved-turn > strong { display: block; font-size: 13px; margin: 12px 0; }
+.saved-question { white-space: pre-wrap; overflow-wrap: anywhere; }
+#previous-turns:empty { display: none; }
+@media (max-width: 700px) { .composer-toolbar, .composer-context { flex-wrap: wrap; gap: 8px; } }
+
+/* 已完成的对话和当前消息使用相同的阅读宽度，避免历史内容贴着窗口边缘。 */
+.saved-turn {
+  width: calc(100% - 56px);
+  max-width: 900px;
+  min-width: 0;
+  margin: 0 auto;
+  padding: 24px 0 28px;
+  border-bottom: 1px solid var(--border);
+}
+.saved-turn > strong {
+  position: relative;
+  display: block;
+  min-height: 25px;
+  margin-bottom: 10px;
+  padding-left: 36px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 25px;
+}
+.saved-turn > strong::before {
+  content: "你";
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 7px;
+  background: var(--bg-hover);
+  color: var(--text-soft);
+  font-size: 11px;
+}
+.saved-turn > strong:nth-of-type(2) { margin-top: 22px; }
+.saved-turn > strong:nth-of-type(2)::before { content: "B"; background: var(--brand-soft); color: var(--brand); }
+.saved-turn .saved-question {
+  display: table;
+  max-width: calc(100% - 36px);
+  margin: 0 0 0 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.saved-turn > .markdown-body { min-width: 0; margin-left: 36px; overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .saved-turn { width: calc(100% - 30px); padding: 18px 0 22px; }
+}

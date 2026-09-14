@@ -1,15 +1,27 @@
 {
-  "name": "repopilot",
+  "name": "bit-agent",
   "version": "0.1.0",
   "private": true,
   "description": "Repository-level AI coding agent",
-  "packageManager": "pnpm@10.10.0",
+  "packageManager": "pnpm@11.19.0",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
+    "architecture:check": "pnpm architecture:js && pnpm architecture:python",
+    "architecture:js": "depcruise --config .dependency-cruiser.cjs apps/desktop/src apps/gateway/src packages/diagnostics/index.mjs",
+    "architecture:python": "node scripts/check-python-architecture.mjs",
     "test": "pnpm -r test",
-    "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "lint": "pnpm -r lint && pnpm architecture:check",
+    "typecheck": "pnpm -r typecheck",
+    "desktop:build": "pnpm --dir apps/desktop build",
+    "desktop:dev": "pnpm --dir apps/desktop build && node scripts/desktop-dev.mjs",
+    "desktop:only": "pnpm --dir apps/desktop dev",
+    "gateway:dev": "pnpm --dir apps/gateway dev",
+    "desktop:package": "pnpm desktop:build && node scripts/package-desktop.mjs"
+  },
+  "devDependencies": {
+    "dependency-cruiser": "^18.2.0",
+    "typescript": "^6.0.3"
   }
 }
