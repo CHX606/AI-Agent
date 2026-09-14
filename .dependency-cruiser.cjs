@@ -1,0 +1,38 @@
+/** Executable layer boundaries. Composition roots alone select concrete adapters. */
+module.exports = {
+  forbidden: [
+    { name: "no-circular-dependencies", severity: "error", from: {}, to: { circular: true } },
+    { name: "gateway-inner-layers", severity: "error",
+      from: { path: "^apps/gateway/src/(domain|application)/" },
+      to: { path: "^apps/gateway/src/(infrastructure/|transport/|bootstrap\\.ts|index\\.ts)" } },
+    { name: "gateway-domain-independent", severity: "error",
+      from: { path: "^apps/gateway/src/domain/" }, to: { path: "^apps/gateway/src/application/" } },
+    { name: "gateway-http-uses-ports", severity: "error",
+      from: { path: "^apps/gateway/src/transport/" },
+      to: { path: "^apps/gateway/src/(infrastructure/|bootstrap\\.ts|index\\.ts)" } },
+    { name: "gateway-adapters-independent-of-http", severity: "error",
+      from: { path: "^apps/gateway/src/infrastructure/" }, to: { path: "^apps/gateway/src/transport/" } },
+    { name: "desktop-renderer-isolated", severity: "error",
+      from: { path: "^apps/desktop/src/renderer/" },
+      to: { path: "^(apps/desktop/src/main/|electron$|node:)" } },
+    { name: "desktop-shared-contracts-independent", severity: "error",
+      from: { path: "^apps/desktop/src/shared/" }, to: { path: "^apps/desktop/src/(main|renderer)/" } },
+    { name: "desktop-application-uses-ports", severity: "error",
+      from: { path: "^apps/desktop/src/main/application/" },
+      to: { path: "^apps/desktop/src/main/(infrastructure/|transport/|main\\.ts)" } },
+    { name: "desktop-ipc-uses-ports", severity: "error",
+      from: { path: "^apps/desktop/src/main/transport/" },
+      to: { path: "^apps/desktop/src/main/(infrastructure/|main\\.ts)" } },
+    { name: "desktop-adapters-independent-of-ipc", severity: "error",
+      from: { path: "^apps/desktop/src/main/infrastructure/" },
+      to: { path: "^apps/desktop/src/main/(transport/|main\\.ts)" } },
+  ],
+  options: {
+    doNotFollow: { path: "node_modules" },
+    tsPreCompilationDeps: true,
+    enhancedResolveOptions: {
+      extensions: [".ts", ".cts", ".js", ".mjs", ".cjs", ".json"],
+      conditionNames: ["import", "require", "node", "default"],
+    },
+  },
+};

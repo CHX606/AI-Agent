@@ -3,6 +3,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest-tmp/
 .mypy_cache/
 .ruff_cache/
 .coverage
@@ -15,6 +16,8 @@ node_modules/
 dist/
 coverage/
 .pnpm-store/
+.npm-cache/
+.electron-cache/
 
 # Environment variables
 .env
@@ -27,9 +30,15 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# RepoPilot runtime
+# Bit Agent runtime
 workspaces/
 artifacts/
 logs/
 
+# Local release bundles and historical task workspaces are not source files.
+/release/
+/.test-runs/*
+!/.test-runs/README.md
+
 tmp/
+.import_linter_cache/

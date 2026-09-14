@@ -1,0 +1,27 @@
+{
+  "name": "@bit-agent/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main/main/main.js",
+  "description": "Bit Agent Electron desktop client",
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.main.json && vite build",
+    "dev": "pnpm run build && electron .",
+    "start": "electron .",
+    "test": "vitest run",
+    "lint": "tsc --noEmit -p tsconfig.main.json && tsc --noEmit -p tsconfig.renderer.json && tsc -p tsconfig.test.json",
+    "typecheck": "tsc --noEmit -p tsconfig.main.json && tsc --noEmit -p tsconfig.renderer.json && tsc -p tsconfig.test.json"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "electron": "^44.1.1",
+    "typescript": "^7.0.2",
+    "vite": "^7.2.2",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@bit-agent/diagnostics": "workspace:*",
+    "@awesome.me/webawesome": "3.12.0"
+  }
+}

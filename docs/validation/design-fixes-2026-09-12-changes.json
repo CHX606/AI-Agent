@@ -1,0 +1,31 @@
+{
+  "changed_files": [
+    "services\\agent\\src\\bit_agent\\context\\manager.py",
+    "services\\agent\\src\\bit_agent\\context\\summarizer.py",
+    "services\\agent\\src\\bit_agent\\tools\\apply_patch.py",
+    "services\\agent\\src\\bit_agent\\runtime\\application\\capacity.py",
+    "services\\agent\\src\\bit_agent\\runtime\\application\\delegation.py",
+    "services\\agent\\src\\bit_agent\\runtime\\application\\interaction.py",
+    "services\\agent\\src\\bit_agent\\runtime\\application\\service.py",
+    "services\\agent\\src\\bit_agent\\runtime\\infrastructure\\storage.py",
+    "services\\agent\\tests\\test_context_manager.py",
+    "services\\agent\\tests\\test_local_runtime.py",
+    "services\\agent\\tests\\test_patch_permissions.py",
+    "services\\agent\\tests\\test_runtime_recovery.py",
+    "apps\\gateway\\src\\application\\ports\\task-store.ts",
+    "apps\\gateway\\src\\infrastructure\\runtime\\local-task-store.ts",
+    "apps\\gateway\\src\\transport\\http\\app.ts",
+    "apps\\gateway\\test\\health.test.ts",
+    "apps\\gateway\\test\\local-task-store.test.ts",
+    "apps\\desktop\\src\\renderer\\main.ts",
+    "apps\\desktop\\src\\main\\transport\\electron.ts",
+    "apps\\desktop\\src\\main\\transport\\task-event-stream.ts",
+    "apps\\desktop\\test\\task-event-stream.test.ts",
+    "docs\\CONTEXT.md"
+  ],
+  "python_lint": {
+    "baseline_issues": 53,
+    "current_issues": 53,
+    "new_issues": 0
+  }
+}

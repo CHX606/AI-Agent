@@ -1,9 +1,9 @@
 {
-  "name": "@repopilot/gateway",
+  "name": "@bit-agent/gateway",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "RepoPilot TypeScript API Gateway",
+  "description": "Bit Agent TypeScript API Gateway",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bit-agent/diagnostics": "workspace:*",
     "fastify": "^5.12.0",
+    "redis": "^6.2.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

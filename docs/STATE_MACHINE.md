@@ -1,90 +1,88 @@
-# RepoPilot 状态机 v0.1
+# 任务状态：怎样知道它进行到了哪里
 
-## 1. 两层状态设计
+更新日期：2026-09-07。下面使用当前 Gateway 和 Worker 的实际状态名称。
 
-RepoPilot 将状态分成两层：
+## 先分清三种“状态”
 
-- `TaskStatus`：提供给 Gateway、队列和用户，描述任务整体状态。
-- `AgentPhase`：提供给 Agent Worker，描述当前执行阶段。
+任务状态说的是整张工单有没有开始、结束或取消；事件说的是执行过程中刚刚发生了什么；工具状态说的是一次读文件、打补丁或运行检查有没有成功。
 
-这样可以避免把“正在测试”“正在规划”等内部细节全部塞进任务状态。
+一次工具失败，不一定代表整个任务马上失败。Agent 可能读懂错误后再试一次。
 
-## 2. TaskStatus
+## Gateway / Worker 任务状态
 
-| 状态 | 含义 |
-|---|---|
-| `CREATED` | 任务已经创建，尚未校验 |
-| `QUEUED` | 任务校验通过，等待 Worker |
-| `RUNNING` | Worker 正在执行 |
-| `SUCCEEDED` | 任务成功完成 |
-| `FAILED` | 任务执行失败 |
-| `CANCELLED` | 用户主动取消 |
-| `REJECTED` | 请求或工作区不合法 |
-
-## 3. AgentPhase
-
-| 阶段 | 含义 |
-|---|---|
-| `VALIDATING` | 校验 Issue、工作区和参数 |
-| `MAPPING_REPO` | 生成仓库地图 |
-| `PLANNING` | 生成或更新执行计划 |
-| `EXECUTING` | 调用代码工具 |
-| `TESTING` | 运行测试并保存原始结果 |
-| `VERIFYING` | 判断修改是否满足任务目标 |
-| `FINALIZING` | 生成 Diff 和最终报告 |
-
-## 4. 状态图
+| 状态 | 大白话含义 | 是否结束 |
+| --- | --- | --- |
+| `QUEUED` | 已经接单，正在排队。 | 否 |
+| `RUNNING` | Worker 已领取，正在执行。 | 否 |
+| `CANCELLATION_REQUESTED` | 收到取消请求，正在等待执行端停止。 | 否 |
+| `CANCELLED` | 任务已经取消。 | 是 |
+| `COMPLETED` | 本次执行报告为完成。 | 是 |
+| `PARTIAL` | 主 Agent 完成，但部分子调查没有完成，或汇总存在冲突。 | 是 |
+| `FAILED` | 本次执行没有正常完成。 | 是 |
 
 ```mermaid
 stateDiagram-v2
-    [*] --> CREATED
-
-    CREATED --> VALIDATING
-    VALIDATING --> REJECTED: 请求或工作区不合法
-    VALIDATING --> QUEUED: 校验通过
-
-    QUEUED --> CANCELLED: 用户取消
-    QUEUED --> MAPPING_REPO: Worker 获取任务
-
-    MAPPING_REPO --> PLANNING: RepoMap 完成
-    MAPPING_REPO --> FAILED: 仓库无法读取
-
-    PLANNING --> EXECUTING: 计划有效
-    PLANNING --> FAILED: 无法生成有效计划
-
-    EXECUTING --> EXECUTING: 继续执行下一步骤
-    EXECUTING --> TESTING: 代码修改完成
-    EXECUTING --> FAILED: 工具发生不可恢复错误
-
-    TESTING --> VERIFYING: 获得测试结果
-    TESTING --> FAILED: 测试无法启动
-
-    VERIFYING --> FINALIZING: 验收通过
-    VERIFYING --> PLANNING: 验收失败且仍可重试
-    VERIFYING --> FAILED: 重试预算耗尽
-
-    FINALIZING --> SUCCEEDED
-
-    SUCCEEDED --> [*]
+    [*] --> QUEUED
+    QUEUED --> RUNNING
+    QUEUED --> CANCELLED
+    RUNNING --> CANCELLATION_REQUESTED
+    CANCELLATION_REQUESTED --> CANCELLED
+    RUNNING --> COMPLETED
+    RUNNING --> PARTIAL
+    RUNNING --> FAILED
+    COMPLETED --> [*]
+    PARTIAL --> [*]
     FAILED --> [*]
     CANCELLED --> [*]
-    REJECTED --> [*]
 ```
 
-## 5. 核心转换规则
+这是主要流程示意。取消和任务自然结束可能同时发生，最终状态以服务返回的任务记录为准。
 
-1. 只有校验通过的任务才能进入队列。
-2. 只有 Worker 成功获取任务后，任务才进入 `RUNNING`。
-3. 每次状态转换必须保存时间、原因和关联事件。
-4. 测试失败不一定代表任务失败，可以返回 `PLANNING`。
-5. 工具错误分为可恢复错误和不可恢复错误。
-6. 超过步骤、重试、时间或 Token 预算时进入 `FAILED`。
-7. `SUCCEEDED`、`FAILED`、`CANCELLED`、`REJECTED` 是终态。
-8. 终态任务不能继续调用工具。
-9. 相同事件重复到达时不能重复执行副作用操作。
+`CANCELLED` 只会在 Gateway 收到取消请求后出现。空工作区、模型异常和 Worker 超时不会
+自动写成取消；这些执行异常应进入 `FAILED`。关闭 Desktop 的事件流也不等于取消任务。
 
-## 6. TESTING 与 VERIFYING 的区别
+当前公开协议没有 `CREATED`、`SUCCEEDED` 或 `REJECTED` 这几个任务状态。它们出现在早期设计稿中；请求格式不合法时，Gateway 会返回 HTTP 错误，不会给你一个名为 `REJECTED` 的已排队任务。
 
-`TESTING` 负责执行测试并记录退出码、标准输出、错误输出和耗时。
+## 为什么已经有结果还可能是 PARTIAL
 
-`VERIFYING` 负责根据测试结果、Git Diff、安全规则和 Issue 目标判断任务是否真正完成。
+例如三个子 Agent 中，有一个调查超时了，主 Agent 仍利用其余证据完成了修改。或者多个调查结果互相矛盾，需要保留提示。
+
+此时你应查看 `subagents`、`aggregation.conflicts` 和主 Agent 的结果，而不是把 `PARTIAL` 理解为“代码只写了一半”。
+
+## 运行过程看事件
+
+| 事件 | 表示什么 |
+| --- | --- |
+| `PLANNING_STARTED` / `PLANNING_COMPLETED` | 开始判断路由并按需拆分任务 / 规划结束。 |
+| `DISPATCH_STARTED` / `DISPATCH_COMPLETED` | 开始安排子 Agent / 子调查结束。 |
+| `MODEL_REQUESTED` / `MODEL_RESPONDED` | 发出模型请求 / 收到回应。 |
+| `TOOL_REQUESTED` / `TOOL_COMPLETED` | 请求运行工具 / 工具有了结果。 |
+| `VERIFICATION_REQUIRED` | 还有改动没有完成框架要求的验证。 |
+| `CONTEXT_COMPACTED` | 历史内容进行了压缩。 |
+| `MEMORY_RECALLED` | 召回了参考记忆。 |
+| `AGENT_COMPLETED` / `AGENT_FAILED` | 一个 Agent 的执行结束。 |
+| `TRACE_COMPLETED` / `TRACE_FAILED` | 整条执行轨迹结束。 |
+
+旧文档中的 `AgentPhase` 和 `PLANNING -> EXECUTING -> VERIFYING` 可用于解释概念，不应当作当前 API 一定提供的字段。
+
+## 工具状态
+
+`SUCCESS` 表示这次工具调用成功；`ERROR` 表示执行出错；`REJECTED` 表示不符合工具限制；`TIMEOUT` 表示超时。这里的 `REJECTED` 属于工具结果，不属于上面的任务状态。
+
+## 代码改完为什么不能直接结束
+
+打补丁后，Agent 会把“测试已通过”和“静态检查已通过”的标志重置。它需要在修改后重新获得成功的测试结果，并让 Ruff lint 覆盖改动文件。
+
+只有结果中的 `tests_passed` 为真，仍不足以替代 `quality_checks_passed`。更早的历史记录可能还没有后者，阅读旧记录时应保留当时的版本背景。
+
+`direct` 普通回复不运行 Docker 或 Ruff，Desktop 应显示“未运行”，不能把缺少验证执行
+误写成“未通过”。
+
+## 对应代码
+
+- `apps/gateway/src/domain/protocol.ts`：TypeScript 任务状态。
+- `services/agent/src/bit_agent/worker/models.py`：Python 任务状态。
+- `services/agent/src/bit_agent/worker/service.py`：Worker 执行和状态回写。
+- `services/agent/src/bit_agent/agent/result.py`：单 Agent 结果。
+- `services/agent/src/bit_agent/multi_agent/models.py`：多 Agent 结果和子任务状态。
+- `services/agent/src/bit_agent/observability/events.py`：执行事件。
