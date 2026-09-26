@@ -8,8 +8,10 @@ from bit_agent.tools.models import ToolResult
 
 class StoragePort(Protocol):
     directory: Path
+    event_version: int
 
     async def call(self, operation: str, *args: Any) -> Any: ...
+    async def wait_for_events(self, since: int, timeout: float) -> None: ...
     def close(self) -> None: ...
 
 

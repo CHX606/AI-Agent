@@ -34,6 +34,9 @@ class LocalStorage:
         self.directory = directory.resolve()
         self.directory.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        # 每写入一条事件加一；读事件的一方据此判断是否需要等待，而不是固定轮询。
+        self.event_version = 0
+        self._event_waiters: list[asyncio.Future[None]] = []
         self._db = sqlite3.connect(
             self.directory / "sessions.sqlite3",
             timeout=15,
@@ -82,7 +85,28 @@ class LocalStorage:
 
     async def call(self, operation: str, *args: Any) -> Any:
         # 磁盘读写放到后台线程，避免保存记录时卡住取消任务、接收消息等操作。
-        return await asyncio.to_thread(self._call, operation, args)
+        result = await asyncio.to_thread(self._call, operation, args)
+        if operation == "event":
+            self.event_version += 1
+            waiters, self._event_waiters = self._event_waiters, []
+            for waiter in waiters:
+                if not waiter.done():
+                    waiter.set_result(None)
+        return result
+
+    async def wait_for_events(self, since: int, timeout: float) -> None:
+        """等到 event_version 离开 since（有新事件写入）或超时。"""
+        if self.event_version != since or timeout <= 0:
+            return
+        waiter = asyncio.get_running_loop().create_future()
+        self._event_waiters.append(waiter)
+        try:
+            await asyncio.wait_for(waiter, timeout)
+        except TimeoutError:
+            pass
+        finally:
+            if waiter in self._event_waiters:
+                self._event_waiters.remove(waiter)
 
     def _call(self, operation: str, args: tuple[Any, ...]) -> Any:
         try:

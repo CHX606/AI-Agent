@@ -119,6 +119,65 @@ async def test_round_budget_reaches_runner_and_survives_restart(
 
 
 @pytest.mark.asyncio
+async def test_read_events_wakes_up_as_soon_as_an_event_is_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    release = asyncio.Event()
+
+    async def blocked_runner(*_args: Any, **_kwargs: Any) -> AgentRunResult:
+        await release.wait()
+        return AgentRunResult(status=AgentRunStatus.COMPLETED, final_answer="ok", rounds=0)
+
+    monkeypatch.setattr(service, "run_agent", blocked_runner)
+    runtime = create_runtime(tmp_path / "data")
+    await runtime.start()
+    try:
+        task = await runtime.create_task(
+            {"objective": "wait", "workspace_root": str(tmp_path), "multi_agent_mode": "off"}
+        )
+        for _ in range(100):
+            if (await runtime.get_task(task["task_id"]))["status"] == "RUNNING":
+                break
+            await asyncio.sleep(0.01)
+        existing = await runtime.read_events(task["task_id"], block_ms=0)
+        cursor = existing[-1]["id"] if existing else "0-0"
+
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        reader = asyncio.create_task(runtime.read_events(task["task_id"], cursor, block_ms=1000))
+        await asyncio.sleep(0.05)
+        await runtime.storage.call("event", task["task_id"], "PING", {"n": 1})
+        events = await reader
+        elapsed = loop.time() - started
+
+        assert [event["event_type"] for event in events] == ["PING"]
+        assert elapsed < 0.5, f"事件应立即推送，实际等待 {elapsed:.2f}s"
+
+        started = loop.time()
+        assert await runtime.read_events(task["task_id"], events[-1]["id"], block_ms=200) == []
+        assert loop.time() - started >= 0.15
+    finally:
+        release.set()
+        await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_wait_for_events_does_not_miss_an_event_written_before_waiting(
+    tmp_path: Path,
+) -> None:
+    storage = LocalStorage(tmp_path / "data")
+    try:
+        since = storage.event_version
+        await storage.call("event", "task", "PING", {})
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        await storage.wait_for_events(since, 5)
+        assert loop.time() - started < 0.1
+    finally:
+        storage.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("limit", [0, -1, 1.5, 1001, "100", None, True])
 async def test_runtime_rejects_invalid_round_budget(tmp_path: Path, limit: Any) -> None:
     runtime = create_runtime(tmp_path / "data")
