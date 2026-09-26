@@ -408,11 +408,13 @@ class AgentRuntime:
         if not isinstance(after_id, str) or not re.fullmatch(r"[0-9]+-0", after_id):
             raise ValueError("事件位置无效")
         after = int(after_id.split("-")[0])
+        # 先记下版本再查询：查询之后才写入的事件也会让等待立即结束。
+        since = self.storage.event_version
         events = await self.storage.call("read_events", task_id, after)
         if not events:
             task = await self.get_task(task_id)
             if task and task["status"] not in TERMINAL:
-                await asyncio.sleep(max(0, min(block_ms, 1000)) / 1000)
+                await self.storage.wait_for_events(since, max(0, min(block_ms, 1000)) / 1000)
                 events = await self.storage.call("read_events", task_id, after)
         return events
 
