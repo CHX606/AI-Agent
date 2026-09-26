@@ -139,7 +139,7 @@ runner = EvalRunner(
 安装真实 PostgreSQL 适配器依赖：
 
 ```powershell
-python -m pip install -e ".[dev,memory]"
+uv sync --locked --extra memory
 ```
 
 确认 Ollama 已启动并且模型已下载后，可以执行真实探测：

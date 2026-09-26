@@ -74,7 +74,7 @@ pnpm -r test
 pnpm desktop:package
 ```
 
-Python 检查优先使用项目 `.venv`，也可以设置 `BIT_AGENT_PYTHON`。开发环境需安装 `pip install -e ".[dev]"`。根目录 TypeScript 6 供 dependency-cruiser 解析；桌面和 Gateway 继续使用各自的 TypeScript 7 编译器。
+Python 检查优先使用项目 `.venv`，也可以设置 `BIT_AGENT_PYTHON`。开发环境用 `uv sync --locked` 按 `uv.lock` 安装。根目录 TypeScript 6 供 dependency-cruiser 解析；桌面和 Gateway 继续使用各自的 TypeScript 7 编译器。
 
 ## 保留的行为与数据
 
