@@ -15,9 +15,12 @@
 
 | 你想知道 | 看这里 |
 | --- | --- |
+| Agent 主循环怎样基于 OpenAI Agents SDK 运行 | [SDK_RUNTIME.md](SDK_RUNTIME.md) |
+| 本地执行进程、会话和数据怎样保存 | [LOCAL_RUNTIME.md](LOCAL_RUNTIME.md) |
+| 权限模式、暂停、提问和改动审阅 | [PRODUCT_HARDENING.md](PRODUCT_HARDENING.md)、[INTERACTION.md](INTERACTION.md) |
 | 业务、数据与通信层怎样分目录和连接 | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | 桌面日志在哪里、如何导出诊断包 | [DESKTOP_DIAGNOSTICS.md](DESKTOP_DIAGNOSTICS.md) |
-| 2026-09-12 的五项设计修复验证结果 | [设计缺陷修复验证](validation/design-fixes-2026-09-12.md) |
+| 某项功能验收过什么、没验收什么 | [validation/](validation/) 下的验收报告 |
 | 这个产品已经做了什么、还缺什么 | [PRD.md](PRD.md) |
 | Gateway 有哪些接口、任务怎样交给执行进程 | [GATEWAY.md](GATEWAY.md) |
 | COMPLETED、PARTIAL、FAILED 是什么意思 | [STATE_MACHINE.md](STATE_MACHINE.md) |
@@ -31,6 +34,4 @@
 | Docker、数据库配置做什么 | [infra 说明](../infra/README.md) |
 | 评测原题和完成后的副本有什么区别 | [evals 说明](../evals/README.md)、[.test-runs 说明](../.test-runs/README.md) |
 
-这批说明于 2026-09-04 对照现有代码整理。旧运行记录保留当时的事实，不会因为更新说明就变成新一轮测试结果。
-
-验收结论应保存在 `docs` 中；临时工作区、日志、测试用户配置和 EXE 发布包只保留在本机，不随源码提交。新增归档记录放在 `docs/validation`。
+说明文档只写"现在是什么样"；某次验收跑了什么、结果如何，统一记录在 `docs/validation/` 的报告里，报告保留当时的事实，不随后续修改更新。临时工作区、日志、测试用户配置和 EXE 发布包只保留在本机，不随源码提交。

@@ -90,4 +90,4 @@ SDK 拿到模型结果后通知它；它只负责保存计划、检查用户的�
 - 关闭 SDK 的额外 tracing 上传，并设置 `store=False`。模型请求本身仍需要发送到用户配置的模型服务，这不是离线大模型。
 
 官方参考：[Agents SDK 运行方式](https://developers.openai.com/api/docs/guides/agents/running-agents)。
-本轮实际验收结果单独记录在 [SDK 替换验收报告](ACCEPTANCE_SDK_RUNTIME.md)。
+实际验收结果单独记录在 [SDK 替换验收报告](validation/ACCEPTANCE_SDK_RUNTIME.md)。

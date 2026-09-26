@@ -106,4 +106,4 @@ $env:PYTHONUTF8 = "1"
 .\.venv\Scripts\python.exe -m pytest -q --tb=short --basetemp (Join-Path $base "pytest") --ignore=services/agent/tests/test_memory_backends_integration.py --ignore=services/agent/tests/test_worker_redis_integration.py --ignore=services/agent/tests/test_mcp_integration.py
 ```
 
-运行说明见 [本地运行方式](LOCAL_RUNTIME.md)。
+运行说明见 [本地运行方式](../LOCAL_RUNTIME.md)。

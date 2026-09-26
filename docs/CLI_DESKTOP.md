@@ -1,6 +1,6 @@
 # Desktop 和 CLI：怎样使用这个项目
 
-更新日期：2026-09-09。本轮代码尚未运行验证。
+更新日期：2026-09-09。
 
 Desktop 是桌面窗口，CLI 是终端命令。默认任务经过 Gateway 和本地 Python 运行库，不再需要 Redis。
 桌面支持会话恢复和关闭／开启／智能三档模式；旧 CLI 命令不等于完整的桌面多轮会话界面。
@@ -100,4 +100,3 @@ bit-agent status TASK_ID --gateway "http://127.0.0.1:3000"
 - `services/agent/src/bit_agent/client`：Python Gateway 客户端。
 
 Desktop 的页面进程没有直接开放 Node.js 能力；本机 Gateway 可以使用 HTTP，远程地址需要 HTTPS。具体地址规则和访问限制由客户端代码执行。
-> 2026-09-09 验收更新：本地运行链路已通过回归和真实 Electron 串联检查。文中早先的“未验收”描述是修改阶段的记录；最新结果及未覆盖范围见 [本地版验收报告](ACCEPTANCE_LOCAL_RUNTIME.md)。

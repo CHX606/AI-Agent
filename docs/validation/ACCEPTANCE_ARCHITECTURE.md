@@ -1,6 +1,6 @@
 # 目录分层验收
 
-日期：2026-09-11。目录及依赖规则见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+日期：2026-09-11。目录及依赖规则见 [ARCHITECTURE.md](../ARCHITECTURE.md)。
 
 ## 已完成
 

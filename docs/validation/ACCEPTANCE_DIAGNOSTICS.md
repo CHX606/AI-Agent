@@ -1,6 +1,6 @@
 # 日志与诊断验收记录
 
-日期：2026-09-11。使用方法及接口边界见 [DESKTOP_DIAGNOSTICS.md](./DESKTOP_DIAGNOSTICS.md)。
+日期：2026-09-11。使用方法及接口边界见 [DESKTOP_DIAGNOSTICS.md](../DESKTOP_DIAGNOSTICS.md)。
 
 ## 自动化检查
 
