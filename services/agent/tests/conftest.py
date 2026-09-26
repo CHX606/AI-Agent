@@ -108,6 +108,7 @@ def pytest_runtest_logreport(report):
     """在 GitHub Actions 中把失败测试写成注解，不登录也能在检查结果里看到原因。"""
     if os.environ.get("GITHUB_ACTIONS") != "true" or not report.failed:
         return
+
     def escape(value: str, *, property_value: bool = False) -> str:
         value = value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
         return value.replace(":", "%3A").replace(",", "%2C") if property_value else value
