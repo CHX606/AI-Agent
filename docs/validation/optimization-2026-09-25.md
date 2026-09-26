@@ -16,12 +16,16 @@
 | 测试产物 | 测试不再往仓库 `artifacts/` 写事件文件（`BIT_AGENT_ARTIFACTS_DIR`）。 |
 | 桌面渲染层 | `renderer/main.ts` 从 1060 行拆出仓库浏览、任务历史、操作卡片与公共工具模块。 |
 | 便携包 | 只打包运行时 Python 依赖，严格按 `uv.lock`；pytest、ruff 等开发工具不再进入发布包（site-packages 99 MB → 69 MB）。 |
+| 8.3 短路径 bug | 首次 CI 运行暴露：`TEMP` 为短文件名（如 `C:\Users\RUNNER~1\...`）时独立验收工作区路径比较失败。真实用户（用户名较长或含空格）同样会遇到。已修复并加回归测试。 |
+| CI 可读性 | GitHub Actions 中失败的 pytest 用例会输出为注解，不登录也能看到原因。 |
 
 ## 验证结果
 
 | 检查 | 结果 |
 | --- | --- |
-| Python 测试 | 414 通过，11 跳过（跳过项需要 Docker 沙箱镜像、PostgreSQL 或真实模型） |
+| GitHub Actions（提交 `218601d`） | python 与 node 两个任务全部通过 |
+| 干净克隆 + 8.3 短路径 `TEMP` 的本地 CI 复现 | 9 个步骤全部通过 |
+| Python 测试 | 415 通过，11 跳过（跳过项需要 Docker 沙箱镜像、PostgreSQL 或真实模型） |
 | Ruff lint / format | 通过 |
 | import-linter 分层规则 | 4 条全部保持 |
 | Gateway 测试 | 26 通过，2 跳过（真实串联测试默认跳过，见下行） |
@@ -34,4 +38,3 @@
 
 - 真实在线模型、真实 Docker 沙箱内的 `run_tests` / `run_checks` / `verify_project`。
 - PostgreSQL 长期记忆与真实 LLM 记忆巩固。
-- GitHub Actions 工作流本身：写好后尚未在 GitHub 上运行过。
