@@ -70,6 +70,32 @@ async def invoke(provider, name, arguments, identifier="execute"):
     return await provider.call_tool(name, identifier, json.dumps(arguments))
 
 
+def _windows_short_path(path: Path) -> str | None:
+    """返回 8.3 短路径；非 Windows 或该卷未启用短文件名时返回 None。"""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = ctypes.windll.kernel32.GetShortPathNameW(str(path), buffer, len(buffer))
+    return buffer.value if length and buffer.value != str(path) else None
+
+
+async def test_workspace_accepts_short_windows_temp_path(project, tmp_path, monkeypatch):
+    # GitHub Actions 的 TEMP 是 C:\Users\RUNNER~1\...；工作区根目录必须解析成长路径。
+    import tempfile
+
+    long_directory = tmp_path / "temporary directory with a long name"
+    long_directory.mkdir()
+    short = _windows_short_path(long_directory)
+    if short is None:
+        pytest.skip("当前系统没有 8.3 短文件名")
+    monkeypatch.setattr(tempfile, "tempdir", short)
+    async with AcceptanceWorkspace(project, tmp_path / "artifacts") as workspace:
+        target = await workspace.write_test("", "test_add.py", "def test_add():\n    assert 1+1==2")
+        assert (workspace.root / target).is_file()
+
+
 async def test_snapshot_and_generated_tests_never_change_source(project, tmp_path):
     artifacts = tmp_path / "artifacts"
     async with AcceptanceWorkspace(project, artifacts) as workspace:

@@ -50,6 +50,16 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
+      # Gateway 的诊断测试会启动真实的 Python 执行进程，需要项目的 .venv。
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.19"
+          enable-cache: true
+      - name: Install Python dependencies
+        run: uv sync --locked
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Typecheck

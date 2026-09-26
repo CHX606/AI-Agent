@@ -252,7 +252,8 @@ class EvalRunner:
             prefix=f"bit-agent-eval-{case.name}-",
             dir=self.temporary_root,
         ) as temporary_directory:
-            workspace = Path(temporary_directory) / "workspace"
+            # resolve()：TEMP 可能是 8.3 短名，统一成工具内部使用的规范长路径。
+            workspace = Path(temporary_directory).resolve() / "workspace"
             # 在复制前先拒绝 Fixture 中的链接，避免 copytree 跟随到工作区外。
             fixture_snapshot = snapshot_workspace(case.fixture_path, case.ignored_paths)
             shutil.copytree(case.fixture_path, workspace)

@@ -13,6 +13,7 @@ test.skipIf(process.env.BIT_AGENT_TEST_LOCAL_RUNTIME !== "1")(
   "local runtime: HTTP, SSE, restart, cancellation and real Electron",
   async () => {
     const root = resolve(import.meta.dirname, "../../..");
+    mkdirSync(join(root, "tmp"), { recursive: true });
     const directory = mkdtempSync(join(root, "tmp", "local-acceptance-"));
     const workspace = join(directory, "workspace");
     const other = join(directory, "other");

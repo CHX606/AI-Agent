@@ -1,6 +1,7 @@
 """只替换模型的回答，不替换 SDK Runner，因此测试仍经过真正的 SDK 工具循环。"""
 
 import asyncio
+import os
 from uuid import uuid4
 
 import pytest
@@ -101,6 +102,27 @@ class FixtureModel(Model):
     async def stream_response(self, *args, **kwargs):
         raise AssertionError("流式验收使用本地 HTTP 模型，不使用这个数据替身")
         yield  # pragma: no cover
+
+
+def pytest_runtest_logreport(report):
+    """在 GitHub Actions 中把失败测试写成注解，不登录也能在检查结果里看到原因。"""
+    if os.environ.get("GITHUB_ACTIONS") != "true" or not report.failed:
+        return
+    def escape(value: str, *, property_value: bool = False) -> str:
+        value = value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        return value.replace(":", "%3A").replace(",", "%2C") if property_value else value
+
+    path, line, _ = report.location
+    crash = getattr(getattr(report, "longrepr", None), "reprcrash", None)
+    message = crash.message if crash is not None else report.longreprtext[-1000:]
+    properties = ",".join(
+        [
+            f"file={escape(path.replace(chr(92), '/'), property_value=True)}",
+            f"line={(line or 0) + 1}",
+            f"title={escape(report.nodeid, property_value=True)}",
+        ]
+    )
+    print(f"\n::error {properties}::{escape(str(message)[:1000])}")
 
 
 @pytest.fixture(autouse=True)
