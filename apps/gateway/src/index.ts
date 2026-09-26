@@ -4,7 +4,6 @@ import { loadEnvFile } from "node:process";
 
 import { buildApp } from "./bootstrap.js";
 import { LocalTaskStore } from "./infrastructure/runtime/local-task-store.js";
-import type { TaskStore } from "./application/ports/task-store.js";
 import { gatewayDiagnostics } from "./infrastructure/observability/diagnostics.js";
 
 for (const candidate of [resolve(".env"), resolve("..", "..", ".env")]) {
@@ -14,17 +13,8 @@ for (const candidate of [resolve(".env"), resolve("..", "..", ".env")]) {
   }
 }
 
-// 默认只启动一个本机 Python 进程。旧 Redis 链路必须显式选择，旧数据不会被删除。
-let taskStore: TaskStore;
-const backend = process.env.BIT_AGENT_RUNTIME ?? "local";
-if (backend === "redis") {
-  const { RedisTaskStore } = await import("./infrastructure/persistence/redis-task-store.js");
-  taskStore = await RedisTaskStore.connect(process.env.BIT_AGENT_REDIS_URL ?? "redis://127.0.0.1:6379/0");
-} else if (backend === "local") {
-  taskStore = await LocalTaskStore.connect();
-} else {
-  throw new Error("BIT_AGENT_RUNTIME 只能是 local 或 redis");
-}
+// 只启动一个本机 Python 进程；任务和会话由它保存在 SQLite 中。
+const taskStore = await LocalTaskStore.connect();
 const app = buildApp({ taskStore });
 
 const host = process.env.HOST ?? "127.0.0.1";

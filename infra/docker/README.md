@@ -8,7 +8,7 @@
 
 `start-docker-desktop.ps1` 是 PowerShell 脚本；本文件是解释它怎样工作的说明。脚本位于本项目中，但它检查和处理的是本机 Docker 的运行状态。
 
-它不会负责启动 Redis、Gateway、Worker 或 Bit Agent 桌面窗口。Redis 和数据库配置在 [infra 总说明](../README.md) 中。
+它不会负责启动数据库、Gateway 或 Bit Agent 桌面窗口。数据库配置在 [infra 总说明](../README.md) 中。
 
 ## 什么时候用
 

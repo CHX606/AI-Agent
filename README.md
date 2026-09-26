@@ -4,12 +4,12 @@
 
 Bit Agent 是一个帮你处理代码项目的 AI 助手。你告诉它“修复这个问题”，它会查看代码、调用模型分析、用工具修改文件，再根据测试和检查结果继续处理。
 
-当前已经有桌面界面、命令行、本地 Python 执行服务、多 Agent 调查、记忆和上下文管理等实现。默认采用本地 SQLite 保存会话，不再要求 Redis。它仍处于开发阶段，“模块已经写出来”不代表所有使用场景都没有 bug。
+当前已经有桌面界面、命令行、本地 Python 执行服务、多 Agent 调查、记忆和上下文管理等实现。会话保存在本地 SQLite 中。它仍处于开发阶段，“模块已经写出来”不代表所有使用场景都没有 bug。
 
 文档对齐日期：2026-09-09。已补充本轮回归、类型检查、构建与真实 exe 验收。真实在线模型和 Docker 环境不包含在本机假模型验收结论中。
 
 **刚接着学习本项目，先读 [SDK 主线与学习入口](docs/SDK_RUNTIME.md)，再读 [本地运行入口](docs/LOCAL_RUNTIME.md)。**
-模型与工具之间的循环由 SDK 完成。`bit_agent.runtime` 管桌面任务和本地保存，工具模块管具体操作；旧 Redis 适配器不是默认桌面链路。
+模型与工具之间的循环由 SDK 完成。`bit_agent.runtime` 管桌面任务和本地保存，工具模块管具体操作。
 
 ## 第一次看这个项目，先读哪里
 
@@ -28,11 +28,11 @@ Bit Agent 是一个帮你处理代码项目的 AI 助手。你告诉它“修复
 | --- | --- | --- |
 | Desktop | 已有实现 | 用窗口选项目、发任务、看结果，也能浏览目录和预览文本文件。 |
 | CLI | 已有实现 | 不开窗口，直接在终端提交和查询任务。 |
-| Gateway + 本地运行库 | 已接入源码，待验收 | Gateway 通过进程管道交给 Python，SQLite 保存任务和会话，不要求 Redis。 |
+| Gateway + 本地运行库 | 已接入源码，待验收 | Gateway 通过进程管道交给 Python，SQLite 保存任务和会话。 |
 | 代码工具和 Docker 沙箱 | 已有实现 | 能列目录、读文件、搜索、打补丁、运行测试和白名单检查。 |
 | Multi-Agent | 三档模式已接入源码，待验收 | 关闭、开启、智能；主 Agent 按模式调用只读调查工具，自己统一修改。 |
 | Working Memory / 会话 | 本地持久化已接入源码，待验收 | 保存历史、摘要和任务进度，没有 24 小时自动过期。 |
-| 长期记忆 | 已有实现，需要接入配置 | 用 PostgreSQL/pgvector 保存和检索经过审核的经验；普通 Worker 启动不会自动把这一整套启用。 |
+| 长期记忆 | 已有实现，需要接入配置 | 用 PostgreSQL/pgvector 保存和检索经过审核的经验；默认启动不会自动把这一整套启用。 |
 | Context Manager | 已接入运行循环 | 历史太长时保存大段结果、压缩旧内容，控制发给模型的输入量。 |
 | 评测和事件记录 | 已有实现 | 保存做题过程、修改内容和验证结果，方便回头查问题。 |
 | 独立 Web 管理后台、生产级认证与配额 | 尚未提供完整方案 | 当前主要面向本地开发和验证。 |
@@ -66,8 +66,8 @@ AI Agent/
 |-- apps/
 |   |-- desktop/       桌面窗口
 |   `-- gateway/       接收任务的 HTTP 服务
-|-- services/agent/    Python Agent、Worker、工具、记忆和测试
-|-- packages/protocol/协议说明
+|-- services/agent/    Python Agent、本地运行服务、工具、记忆和测试
+|-- packages/diagnostics/ Gateway 与桌面共用的诊断日志
 |-- docs/             项目文档
 |-- evals/fixtures/    给 Agent 使用的示例题目
 |-- infra/            Docker 和配套服务配置
@@ -92,7 +92,7 @@ python -m venv .venv
 pnpm install --frozen-lockfile
 ```
 
-第一条建立 Python 环境；第二条安装本项目和开发依赖；第三条安装 Gateway、Desktop 等 Node.js 依赖。只有使用旧 Redis 或 PostgreSQL 适配器时才需要另外安装 `.[memory]`。
+第一条建立 Python 环境；第二条安装本项目和开发依赖；第三条安装 Gateway、Desktop 等 Node.js 依赖。只有使用 PostgreSQL 长期记忆时才需要另外安装 `.[memory]`。
 
 Node.js 依赖仓库由根目录 `pnpm-workspace.yaml` 的 `storeDir` 统一指定为 `D:\myproject\AI Agent.pnpm-store`（与项目目录同级、专供本项目使用）。pnpm 11 的这类项目配置写在该 YAML 文件中，不写入 `.npmrc`。在项目根目录或任一子包运行 `pnpm install`、`pnpm add`、`pnpm update` 都会使用该仓库；不要通过命令行或环境变量覆盖仓库路径。`--frozen-lockfile` 保持锁定的依赖版本和锁文件内容。
 
@@ -127,12 +127,11 @@ pnpm -r build
 pnpm desktop:dev
 ```
 
-这条命令先构建桌面，再启动 Gateway 和 Electron。Gateway 自动启动本地 Python 进程，不需要旧 Worker 和 Redis。
+这条命令先构建桌面，再启动 Gateway 和 Electron。Gateway 自动启动本地 Python 进程。
 Gateway 默认是 `http://127.0.0.1:3000`。若已手动运行 Gateway，用 `pnpm desktop:only` 只打开界面。
 关闭桌面会结束这一套开发启动进程，但会话记录仍在本机数据目录。`pnpm desktop:package` 生成包含 exe 的便携目录；需要保留整个目录，不是单文件安装器。
 
-使用 `BIT_AGENT_RUNTIME=redis` 可显式选择旧模式，再自行启动 Redis 和旧 Worker；
-新会话恢复和三档模式仅针对默认本地链路。不会自动迁移或删除旧 Redis 数据。
+早期的 Redis 队列 + Python Worker 链路已删除；需要查看旧实现时，检出 git 标签 `legacy-redis`。
 
 也可以使用命令行提交任务：
 
@@ -153,7 +152,7 @@ Gateway 默认是 `http://127.0.0.1:3000`。若已手动运行 Gateway，用 `pn
 | `pnpm test` | 递归执行 Node.js 工作区中各项目定义的测试。 |
 | `pnpm typecheck` | 递归执行 Node.js 工作区的类型检查。 |
 
-真实数据库测试、Gateway/Worker 联调和 Agent 做题评测需要额外服务，分别见 [基础设施说明](infra/README.md) 和 [评测目录说明](evals/README.md)。
+真实数据库测试和 Agent 做题评测需要额外服务，分别见 [基础设施说明](infra/README.md) 和 [评测目录说明](evals/README.md)。
 
 ## 为什么有些 README 还会提到“故障”或“未完成”
 

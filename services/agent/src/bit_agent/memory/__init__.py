@@ -60,7 +60,6 @@ from bit_agent.memory.store import (
     InMemoryLongTermMemoryStore,
     InMemoryWorkingMemoryStore,
     LongTermMemoryStore,
-    RedisWorkingMemoryStore,
     WorkingMemoryStore,
 )
 from bit_agent.memory.working import WorkingMemoryTracker
@@ -102,7 +101,6 @@ __all__ = [
     "MemoryWritePolicy",
     "OpenAIEmbeddingProvider",
     "PostgreSQLLongTermMemoryStore",
-    "RedisWorkingMemoryStore",
     "TestStatus",
     "VerifiedRunEvidence",
     "WorkingMemory",

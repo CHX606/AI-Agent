@@ -7,7 +7,6 @@ from bit_agent.observability.events import (
     EventSink,
     InMemoryEventSink,
     JsonlEventSink,
-    RedisEventSink,
 )
 
 __all__ = [
@@ -17,5 +16,4 @@ __all__ = [
     "EventSink",
     "InMemoryEventSink",
     "JsonlEventSink",
-    "RedisEventSink",
 ]

@@ -79,7 +79,7 @@ export async function startManagedRuntime(): Promise<void> {
     startupError = publicError(diagnostics.failure("settings_decryption_failed", error), "已存密钥不能解密，请重新配置模型");
   }
   if (settings.apiKey) registerSecret(String(settings.apiKey));
-  const env = { ...process.env, ELECTRON_RUN_AS_NODE: "1", BIT_AGENT_RUNTIME: "local",
+  const env = { ...process.env, ELECTRON_RUN_AS_NODE: "1",
     BIT_AGENT_GATEWAY_TOKEN: token, BIT_AGENT_PROJECT_ROOT: join(resources, "backend"),
     BIT_AGENT_PYTHON: join(resources, "python", "python.exe"), BIT_AGENT_DATA_DIR: data,
     PATH: [join(resources, "tools"), process.env.PATH ?? ""].join(delimiter),

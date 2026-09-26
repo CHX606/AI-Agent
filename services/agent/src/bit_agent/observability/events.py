@@ -78,36 +78,6 @@ class JsonlEventSink:
             stream.write(line)
 
 
-class RedisEventSink:
-    """把事件写入 Redis Stream，供 Gateway 通过 SSE 实时转发。"""
-
-    def __init__(
-        self,
-        client: Any,
-        stream_key: str,
-        *,
-        max_events: int = 10_000,
-        ttl_seconds: int = 7 * 24 * 60 * 60,
-    ) -> None:
-        if not stream_key.strip():
-            raise ValueError("stream_key 不能为空")
-        if max_events <= 0 or ttl_seconds <= 0:
-            raise ValueError("事件上限和过期时间必须大于 0")
-        self.client = client
-        self.stream_key = stream_key.strip()
-        self.max_events = max_events
-        self.ttl_seconds = ttl_seconds
-
-    async def emit(self, event: AgentEvent) -> None:
-        await self.client.xadd(
-            self.stream_key,
-            {"event": event.model_dump_json()},
-            maxlen=self.max_events,
-            approximate=True,
-        )
-        await self.client.expire(self.stream_key, self.ttl_seconds)
-
-
 class EventBus:
     """为并发 Agent 分配全局递增序号，并隔离 Sink 故障。"""
 

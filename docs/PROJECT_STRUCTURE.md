@@ -35,12 +35,11 @@ AI Agent/
 |   |-- src/bit_agent/         Python 功能源码
 |   |-- tests/                测试 Bit Agent 自己
 |   `-- evals/                让 Agent 做题的评测入口
-|-- packages/protocol/        Gateway 和 Worker 的通信说明
+|-- packages/diagnostics/     Gateway 与桌面共用的诊断日志
 |-- docs/                     项目文档
 |-- evals/fixtures/           独立示例题目
 |-- infra/
 |   |-- docker/               Docker Desktop 辅助启动脚本
-|   |-- runtime/              开发和联调用 Redis 配置
 |   |-- memory/               记忆后端测试服务配置
 |   `-- sandbox/python/      Python 测试沙箱镜像配方
 |-- workspaces/               实际演示工作区
@@ -88,9 +87,9 @@ AI Agent/
 
 它是客户端和后台之间的 HTTP 接口服务。它接收任务、查询任务、处理取消请求，并把执行事件发送给客户端。
 
-`src/transport/http/app.ts` 定义接口，`src/index.ts` 和 `src/bootstrap.ts` 负责启动与装配。`src/application/ports` 定义操作接口，`src/infrastructure` 放本地 RPC、Redis、内存和日志适配器，`src/domain/protocol.ts` 定义数据约定。
+`src/transport/http/app.ts` 定义接口，`src/index.ts` 和 `src/bootstrap.ts` 负责启动与装配。`src/application/ports` 定义操作接口，`src/infrastructure` 放本地 RPC、测试内存和日志适配器，`src/domain/protocol.ts` 定义数据约定。
 
-这里不会自己完成代码分析和补丁修改，默认由本地 Python AgentRuntime 执行；Worker 是可选 Redis 链路。详见 [Gateway 目录说明](../apps/gateway/README.md)。
+这里不会自己完成代码分析和补丁修改，由本地 Python AgentRuntime 执行。详见 [Gateway 目录说明](../apps/gateway/README.md)。
 
 ## services/agent：实际干活的 Python 代码
 
@@ -100,7 +99,6 @@ AI Agent/
 | --- | --- |
 | `agent` | 单个 Agent 的运行循环：问模型、运行工具、处理结果、决定能否结束。 |
 | `runtime` | 本地服务，内部按业务、领域约定、数据适配器和 RPC 分层。 |
-| `worker` | 从 Redis 领任务，控制超时和取消，再把结果写回去。 |
 | `multi_agent` | 拆分调查任务、并发安排子 Agent、汇总结果。 |
 | `tools` | 读文件、搜索、补丁、测试、静态检查等实际工具。 |
 | `tool_provider` | 把工具接到 Agent 上，可用本地调用或 MCP，也可限制工具权限。 |
@@ -127,9 +125,9 @@ AI Agent/
 
 ## packages：共享约定
 
-当前 `packages/protocol` 主要保存协议说明。它写明 Gateway 和 Worker 怎样存取 Redis 任务、如何命名状态。
+当前只有 `packages/diagnostics`：Gateway 和桌面主进程共用的诊断日志与错误编号工具。
 
-目录名叫 packages，并不意味着其中每个目录都已经是可安装的软件包。当前协议的 TypeScript 和 Python 模型仍分别在各自源码中维护。
+Gateway 与 Python 之间的任务字段和状态没有单独的共享包，TypeScript 在 `apps/gateway/src/domain/protocol.ts`，Python 在 `bit_agent.runtime` 中分别维护。
 
 ## docs：我们维护的说明书
 
@@ -186,7 +184,7 @@ AI Agent/
 
 ## infra：帮项目准备运行环境
 
-`runtime` 提供正常开发或联调用 Redis 配置；`memory` 提供记忆后端测试环境；`sandbox/python` 定义运行目标 Python 测试的容器环境；`docker` 放 Windows 辅助启动脚本。
+`memory` 提供记忆后端测试环境；`sandbox/python` 定义运行目标 Python 测试的容器环境；`docker` 放 Windows 辅助启动脚本。
 
 Dockerfile 像“环境配方”；镜像是按配方准备好的环境；容器是实际启动起来的一次运行。Dockerfile 文件本身不是一个正在运行的服务。
 

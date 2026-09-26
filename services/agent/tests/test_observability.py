@@ -12,7 +12,6 @@ from bit_agent.observability import (
     EventBus,
     InMemoryEventSink,
     JsonlEventSink,
-    RedisEventSink,
 )
 
 
@@ -58,45 +57,6 @@ async def test_event_sink_failure_does_not_break_other_sinks() -> None:
 
     assert len(memory_sink.events) == 1
     assert bus.warnings == ["BrokenSink: OSError: 日志磁盘不可用"]
-
-
-@pytest.mark.asyncio
-async def test_redis_event_sink_writes_agent_event_to_stream() -> None:
-    class FakeRedis:
-        def __init__(self) -> None:
-            self.values: list[tuple[str, dict[str, str], dict[str, object]]] = []
-            self.expirations: list[tuple[str, int]] = []
-
-        async def xadd(
-            self,
-            key: str,
-            values: dict[str, str],
-            **options: object,
-        ) -> str:
-            self.values.append((key, values, options))
-            return "1-0"
-
-        async def expire(self, key: str, seconds: int) -> None:
-            self.expirations.append((key, seconds))
-
-    redis = FakeRedis()
-    sink = RedisEventSink(redis, "tasks:one:events", max_events=50, ttl_seconds=60)
-    event = AgentEvent(
-        trace_id="trace-1",
-        run_id="run-1",
-        sequence=1,
-        event_type=AgentEventType.AGENT_STARTED,
-        timestamp="2026-09-03T00:00:00Z",
-        agent_id="main",
-    )
-
-    await sink.emit(event)
-
-    key, values, options = redis.values[0]
-    assert key == "tasks:one:events"
-    assert json.loads(values["event"])["event_type"] == "AGENT_STARTED"
-    assert options == {"maxlen": 50, "approximate": True}
-    assert redis.expirations == [("tasks:one:events", 60)]
 
 
 @pytest.mark.asyncio
