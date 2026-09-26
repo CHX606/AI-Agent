@@ -30,12 +30,12 @@ Observability 在这里可以理解成“让执行过程看得见”。Agent 最
 | 位置或形式 | 用途 |
 | --- | --- |
 | `artifacts/events/*.jsonl` | 文件形式的事件记录，一行一个 JSON。 |
-| Redis Stream | Worker 把事件写到这里，让 Gateway 实时读取。 |
+| 本地 SQLite | 本地执行进程把任务事件存在这里，Gateway 读取后推送。 |
 | Gateway SSE | 把事件持续推送给 Desktop 或 CLI。 |
 | `.test-runs/.../artifacts/events.sse` | 某次运行保存下来的 SSE 文本记录。 |
 | `.test-runs/.../artifacts/gateway-result.json` | 某次任务保存下来的最终回执。 |
 
-默认运行可以写 JSONL；Worker 会注入 Redis 事件接收器。实际生成哪些文件，以该次运行的配置和结果中的路径为准，不能要求每个任务都生成完全相同的目录。
+默认运行可以写 JSONL。实际生成哪些文件，以该次运行的配置和结果中的路径为准，不能要求每个任务都生成完全相同的目录。
 
 JSONL 每行就是一个完整对象；SSE 通常有 `id:`、`event:`、`data:` 和空行，不应直接当成一个普通 JSON 文件解析。
 
@@ -50,7 +50,7 @@ JSONL 每行就是一个完整对象；SSE 通常有 `id:`、`event:`、`data:` 
 
 ## 程序怎样写事件
 
-`EventBus` 负责分配编号，`EventSink` 负责把事件放进具体存储。现有接收器包括内存、JSONL 文件和 Redis。
+`EventBus` 负责分配编号，`EventSink` 负责把事件放进具体存储。现有接收器包括内存和 JSONL 文件；本地执行进程另外注入接收器，把事件写进 SQLite。
 
 ```python
 from bit_agent.observability import InMemoryEventSink

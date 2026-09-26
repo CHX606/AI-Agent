@@ -16,9 +16,9 @@ Python 项目的依赖和测试配置统一在根目录 `pyproject.toml`。不�
 
 ## 推荐阅读顺序
 
-1. `worker/service.py`：看看任务如何被领取、执行和回写。
-2. `multi_agent/orchestrator.py`：看看完整任务如何拆分和汇总。
-3. `agent/runtime.py`：看看一个 Agent 如何反复调用模型和工具。
+1. `runtime/application/service.py`：看看任务如何被接收、执行和保存。
+2. `agent/runtime.py`：看看一个 Agent 如何反复调用模型和工具。
+3. `agent/verification.py`：看看修改代码后什么时候才允许结束任务。
 4. `llm/tool_schemas.py`：看看模型被允许调用哪些工具。
 5. `tools`：看工具实际上怎样读文件、改文件和检查结果。
 6. `tests`：结合用例理解预期行为。
@@ -40,15 +40,12 @@ Python 项目的依赖和测试配置统一在根目录 `pyproject.toml`。不�
 | `models` | 代码索引和仓库地图的数据结构。 |
 | `evals` | 独立验收 Agent 结果的程序实现。 |
 
-## 在根目录启动 Worker
+## 怎样启动
 
-```powershell
-./.venv/Scripts/python.exe -m bit_agent.worker
-```
+本地执行进程由 Gateway 自动启动（`python -m bit_agent.runtime`），平时用根目录的 `pnpm desktop:dev` 即可，见 [本地运行](../../docs/LOCAL_RUNTIME.md)。
+执行测试和检查还需要 Docker 环境。
 
-需要配置聊天模型并先启动 Redis；执行测试和检查还需要 Docker 环境。
-
-普通 Worker 默认接入 Redis 工作记忆，不会自动把 PostgreSQL 长期记忆和向量服务全部启用。具体接入见 [记忆说明](../../docs/MEMORY.md)。
+默认不会启用 PostgreSQL 长期记忆和向量服务。具体接入见 [记忆说明](../../docs/MEMORY.md)。
 
 ## 测试和评测结果怎么看
 

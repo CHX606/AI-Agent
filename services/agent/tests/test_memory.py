@@ -18,7 +18,6 @@ from bit_agent.memory import (
     MemoryRetriever,
     MemoryScope,
     OpenAIEmbeddingProvider,
-    RedisWorkingMemoryStore,
     VerifiedRunEvidence,
     WorkingMemory,
     WorkingMemoryTracker,
@@ -109,22 +108,6 @@ class StaticEmbedding:
         return [[1.0, float(index + 1)] for index, _ in enumerate(texts)]
 
 
-class FakeRedis:
-    def __init__(self) -> None:
-        self.values: dict[str, str] = {}
-        self.expirations: dict[str, int] = {}
-
-    async def get(self, key: str) -> str | None:
-        return self.values.get(key)
-
-    async def set(self, key: str, value: str, *, ex: int) -> None:
-        self.values[key] = value
-        self.expirations[key] = ex
-
-    async def delete(self, key: str) -> None:
-        self.values.pop(key, None)
-
-
 def test_working_memory_is_updated_by_deterministic_tool_results() -> None:
     tracker = WorkingMemoryTracker.create("修复错误", thread_id="thread-1")
 
@@ -142,21 +125,6 @@ def test_working_memory_is_updated_by_deterministic_tool_results() -> None:
     tracker.record_tool_call(tool_record("run_tests"))
     assert tracker.memory.latest_test_status is MemoryTestStatus.PASSED
     assert tracker.memory.unresolved_errors == []
-
-
-@pytest.mark.asyncio
-async def test_redis_working_memory_round_trip_and_ttl() -> None:
-    redis = FakeRedis()
-    store = RedisWorkingMemoryStore(redis, default_ttl_seconds=60)
-    memory = WorkingMemory(thread_id="thread-1", objective="继续任务")
-
-    await store.save(memory)
-    restored = await store.load("thread-1")
-
-    assert restored == memory
-    assert redis.expirations["bit-agent:working-memory:thread-1"] == 60
-    await store.delete("thread-1")
-    assert await store.load("thread-1") is None
 
 
 @pytest.mark.asyncio

@@ -29,7 +29,6 @@ dev = [
 ]
 memory = [
     "psycopg[binary]>=3.2,<4",
-    "redis>=5,<7",
 ]
 
 [tool.setuptools]

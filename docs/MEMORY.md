@@ -2,7 +2,7 @@
 
 更新日期：2026-09-10。上下文和任务状态已拆开存储；本次测试结果以本轮回复为准。
 
-**默认桌面链路现在使用 SQLite，而不是这里介绍的 Redis 工作记忆适配器。**
+**默认桌面链路把工作记忆保存在本地 SQLite 中。**
 对话历史、任务记录和工作记忆不会 24 小时后过期。先看 [本地运行](LOCAL_RUNTIME.md)。
 
 ## 用大白话理解这两种记忆
@@ -17,9 +17,8 @@
 | --- | --- |
 | 直接调用 `run_agent` | 默认使用进程内工作记忆；进程退出后，这份内存状态不会自动持久化。 |
 | 默认 Gateway / AgentRuntime | 使用 `runtime/infrastructure/storage.py` 保存会话历史、工作记忆和执行进度到本地 SQLite，无 TTL。 |
-| 旧 Python Worker，显式 Redis 模式 | 给 Agent 接入 Redis 工作记忆，仍保留旧接口供兼容和测试。 |
 | PostgreSQL 长期记忆 | 有实现，需要创建存储并接入召回器或巩固器。 |
-| Embedding 向量服务 | 独立配置；普通 Worker 不会自动创建它。 |
+| Embedding 向量服务 | 独立配置；默认启动不会自动创建它。 |
 | 独立 EvalRunner 的记忆巩固 | 传入巩固器且验收通过后，才有相应写入流程。 |
 
 因此“代码里有记忆模块”和“你当前这次任务正在使用全部长期记忆功能”是两件需要分别确认的事。
@@ -41,7 +40,7 @@ Bit Agent 的记忆框架遵循一条边界：运行时状态可以高频更新�
 ```text
 Agent 工具循环
 → WorkingMemoryTracker 确定性更新
-→ WorkingMemoryStore（内存或 Redis）
+→ WorkingMemoryStore（内存或本地 SQLite）
 → 独立 Docker 验证通过
 → 确定性证据压缩（Token 硬预算）
 → LLM 提炼原子 MemoryCandidate
@@ -65,9 +64,10 @@ Working Memory 不再包含 `history_summary` 字段，也不负责保管摘要�
 
 ```python
 from bit_agent.agent import run_agent
-from bit_agent.memory import RedisWorkingMemoryStore
+from bit_agent.memory import InMemoryWorkingMemoryStore
 
-store = RedisWorkingMemoryStore.from_url("redis://localhost:6379/0")
+# 同一个 store 对象在进程内共享；桌面链路使用 runtime 里的 SQLiteWorkingMemoryStore。
+store = InMemoryWorkingMemoryStore()
 
 result = await run_agent(
     "修复当前项目的失败测试",
@@ -84,13 +84,13 @@ result = await run_agent(
 - 失败的 `run_tests` 记录错误。
 - 成功的 `run_tests` 清理已解决测试错误。
 
-Redis 是可选适配器。没有 Redis 时，Agent 仍可使用 `InMemoryWorkingMemoryStore`；但进程退出后状态会消失。恢复结构化工作记忆也不等于自动恢复所有对话、正在执行的进程或 Docker 容器。
+`InMemoryWorkingMemoryStore` 在进程退出后状态会消失；需要持久化时由调用方传入其他 `WorkingMemoryStore` 实现。恢复结构化工作记忆也不等于自动恢复所有对话、正在执行的进程或 Docker 容器。
 
 ## Long-term Memory
 
 长期记忆不是原始聊天记录。一次任务必须经过 Agent 自测和 EvalRunner 的独立验证，之后才会触发 `MemoryConsolidator`。
 
-下面是一套使用本地 Ollama 的向量服务配置示例。它不产生远程 API 的按 Token 费用，但仍会使用本机资源；普通 Worker 不会自动启用这套配置：
+下面是一套使用本地 Ollama 的向量服务配置示例。它不产生远程 API 的按 Token 费用，但仍会使用本机资源；默认启动不会自动启用这套配置：
 
 ```ini
 EMBEDDING_API_KEY=ollama
@@ -136,7 +136,7 @@ runner = EvalRunner(
 )
 ```
 
-安装真实 Redis/PostgreSQL 适配器依赖：
+安装真实 PostgreSQL 适配器依赖：
 
 ```powershell
 python -m pip install -e ".[dev,memory]"
@@ -154,8 +154,8 @@ PostgreSQL 用户必须有创建或使用 `vector` 扩展的权限。`initialize
 
 ## 真实后端集成测试
 
-项目提供隔离的 Redis 与 PostgreSQL/pgvector 测试环境。以下命令会启动两个测试容器，
-向本次测试进程注入测试地址，并执行对应集成测试文件，覆盖 Redis 跨进程恢复、
+项目提供隔离的 PostgreSQL/pgvector 测试环境。以下命令会启动测试容器，
+向本次测试进程注入测试地址，并执行对应集成测试文件，覆盖
 PostgreSQL 持久化与向量召回、真实 LLM 记忆巩固等场景：
 
 ```powershell
@@ -169,8 +169,7 @@ pwsh -File infra/memory/run-integration-tests.ps1 -FullSuite
 ```
 
 容器默认保留，方便重复测试；添加 `-StopAfter` 可在测试结束后停止并删除测试容器。
-测试服务只绑定到本机 `127.0.0.1`，使用 `6380` 和 `55432` 端口，不占用 Redis、
-PostgreSQL 的常见默认端口。Compose 中的账户仅用于本机测试，不能用于生产环境。
+测试服务只绑定到本机 `127.0.0.1`，使用 `55432` 端口，不占用 PostgreSQL 的常见默认端口。Compose 中的账户仅用于本机测试，不能用于生产环境。
 
 每条向量同时保存 `provider + model + dimensions + version` 组成的 `EmbeddingProfile`。不同模型、维度或版本的向量不会放在一起比较，因此更换 Embedding 模型时可以安全地并行重建，而不会产生“维度相同但语义空间不同”的隐蔽错误。
 
@@ -218,10 +217,10 @@ print(result.memory_context_tokens)
 
 ## 当前边界
 
-- 已实现 Working Memory、Redis 适配器、长期记忆审核、PostgreSQL/pgvector、证据压缩、原子化、长记忆分块、Embedding 批处理、Profile 隔离、混合召回和召回评测。
+- 已实现 Working Memory、长期记忆审核、PostgreSQL/pgvector、证据压缩、原子化、长记忆分块、Embedding 批处理、Profile 隔离、混合召回和召回评测。
 - 已接入 Agent runtime 和独立 EvalRunner；所有召回与写入结果都可审计。
 - 长期记忆写入前的证据压缩和召回注入预算由 Memory 模块负责；Agent 多轮历史的
   Token 监控、工具结果外置与滚动摘要已经由 Context Manager 接管，详见
   [CONTEXT.md](CONTEXT.md)。
-- PostgreSQL 与 Redis 属于外部服务，默认测试使用内存实现，不要求开发机始终启动数据库。
+- PostgreSQL 属于外部服务，默认测试使用内存实现，不要求开发机始终启动数据库。
 > 2026-09-09 验收更新：本地运行链路已通过回归和真实 Electron 串联检查。文中早先的“未验收”描述是修改阶段的记录；最新结果及未覆盖范围见 [本地版验收报告](ACCEPTANCE_LOCAL_RUNTIME.md)。

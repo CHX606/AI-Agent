@@ -1,6 +1,6 @@
 # 任务状态：怎样知道它进行到了哪里
 
-更新日期：2026-09-07。下面使用当前 Gateway 和 Worker 的实际状态名称。
+更新日期：2026-09-07。下面使用当前 Gateway 和本地执行进程的实际状态名称。
 
 ## 先分清三种“状态”
 
@@ -8,12 +8,12 @@
 
 一次工具失败，不一定代表整个任务马上失败。Agent 可能读懂错误后再试一次。
 
-## Gateway / Worker 任务状态
+## 任务状态
 
 | 状态 | 大白话含义 | 是否结束 |
 | --- | --- | --- |
 | `QUEUED` | 已经接单，正在排队。 | 否 |
-| `RUNNING` | Worker 已领取，正在执行。 | 否 |
+| `RUNNING` | 本地执行进程已开始执行。 | 否 |
 | `CANCELLATION_REQUESTED` | 收到取消请求，正在等待执行端停止。 | 否 |
 | `CANCELLED` | 任务已经取消。 | 是 |
 | `COMPLETED` | 本次执行报告为完成。 | 是 |
@@ -38,7 +38,7 @@ stateDiagram-v2
 
 这是主要流程示意。取消和任务自然结束可能同时发生，最终状态以服务返回的任务记录为准。
 
-`CANCELLED` 只会在 Gateway 收到取消请求后出现。空工作区、模型异常和 Worker 超时不会
+`CANCELLED` 只会在 Gateway 收到取消请求后出现。空工作区、模型异常和执行超时不会
 自动写成取消；这些执行异常应进入 `FAILED`。关闭 Desktop 的事件流也不等于取消任务。
 
 当前公开协议没有 `CREATED`、`SUCCEEDED` 或 `REJECTED` 这几个任务状态。它们出现在早期设计稿中；请求格式不合法时，Gateway 会返回 HTTP 错误，不会给你一个名为 `REJECTED` 的已排队任务。
@@ -81,8 +81,9 @@ stateDiagram-v2
 ## 对应代码
 
 - `apps/gateway/src/domain/protocol.ts`：TypeScript 任务状态。
-- `services/agent/src/bit_agent/worker/models.py`：Python 任务状态。
-- `services/agent/src/bit_agent/worker/service.py`：Worker 执行和状态回写。
+- `services/agent/src/bit_agent/runtime/application/service.py`：任务执行和状态回写。
+- `services/agent/src/bit_agent/runtime/infrastructure/storage.py`：任务状态在 SQLite 中的保存与转换约束。
+- `services/agent/src/bit_agent/agent/verification.py`：修改后的验证规则。
 - `services/agent/src/bit_agent/agent/result.py`：单 Agent 结果。
 - `services/agent/src/bit_agent/multi_agent/models.py`：多 Agent 结果和子任务状态。
 - `services/agent/src/bit_agent/observability/events.py`：执行事件。

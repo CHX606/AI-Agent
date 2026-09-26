@@ -55,7 +55,7 @@ test.skipIf(process.env.BIT_AGENT_TEST_LOCAL_RUNTIME !== "1")(
     Object.assign(process.env, {
       BIT_AGENT_DATA_DIR: join(directory, "data"), BIT_AGENT_PROJECT_ROOT: root,
       API_KEY: "local-acceptance-not-a-real-key", BASE_URL: `http://127.0.0.1:${address.port}/v1`,
-      MODEL_NAME: "local-test", BIT_AGENT_RUNTIME: "local", BIT_AGENT_TASK_TIMEOUT_SECONDS: "45",
+      MODEL_NAME: "local-test",BIT_AGENT_TASK_TIMEOUT_SECONDS: "45",
     });
     let store = await LocalTaskStore.connect();
     let app = buildApp({ taskStore: store, logger: false });

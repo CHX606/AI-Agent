@@ -24,7 +24,6 @@ pnpm desktop:dev
 ```
 
 这条命令先构建桌面，再启动 Gateway 和 Electron。Gateway 自动启动 Python 本地运行服务。
-不需要先开 Redis，也不需要再运行旧的 `python -m bit_agent.worker`。
 如果已经手动启动 Gateway，使用 `pnpm desktop:only` 打开界面，避免重复占用端口。
 单独开发 Gateway 可以用 `pnpm gateway:dev`。
 
@@ -59,7 +58,6 @@ pnpm desktop:dev
 已有工作记忆是任务状态的依据；若旧上下文副本与它不一致，会从任务记录重读用户补充要求，
 而不是直接用旧副本覆盖当前状态。旧格式迁移失败时保留原记录，不用空数据覆盖。
 
-这次只调整本地 SQLite 会话。旧 Redis 路径的历史数据不会自动导入或迁移。
 本次测试结果以本轮回复为准，下方旧验收报告不代表这次修改已经通过验收。
 
 ### 从哪里开始读代码
@@ -71,10 +69,9 @@ pnpm desktop:dev
 Gateway 的对应入口是 `apps/gateway/src/infrastructure/runtime/local-task-store.ts`。
 它只负责启动 Python 和传递消息，不应该再自行处理上下文、工作记忆或分工。
 
-## 兼容旧代码
+## 旧 Redis 链路
 
-`BIT_AGENT_RUNTIME=redis` 可选择旧的 Redis 路径，需要自己启动 Redis 和旧 Worker。
-旧路径不提供新本地会话的恢复及三档模式语义，旧测试和底层适配器保留。
+早期的 Redis 队列 + Python Worker 链路已删除（git 标签 `legacy-redis` 保留了最后一版）。
+旧 Redis 中的任务从未导入 SQLite，删除代码也不会动那份数据。
 PostgreSQL 长期记忆仍是可选能力，没有删除；普通本地聊天不会默认启用向量记忆。
-旧 Redis 任务没有自动导入 SQLite，历史数据仍留在原来的存储中。
 > 2026-09-09 验收更新：本地运行链路已通过回归和真实 Electron 串联检查。文中早先的“未验收”描述是修改阶段的记录；最新结果及未覆盖范围见 [本地版验收报告](ACCEPTANCE_LOCAL_RUNTIME.md)。

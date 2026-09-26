@@ -1,6 +1,6 @@
 # Gateway：接收任务的服务
 
-这是用 TypeScript 写的 HTTP 服务。默认通过本地 RPC 把任务交给 Python AgentRuntime，由 SQLite 保存；Redis/Worker 链路需要显式选择。
+这是用 TypeScript 写的 HTTP 服务。通过本地 RPC 把任务交给 Python AgentRuntime，由 SQLite 保存。
 
 Gateway 还负责查询状态、处理取消请求，以及把执行事件通过 SSE 转发给客户端。
 
@@ -13,7 +13,7 @@ Gateway 还负责查询状态、处理取消请求，以及把执行事件通过
 | `src/domain/protocol.ts` | 任务字段、状态和校验。 |
 | `src/application/ports/task-store.ts` | 任务操作接口。 |
 | `src/infrastructure/runtime/local-task-store.ts` | Python 子进程与 RPC 适配器。 |
-| `src/infrastructure/persistence/` | Redis 与测试内存适配器。 |
+| `src/infrastructure/persistence/` | 测试用内存适配器。 |
 | `src/infrastructure/observability/` | Gateway 日志适配器。 |
 | `test` | 接口和存储测试。 |
 | `package.json` | 依赖和启动、测试、构建脚本。 |
@@ -30,6 +30,6 @@ pnpm --dir apps/gateway dev
 
 `dev` 会监视源码变化；`start` 直接启动；`build` 运行 TypeScript 编译；`test` 执行测试；当前 `lint` 和 `typecheck` 都调用 TypeScript 的类型检查。
 
-默认本地模式不需要 Redis。默认监听 `http://127.0.0.1:3000`。
+默认监听 `http://127.0.0.1:3000`。
 
-接口与启动顺序见 [Gateway / Worker 说明](../../docs/GATEWAY_WORKER.md)。
+接口与配置见 [Gateway 说明](../../docs/GATEWAY.md)。

@@ -16,7 +16,6 @@ if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
 }
 
 $testVariables = @{
-    BIT_AGENT_TEST_REDIS_URL = "redis://127.0.0.1:6380/0"
     BIT_AGENT_TEST_POSTGRES_DSN = "postgresql://bit_agent_test:bit_agent_test@127.0.0.1:55432/bit_agent_test"
     BIT_AGENT_TEST_LLM = "1"
 }
@@ -26,7 +25,7 @@ $testExitCode = 1
 try {
     & docker compose --file $composeFile up --detach --wait --wait-timeout 60
     if ($LASTEXITCODE -ne 0) {
-        throw "Redis/PostgreSQL 测试服务启动失败"
+        throw "PostgreSQL 测试服务启动失败"
     }
 
     foreach ($name in $testVariables.Keys) {

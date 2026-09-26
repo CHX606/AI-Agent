@@ -1,8 +1,6 @@
-"""真实 Redis 与 PostgreSQL + pgvector 后端的可选集成测试。"""
+"""真实 PostgreSQL + pgvector 后端的可选集成测试。"""
 
-import asyncio
 import os
-import sys
 from collections.abc import Sequence
 from uuid import uuid4
 
@@ -17,13 +15,11 @@ from bit_agent.memory import (
     MemoryRetriever,
     MemoryScope,
     PostgreSQLLongTermMemoryStore,
-    RedisWorkingMemoryStore,
     VerifiedRunEvidence,
     WorkingMemory,
 )
 from bit_agent.memory import TestStatus as MemoryTestStatus
 
-REDIS_URL = os.getenv("BIT_AGENT_TEST_REDIS_URL")
 POSTGRES_DSN = os.getenv("BIT_AGENT_TEST_POSTGRES_DSN")
 RUN_LLM_TEST = os.getenv("BIT_AGENT_TEST_LLM") == "1"
 
@@ -44,59 +40,6 @@ class StaticEmbedding:
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         return [[1.0, 0.5, -0.25] for _ in texts]
-
-
-@pytest.mark.skipif(not REDIS_URL, reason="未配置真实 Redis 集成测试地址")
-@pytest.mark.asyncio
-async def test_redis_working_memory_survives_a_new_python_process() -> None:
-    thread_id = f"memory-e2e-{uuid4().hex}"
-    writer = RedisWorkingMemoryStore.from_url(REDIS_URL, default_ttl_seconds=120)
-    memory = WorkingMemory(
-        thread_id=thread_id,
-        objective="验证 Working Memory 可以跨进程恢复",
-        files_read=["calculator.py"],
-        important_findings=["add 函数曾错误地执行减法"],
-        latest_test_status=MemoryTestStatus.PASSED,
-        rounds=5,
-    )
-
-    await writer.save(memory)
-    child_code = """
-import asyncio
-import os
-import sys
-from bit_agent.memory import RedisWorkingMemoryStore
-
-async def main():
-    store = RedisWorkingMemoryStore.from_url(os.environ["BIT_AGENT_TEST_REDIS_URL"])
-    memory = await store.load(os.environ["BIT_AGENT_TEST_THREAD_ID"])
-    payload = memory.model_dump_json() if memory is not None else "null"
-    sys.stdout.buffer.write(payload.encode("utf-8"))
-    await store.client.aclose()
-
-asyncio.run(main())
-"""
-    child_environment = os.environ.copy()
-    child_environment["BIT_AGENT_TEST_THREAD_ID"] = thread_id
-    process = await asyncio.create_subprocess_exec(
-        sys.executable,
-        "-c",
-        child_code,
-        env=child_environment,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await process.communicate()
-
-    try:
-        assert process.returncode == 0, stderr.decode("utf-8", errors="replace")
-        restored = WorkingMemory.model_validate_json(stdout)
-        assert restored == memory
-        ttl = await writer.client.ttl(f"bit-agent:working-memory:{thread_id}")
-        assert 0 < ttl <= 120
-    finally:
-        await writer.delete(thread_id)
-        await writer.client.aclose()
 
 
 @pytest.mark.skipif(not POSTGRES_DSN, reason="未配置真实 PostgreSQL 集成测试地址")
@@ -211,11 +154,11 @@ async def test_real_llm_consolidates_verified_evidence_into_postgres() -> None:
         project_id="bit-agent-memory-llm-e2e",
         objective=working_memory.objective,
         working_memory=working_memory,
-        final_answer="记忆框架已完成，并通过真实 Redis 和 PostgreSQL 集成测试。",
+        final_answer="记忆框架已完成，并通过真实 PostgreSQL 集成测试。",
         changed_files=working_memory.changed_files,
         tool_trace_summary="修改 PostgreSQL 适配器，然后在 Docker 中运行集成测试。",
         diff="PostgreSQL 数据库操作使用工作线程，保持上层异步接口。",
-        verification_summary="真实 Redis 跨进程恢复通过；PostgreSQL 重连和 pgvector 召回通过。",
+        verification_summary="PostgreSQL 重连和 pgvector 召回通过。",
         independently_verified=True,
     )
     consolidator = MemoryConsolidator(

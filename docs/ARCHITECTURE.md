@@ -21,14 +21,14 @@ apps/desktop/src/
   shared/                           两个进程共享的数据约定
 
 apps/gateway/src/
-  index.ts                          启动、选择本地或 Redis 后端
+  index.ts                          启动、连接本地执行进程
   bootstrap.ts                      默认适配器装配
   domain/                           任务状态、数据约定与校验
   application/ports/                TaskStore 接口
   transport/http/                   Fastify 路由与 SSE
   infrastructure/
     runtime/                        Python 子进程 RPC 客户端
-    persistence/                    Redis、内存存储适配器
+    persistence/                    测试用内存存储适配器
     observability/                  Gateway 日志
 
 services/agent/src/bit_agent/runtime/
@@ -49,7 +49,7 @@ docs/                              说明与验收记录
 | 调用方 | 依赖的接口 | 在装配入口选择的实现 |
 | --- | --- | --- |
 | 桌面 IPC | DesktopServices、GatewayClientPort、RepositoryPort、RuntimePort、PreferencesPort | GatewayClient、本地文件适配器、受管子进程 |
-| HTTP 路由 | TaskStore、DiagnosticService | LocalTaskStore 或 RedisTaskStore；测试使用 MemoryTaskStore |
+| HTTP 路由 | TaskStore、DiagnosticService | LocalTaskStore；测试使用 MemoryTaskStore |
 | Python AgentRuntime / TaskInteraction | StoragePort、WorkingMemoryStore | LocalStorage、SQLiteWorkingMemoryStore |
 | Python 任务/工具编排 | JournalFactory、ChangeJournalPort、ProjectVerifier | ChangeJournal、verify_project |
 | Python RPC | 异步方法表 | 启动入口绑定 AgentRuntime 方法 |
@@ -59,7 +59,7 @@ docs/                              说明与验收记录
 ## 强制依赖规则
 
 - 业务层不得导入本模块的基础设施、通信层或装配入口。
-- 通信层通过接口访问业务/存储，不创建 SQLite、Redis 或子进程适配器。
+- 通信层通过接口访问业务/存储，不创建 SQLite 或子进程适配器。
 - 适配器可以实现业务端口，不得反向调用任务编排或 HTTP/IPC。
 - Gateway 领域约定、桌面 shared 数据约定保持独立；renderer 不得引用主进程实现。
 - JavaScript 检查循环依赖。Python 检查上述规则时也检查间接引用。

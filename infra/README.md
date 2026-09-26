@@ -1,8 +1,7 @@
 # infra：给项目准备配套环境
 
-2026-09-09：默认桌面链路已改成本地 Python + SQLite，不需要下面的开发 Redis。
-Redis 配置和集成测试保留供旧模式使用。Docker 测试沙箱仍有独立用途，没有删除。
-新启动方式见 [本地运行](../docs/LOCAL_RUNTIME.md)。本轮未执行测试或构建。
+日常开发不需要启动这里的任何服务：桌面链路是本地 Python + SQLite，启动方式见 [本地运行](../docs/LOCAL_RUNTIME.md)。
+早期的 Redis 开发与联调配置已随旧链路删除（git 标签 `legacy-redis`）。
 
 这里放服务配置、测试沙箱的 Dockerfile 和辅助脚本。你可以把它理解成“准备工作场地”的部分，Agent 的业务逻辑在 `services/agent`。
 
@@ -11,41 +10,15 @@ Redis 配置和集成测试保留供旧模式使用。Docker 测试沙箱仍有�
 | 目录 | 用途 |
 | --- | --- |
 | `docker` | Windows 下 Docker Desktop 的辅助启动和残留文件处理脚本。 |
-| `runtime` | 正常开发以及 Gateway / Worker 联调使用的 Redis 配置。 |
-| `memory` | 记忆模块真实 Redis/PostgreSQL 测试环境。 |
+| `memory` | 记忆模块真实 PostgreSQL/pgvector 测试环境。 |
 | `sandbox/python` | 给目标 Python 项目运行测试和检查的 Docker 环境。 |
 
-## 开发 Redis 和测试 Redis 分开
+## 记忆集成测试
 
-| 配置文件 | 启动内容 | 本机端口 |
-| --- | --- | --- |
-| `runtime/compose.dev.yaml` | 开发用 Redis，使用持久卷保存数据。 | `6379` |
-| `runtime/compose.yaml` | Gateway / Worker 协议测试 Redis。 | `6381` |
-| `memory/compose.yaml` | 记忆后端测试 Redis 和 PostgreSQL/pgvector。 | `6380`、`55432` |
+`memory/compose.yaml` 只启动测试用 PostgreSQL/pgvector，绑定本机端口 `55432`，不会启动 Gateway、Electron 或 Ollama。
 
-它们是不同用途的环境。开发 Redis 中的任务不会自动出现在另一套测试 Redis 中。
-
-这些 Compose 文件没有启动 Gateway、Worker、Electron 或 Ollama，需要按各自说明单独运行。
-
-## 日常开发启动什么
-
-启动 Docker Desktop 后，在项目根目录执行：
-
-```powershell
-docker compose --file infra/runtime/compose.dev.yaml up --detach --wait
-```
-
-再按 [项目首页](../README.md) 启动 Worker、Gateway 和客户端。
-
-## 两个集成测试脚本
-
-`runtime/run-integration-tests.ps1` 启动测试 Redis，运行 Gateway 与 Python Worker 的 Redis 联调测试。
-
-`memory/run-integration-tests.ps1` 启动记忆测试服务并运行相应 Python 集成测试。它会启用真实 LLM 测试条件，因此还需要相关模型配置。
-
-两个脚本都支持 `-StopAfter`，表示结束后关闭对应测试服务；记忆脚本的 `-FullSuite` 会改为运行默认 Python 测试集合，不会顺带运行所有 Node.js 测试。
-
-这些是脚本用途说明，本轮文档整理没有执行它们。
+`memory/run-integration-tests.ps1` 启动这套服务并运行相应 Python 集成测试。它会启用真实 LLM 测试条件，因此还需要相关模型配置。
+`-StopAfter` 表示结束后关闭测试服务；`-FullSuite` 会改为运行默认 Python 测试集合，不会顺带运行 Node.js 测试。
 
 ## sandbox/python 里有什么
 
