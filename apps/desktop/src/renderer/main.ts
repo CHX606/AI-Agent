@@ -2,13 +2,9 @@ import "@awesome.me/webawesome/dist/styles/themes/default.css";
 import "@awesome.me/webawesome/dist/components/details/details.js";
 import "./styles.css";
 
-import type {
-  ColorTheme,
-  MultiAgentMode,
-  RepositoryDirectoryResult,
-  RepositoryEntry,
-  TaskEvent,
-} from "../shared/contracts";
+import type { ColorTheme, TaskEvent } from "../shared/contracts";
+import { createActivityCard } from "./activity-card";
+import { element, formatHistoryTime, object, projectName } from "./dom";
 import { renderMarkdown } from "./markdown";
 import { eventPresentation, isMainAgentText, summarizeResult } from "./presentation";
 import {
@@ -17,6 +13,8 @@ import {
 } from "./session-view";
 
 import { createInteractionView } from "./interaction-view";
+import { createRepositoryView } from "./repository-view";
+import { loadHistory, saveHistory, type TaskHistoryEntry } from "./task-history";
 
 const terminalStatuses = new Set(["COMPLETED", "PARTIAL", "FAILED", "CANCELLED"]);
 const statusLabels: Record<string, string> = {
@@ -35,11 +33,9 @@ const statusLabels: Record<string, string> = {
   SUBMITTING: "正在提交",
   UNKNOWN: "状态未知",
 };
-const historyKey = "bit-agent.task-history.v1";
 const gatewayKey = "bit-agent.gateway-url.v1";
 const workspaceKey = "bit-agent.workspace-root.v1";
 const inspectorKey = "bit-agent.inspector-collapsed.v1";
-const maximumHistoryEntries = 200;
 import { mountProductControls, permissionMode } from "./product-controls";
 const reportClientError = (kind: "exception" | "rejection", line?: number) => {
   void window.bitAgent.reportClientError({ kind, ...(line === undefined ? {} : { line }) })
@@ -53,31 +49,6 @@ const initialTheme: ColorTheme = window.bitAgent.colorTheme;
 
 document.documentElement.dataset.theme = initialTheme;
 document.documentElement.classList.add("wa-theme-default");
-
-interface TaskHistoryEntry {
-  permissionMode?: "read_only" | "confirm" | "edit";
-  taskId: string;
-  objective: string;
-  workspaceRoot: string;
-  gatewayUrl: string;
-  status: string;
-  createdAt: string;
-  finalAnswer?: string;
-  sessionId?: string;
-  multiAgentMode?: MultiAgentMode;
-}
-
-function element<T extends HTMLElement>(selector: string): T {
-  const found = document.querySelector<T>(selector);
-  if (!found) throw new Error(`缺少界面元素：${selector}`);
-  return found;
-}
-
-function object(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
 
 const shell = element<HTMLElement>(".shell");
 const gatewayInput = element<HTMLInputElement>("#gateway");
@@ -123,19 +94,10 @@ const repositoryNavigation = element<HTMLButtonElement>("#nav-repository");
 const taskSidebarPane = element<HTMLElement>("#task-sidebar-pane");
 const repositorySidebarPane = element<HTMLElement>("#repository-sidebar-pane");
 const repositoryView = element<HTMLElement>("#repository-view");
-const repositoryRootLabel = element<HTMLElement>("#repository-root-label");
-const repositoryRefresh = element<HTMLButtonElement>("#repository-refresh");
-const repositoryBrowse = element<HTMLButtonElement>("#repository-browse");
-const repositoryTree = element<HTMLElement>("#repository-tree");
-const repositoryTreeState = element<HTMLElement>("#repository-tree-state");
-const repositoryTreeMessage = element<HTMLElement>("#repository-tree-message");
-const repositoryEntryCount = element<HTMLElement>("#repository-entry-count");
-const repositoryFileTitle = element<HTMLElement>("#repository-file-title");
-const repositoryFileMeta = element<HTMLElement>("#repository-file-meta");
-const repositoryPreviewEmpty = element<HTMLElement>("#repository-preview-empty");
-const repositoryPreviewContent = element<HTMLElement>("#repository-preview-content");
-const repositoryPreviewNotice = element<HTMLElement>("#repository-preview-notice");
-const repositoryFileContent = element<HTMLElement>("#repository-file-content");
+const repository = createRepositoryView({
+  currentWorkspace: () => workspaceInput.value.trim(),
+  onBrowse: () => void browseWorkspace(),
+});
 
 let activeTaskId: string | null = null;
 let activeSessionId: string | null = null;
@@ -148,10 +110,6 @@ let eventCount = 0;
 const activityCards = new Map<string, HTMLLIElement>();
 let history = loadHistory();
 let activeView: "tasks" | "repository" = "tasks";
-let repositoryLoadGeneration = 0;
-let repositoryPreviewGeneration = 0;
-let repositoryLoadedRoot = "";
-let selectedRepositoryEntry: HTMLButtonElement | null = null;
 let interactionView: ReturnType<typeof createInteractionView> | null = null;
 let interactionRefreshSequence = 0;
 
@@ -165,42 +123,6 @@ function setTheme(theme: ColorTheme, syncWindow = true): void {
   if (syncWindow) window.bitAgent.setTheme(theme);
 }
 
-function isHistoryEntry(value: unknown): value is TaskHistoryEntry {
-  const record = object(value);
-  return (
-    typeof record?.taskId === "string" &&
-    typeof record.objective === "string" &&
-    typeof record.workspaceRoot === "string" &&
-    typeof record.gatewayUrl === "string" &&
-    typeof record.status === "string" &&
-    typeof record.createdAt === "string"
-  );
-}
-
-function loadHistory(): TaskHistoryEntry[] {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(historyKey) ?? "[]");
-    return Array.isArray(parsed) ? parsed.filter(isHistoryEntry).slice(0, maximumHistoryEntries) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveHistory(): void {
-  localStorage.setItem(historyKey, JSON.stringify(history.slice(0, maximumHistoryEntries)));
-}
-
-function formatHistoryTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.valueOf())
-    ? ""
-    : new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
-}
-
-function projectName(path: string): string {
-  return path.split(/[\\/]/u).filter(Boolean).at(-1) ?? "尚未选择项目";
-}
-
 function setWorkspace(path: string): void {
   const workspaceRoot = path.trim();
   // 输入框触发 change 时已经是新值，需要与上次确认的目录比较。
@@ -210,226 +132,9 @@ function setWorkspace(path: string): void {
   workspaceName.textContent = workspaceRoot ? projectName(workspaceRoot) : "尚未选择项目";
   workspaceSummary.textContent = workspaceRoot || "选择本地代码仓库";
   workspaceSummary.title = workspaceRoot;
-  repositoryRootLabel.textContent = workspaceRoot
-    ? projectName(workspaceRoot)
-    : "尚未选择工作区";
-  repositoryRootLabel.title = workspaceRoot;
   if (workspaceRoot) localStorage.setItem(workspaceKey, workspaceRoot);
   else localStorage.removeItem(workspaceKey);
-  invalidateRepository(workspaceRoot);
-  if (activeView === "repository" && workspaceRoot) void refreshRepository();
-}
-
-function setRepositoryTreeState(
-  message: string,
-  options: { browse?: boolean; error?: boolean } = {},
-): void {
-  repositoryTreeMessage.textContent = message;
-  repositoryBrowse.hidden = options.browse !== true;
-  repositoryTreeState.hidden = false;
-  repositoryTree.hidden = true;
-  if (options.error) repositoryTreeState.dataset.tone = "error";
-  else delete repositoryTreeState.dataset.tone;
-}
-
-function resetRepositoryPreview(): void {
-  repositoryPreviewGeneration += 1;
-  selectedRepositoryEntry = null;
-  repositoryFileTitle.textContent = "选择一个文件";
-  repositoryFileTitle.removeAttribute("title");
-  repositoryFileMeta.textContent = "";
-  repositoryFileContent.textContent = "";
-  repositoryPreviewNotice.hidden = true;
-  delete repositoryPreviewNotice.dataset.tone;
-  repositoryPreviewContent.hidden = true;
-  repositoryPreviewEmpty.hidden = false;
-}
-
-function invalidateRepository(workspaceRoot: string): void {
-  repositoryLoadGeneration += 1;
-  repositoryLoadedRoot = "";
-  repositoryRefresh.disabled = false;
-  repositoryEntryCount.textContent = "0";
-  repositoryTree.replaceChildren();
-  resetRepositoryPreview();
-  setRepositoryTreeState(
-    workspaceRoot ? "打开仓库页面以加载文件。" : "选择一个本地代码仓库后即可浏览文件。",
-    { browse: !workspaceRoot },
-  );
-}
-
-function repositoryIcon(kind: RepositoryEntry["kind"]): SVGSVGElement {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute(
-    "d",
-    kind === "directory" ? "M3.5 7.5h7l2-2h8v13h-17z" : "M6 3.5h8l4 4v13H6zM14 3.5v4h4",
-  );
-  svg.append(path);
-  return svg;
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1_000) return `${bytes} B`;
-  if (bytes < 1_000_000) return `${(bytes / 1_000).toFixed(1)} KB`;
-  return `${(bytes / 1_000_000).toFixed(1)} MB`;
-}
-
-function renderRepositoryEntries(
-  result: RepositoryDirectoryResult,
-  container: HTMLElement,
-  generation: number,
-): void {
-  container.replaceChildren();
-  for (const entry of result.entries) {
-    const group = document.createElement("div");
-    group.className = "repository-entry-group";
-    group.setAttribute("role", "none");
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "repository-entry";
-    button.dataset.kind = entry.kind;
-    button.dataset.path = entry.path;
-    button.title = entry.path;
-    button.setAttribute("role", "treeitem");
-
-    const arrow = document.createElement("span");
-    arrow.className = "repository-entry-arrow";
-    arrow.textContent = "›";
-    arrow.setAttribute("aria-hidden", "true");
-    const icon = document.createElement("span");
-    icon.className = "repository-entry-icon";
-    icon.append(repositoryIcon(entry.kind));
-    const name = document.createElement("span");
-    name.className = "repository-entry-name";
-    name.textContent = entry.name;
-    button.append(arrow, icon, name);
-    group.append(button);
-
-    if (entry.kind === "directory") {
-      const children = document.createElement("div");
-      children.className = "repository-entry-children";
-      children.setAttribute("role", "group");
-      children.hidden = true;
-      group.append(children);
-      button.setAttribute("aria-expanded", "false");
-      button.addEventListener("click", async () => {
-        const opening = button.dataset.open !== "true";
-        button.dataset.open = String(opening);
-        button.setAttribute("aria-expanded", String(opening));
-        children.hidden = !opening;
-        if (!opening || children.dataset.loaded === "true") return;
-
-        children.textContent = "正在加载…";
-        children.classList.add("repository-entry-loading");
-        try {
-          const childResult = await window.bitAgent.listRepositoryDirectory({ path: entry.path });
-          if (generation !== repositoryLoadGeneration) return;
-          children.classList.remove("repository-entry-loading");
-          children.dataset.loaded = "true";
-          renderRepositoryEntries(childResult, children, generation);
-          if (childResult.entries.length === 0) {
-            children.textContent = "空目录";
-            children.classList.add("repository-entry-loading");
-          }
-        } catch (error) {
-          if (generation !== repositoryLoadGeneration) return;
-          children.classList.add("repository-entry-loading", "is-error");
-          children.textContent = error instanceof Error ? error.message : "目录读取失败";
-        }
-      });
-    } else {
-      button.addEventListener("click", () => void openRepositoryFile(entry, button));
-    }
-
-    container.append(group);
-  }
-
-  if (result.truncated) {
-    const notice = document.createElement("p");
-    notice.className = "repository-tree-notice";
-    notice.textContent = "目录内容较多，仅显示前 500 项。";
-    container.append(notice);
-  }
-}
-
-async function openRepositoryFile(
-  entry: RepositoryEntry,
-  button: HTMLButtonElement,
-): Promise<void> {
-  const generation = ++repositoryPreviewGeneration;
-  selectedRepositoryEntry?.removeAttribute("data-selected");
-  selectedRepositoryEntry = button;
-  button.dataset.selected = "true";
-  repositoryFileTitle.textContent = entry.name;
-  repositoryFileTitle.title = entry.path;
-  repositoryFileMeta.textContent = entry.path;
-  repositoryPreviewEmpty.hidden = true;
-  repositoryPreviewContent.hidden = false;
-  repositoryFileContent.textContent = "";
-  repositoryPreviewNotice.hidden = false;
-  repositoryPreviewNotice.textContent = "正在读取文件…";
-  delete repositoryPreviewNotice.dataset.tone;
-
-  try {
-    const result = await window.bitAgent.readRepositoryFile({ path: entry.path });
-    if (generation !== repositoryPreviewGeneration) return;
-    repositoryFileContent.textContent = result.content;
-    repositoryFileMeta.textContent = `${entry.path} · ${formatFileSize(result.size)}`;
-    if (result.truncated) {
-      repositoryPreviewNotice.textContent = "文件较大，仅预览前 1 MB。";
-      repositoryPreviewNotice.hidden = false;
-    } else {
-      repositoryPreviewNotice.hidden = true;
-    }
-  } catch (error) {
-    if (generation !== repositoryPreviewGeneration) return;
-    repositoryPreviewNotice.dataset.tone = "error";
-    repositoryPreviewNotice.textContent = error instanceof Error ? error.message : "文件读取失败";
-  }
-}
-
-async function refreshRepository(): Promise<void> {
-  const workspaceRoot = workspaceInput.value.trim();
-  const generation = ++repositoryLoadGeneration;
-  repositoryRefresh.disabled = true;
-  repositoryEntryCount.textContent = "0";
-  repositoryTree.replaceChildren();
-  resetRepositoryPreview();
-
-  if (!workspaceRoot) {
-    repositoryRefresh.disabled = false;
-    setRepositoryTreeState("选择一个本地代码仓库后即可浏览文件。", { browse: true });
-    return;
-  }
-
-  setRepositoryTreeState("正在读取工作区…");
-  try {
-    await window.bitAgent.setRepositoryWorkspace(workspaceRoot);
-    const result = await window.bitAgent.listRepositoryDirectory({ path: "" });
-    if (generation !== repositoryLoadGeneration) return;
-    repositoryLoadedRoot = workspaceRoot;
-    repositoryEntryCount.textContent = result.truncated
-      ? `${result.entries.length}+`
-      : String(result.entries.length);
-    repositoryTreeState.hidden = true;
-    repositoryTree.hidden = false;
-    renderRepositoryEntries(result, repositoryTree, generation);
-    if (result.entries.length === 0) {
-      setRepositoryTreeState("当前工作区为空。");
-    }
-  } catch (error) {
-    if (generation !== repositoryLoadGeneration) return;
-    setRepositoryTreeState(error instanceof Error ? error.message : "工作区读取失败", {
-      browse: true,
-      error: true,
-    });
-  } finally {
-    if (generation === repositoryLoadGeneration) repositoryRefresh.disabled = false;
-  }
+  repository.setWorkspace(workspaceRoot, activeView === "repository");
 }
 
 function setActiveView(view: "tasks" | "repository"): void {
@@ -447,8 +152,7 @@ function setActiveView(view: "tasks" | "repository"): void {
   } else {
     repositoryNavigation.setAttribute("aria-current", "page");
     tasksNavigation.removeAttribute("aria-current");
-    const workspaceRoot = workspaceInput.value.trim();
-    if (workspaceRoot !== repositoryLoadedRoot) void refreshRepository();
+    repository.activate();
   }
 }
 
@@ -486,7 +190,7 @@ function renderHistory(): void {
 function upsertHistory(entry: TaskHistoryEntry): void {
   history = [entry, ...history.filter((item) => item.taskId !== entry.taskId
     && !(entry.sessionId && item.sessionId === entry.sessionId && item.gatewayUrl === entry.gatewayUrl))];
-  saveHistory();
+  saveHistory(history);
   renderHistory();
 }
 
@@ -608,22 +312,6 @@ function showError(error: unknown): void {
   setBusy(false);
 }
 
-function appendPayload(pre: HTMLElement, value: unknown): void {
-  const text = typeof value === "string" ? value : JSON.stringify(value, null, 2) ?? String(value);
-  for (const line of text.split("\n")) {
-    const row = document.createElement("span");
-    row.className = line.startsWith("+")
-      ? "diff-add"
-      : line.startsWith("-")
-        ? "diff-remove"
-        : line.startsWith("@@")
-          ? "diff-hunk"
-          : "payload-line";
-    row.textContent = `${line}\n`;
-    pre.append(row);
-  }
-}
-
 function appendEvent(event: TaskEvent): void {
   // 切换对话后，旧任务仍可在后台执行，但它的事件不能写进新对话。
   if (event.taskId && event.taskId !== activeTaskId) return;
@@ -685,58 +373,7 @@ function appendEvent(event: TaskEvent): void {
     return;
   }
 
-  const item = document.createElement("li");
-  item.className = "activity-item";
-  item.dataset.tone = presentation.tone;
-  const details = document.createElement("wa-details");
-  details.className = "operation-card";
-  details.setAttribute("appearance", "plain");
-  if (presentation.tone === "error") details.setAttribute("open", "");
-  const summary = document.createElement("div");
-  summary.className = "operation-summary";
-  summary.slot = "summary";
-  const dot = document.createElement("span");
-  dot.className = "event-dot";
-  const copy = document.createElement("span");
-  copy.className = "operation-copy";
-  const title = document.createElement("strong");
-  title.textContent = presentation.title;
-  const caption = document.createElement("span");
-  caption.textContent = presentation.target || presentation.toolName || "Bit Agent";
-  copy.append(title, caption);
-  const time = document.createElement("time");
-  time.textContent = new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(new Date());
-  summary.append(dot, copy, time);
-  const humanDetail = document.createElement("dl");
-  humanDetail.className = "operation-meta";
-  const addMeta = (label: string, value: string | undefined): void => {
-    if (!value) return;
-    const term = document.createElement("dt");
-    const description = document.createElement("dd");
-    term.textContent = label;
-    description.textContent = value;
-    humanDetail.append(term, description);
-  };
-  addMeta("操作", presentation.title);
-  addMeta("目标", presentation.target);
-  addMeta("状态", presentation.status);
-  addMeta("耗时", presentation.durationMs === undefined ? undefined : `${presentation.durationMs} ms`);
-  addMeta("工具", presentation.toolName);
-  addMeta("错误码", presentation.errorCode);
-  const detail = document.createElement("pre");
-  detail.className = "event-payload";
-  appendPayload(detail, event.data);
-  const technical = document.createElement("details");
-  technical.className = "technical-detail";
-  const technicalSummary = document.createElement("summary");
-  technicalSummary.textContent = "查看技术详情";
-  technical.append(technicalSummary, detail);
-  details.append(summary, humanDetail, technical);
-  item.append(details);
+  const item = createActivityCard(presentation, event.data);
   if (previous) previous.replaceWith(item); else timeline.append(item);
   activityCards.set(presentation.key, item);
   eventCount = activityCards.size;
@@ -838,7 +475,7 @@ async function refreshSessions(append = false): Promise<void> {
   const identifiers = new Set(loaded.map((entry) => entry.sessionId));
   const remaining = history.filter((entry) => entry.gatewayUrl !== gatewayUrl || !identifiers.has(entry.sessionId));
   history = append ? [...remaining, ...loaded] : [...loaded, ...remaining];
-  saveHistory();
+  saveHistory(history);
   renderHistory();
 }
 
@@ -1023,8 +660,6 @@ async function browseWorkspace(): Promise<void> {
 }
 
 browseButton.addEventListener("click", () => void browseWorkspace());
-repositoryBrowse.addEventListener("click", () => void browseWorkspace());
-repositoryRefresh.addEventListener("click", () => void refreshRepository());
 tasksNavigation.addEventListener("click", () => setActiveView("tasks"));
 repositoryNavigation.addEventListener("click", () => setActiveView("repository"));
 
