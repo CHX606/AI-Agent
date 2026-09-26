@@ -1,22 +1,18 @@
-> 2026-09-09：Agent 执行主线已改用 OpenAI Agents SDK。先读 [SDK 主线与学习入口](docs/SDK_RUNTIME.md)；权限、交互和审阅见 [功能说明](docs/PRODUCT_HARDENING.md)。
-
 # Bit Agent
 
 Bit Agent 是一个帮你处理代码项目的 AI 助手。你告诉它“修复这个问题”，它会查看代码、调用模型分析、用工具修改文件，再根据测试和检查结果继续处理。
 
-当前已经有桌面界面、命令行、本地 Python 执行服务、多 Agent 调查、记忆和上下文管理等实现。会话保存在本地 SQLite 中。它仍处于开发阶段，“模块已经写出来”不代表所有使用场景都没有 bug。
+当前已经有桌面界面、命令行、本地 Python 执行服务、多 Agent 调查、记忆和上下文管理等实现，会话保存在本地 SQLite 中。它仍处于开发阶段，“模块已经写出来”不代表所有使用场景都没有 bug。
 
-文档对齐日期：2026-09-09。已补充本轮回归、类型检查、构建与真实 exe 验收。真实在线模型和 Docker 环境不包含在本机假模型验收结论中。
-
-**刚接着学习本项目，先读 [SDK 主线与学习入口](docs/SDK_RUNTIME.md)，再读 [本地运行入口](docs/LOCAL_RUNTIME.md)。**
-模型与工具之间的循环由 SDK 完成。`bit_agent.runtime` 管桌面任务和本地保存，工具模块管具体操作。
+模型与工具之间的循环由 [OpenAI Agents SDK](docs/SDK_RUNTIME.md) 完成；`bit_agent.runtime` 管桌面任务和本地保存，工具模块管具体操作。
 
 ## 第一次看这个项目，先读哪里
 
 1. [项目目录大白话指南](docs/PROJECT_STRUCTURE.md)：解释根目录、缓存、源码、测试和运行记录分别是什么。
-2. [桌面界面和命令行使用说明](docs/CLI_DESKTOP.md)：了解怎么启动、怎么提交任务。
-3. [Python Agent 目录说明](services/agent/README.md)：了解真正执行任务的代码放在哪里。
-4. [文档导航](docs/README.md)：按问题找到更深入的说明。
+2. [SDK 主线与学习入口](docs/SDK_RUNTIME.md) 和 [本地运行](docs/LOCAL_RUNTIME.md)：一次任务在代码里怎样执行和保存。
+3. [桌面界面和命令行使用说明](docs/CLI_DESKTOP.md)：了解怎么启动、怎么提交任务。
+4. [Python Agent 目录说明](services/agent/README.md)：了解真正执行任务的代码放在哪里。
+5. [文档导航](docs/README.md)：按问题找到更深入的说明。
 
 目录分层、接口连接和强制依赖规则见 [软件架构说明](docs/ARCHITECTURE.md)；执行 `pnpm architecture:check` 验证架构边界。
 
@@ -28,14 +24,16 @@ Bit Agent 是一个帮你处理代码项目的 AI 助手。你告诉它“修复
 | --- | --- | --- |
 | Desktop | 已有实现 | 用窗口选项目、发任务、看结果，也能浏览目录和预览文本文件。 |
 | CLI | 已有实现 | 不开窗口，直接在终端提交和查询任务。 |
-| Gateway + 本地运行库 | 已接入源码，待验收 | Gateway 通过进程管道交给 Python，SQLite 保存任务和会话。 |
+| Gateway + 本地运行库 | 已有实现，已通过本地验收 | Gateway 通过进程管道交给 Python，SQLite 保存任务和会话。 |
 | 代码工具和 Docker 沙箱 | 已有实现 | 能列目录、读文件、搜索、打补丁、运行测试和白名单检查。 |
-| Multi-Agent | 三档模式已接入源码，待验收 | 关闭、开启、智能；主 Agent 按模式调用只读调查工具，自己统一修改。 |
-| Working Memory / 会话 | 本地持久化已接入源码，待验收 | 保存历史、摘要和任务进度，没有 24 小时自动过期。 |
+| Multi-Agent | 三档模式已有实现，已通过本地验收 | 关闭、开启、智能；主 Agent 按模式调用只读调查工具，自己统一修改。 |
+| Working Memory / 会话 | 本地持久化已有实现，已通过本地验收 | 保存历史、摘要和任务进度，没有 24 小时自动过期。 |
 | 长期记忆 | 已有实现，需要接入配置 | 用 PostgreSQL/pgvector 保存和检索经过审核的经验；默认启动不会自动把这一整套启用。 |
 | Context Manager | 已接入运行循环 | 历史太长时保存大段结果、压缩旧内容，控制发给模型的输入量。 |
 | 评测和事件记录 | 已有实现 | 保存做题过程、修改内容和验证结果，方便回头查问题。 |
 | 独立 Web 管理后台、生产级认证与配额 | 尚未提供完整方案 | 当前主要面向本地开发和验证。 |
+
+“已通过本地验收”指用本地假模型实际启动 Gateway、Python 执行进程和桌面程序走通了对应流程；真实在线模型和 Docker 沙箱不在其范围内。每次验收做了什么、没做什么，见 [docs/validation](docs/validation/)。
 
 ## 一次任务怎么流转
 
@@ -107,20 +105,7 @@ pnpm install --frozen-lockfile
 
 `uv sync` 会让 `.venv` 与锁文件完全一致，手动 `pip install` 的额外包会被移除。新增或升级 Python 依赖用 `uv add <包名>`（开发工具加 `--group dev`）或 `uv lock --upgrade-package <包名>`，并提交更新后的 `uv.lock`。
 
-Node.js 依赖仓库由根目录 `pnpm-workspace.yaml` 的 `storeDir` 统一指定为 `D:\myproject\AI Agent.pnpm-store`（与项目目录同级、专供本项目使用）。pnpm 11 的这类项目配置写在该 YAML 文件中，不写入 `.npmrc`。在项目根目录或任一子包运行 `pnpm install`、`pnpm add`、`pnpm update` 都会使用该仓库；不要通过命令行或环境变量覆盖仓库路径。`--frozen-lockfile` 保持锁定的依赖版本和锁文件内容。
-
-同一配置中的 `allowBuilds.esbuild: true` 允许现有构建依赖 esbuild 执行安装脚本，完成其二进制检查。
-
-可在根目录运行以下命令核对仓库和构建：
-
-```powershell
-pnpm store path
-pnpm --dir apps/gateway store path
-pnpm --dir apps/desktop store path
-pnpm -r build
-```
-
-前三条应统一返回 `D:\myproject\AI Agent.pnpm-store\v11`。该目录位于 Git 仓库之外；项目内遗留的 `.pnpm-store/` 也已被 `.gitignore` 忽略。本次保留旧的 `D:\.pnpm-store` 和项目内旧缓存。以后须先将其他项目逐一迁移、重新安装并验证构建，确认配置及依赖链接不再引用共享仓库，且没有安装任务运行，再清理 `D:\.pnpm-store`。
+pnpm 的包仓库由 `pnpm-workspace.yaml` 的 `storeDir` 指定为项目目录旁边的 `D:\myproject\AI Agent.pnpm-store`，专供本项目使用；`pnpm store path` 应返回该目录下的 `v11`。同一配置中的 `allowBuilds.esbuild: true` 允许构建依赖 esbuild 执行安装脚本。
 
 ### 2. 配置模型
 
@@ -154,20 +139,21 @@ Gateway 默认是 `http://127.0.0.1:3000`。若已手动运行 Gateway，用 `pn
 
 ## 测试命令是什么意思
 
-下面列出的是开发者可以手动执行的命令，不表示本轮更新文档时已经执行过。
+每次推送和 Pull Request 都会由 [CI](.github/workflows/ci.yml) 自动运行下表中的检查；本地也可以手动执行。
 
 | 命令 | 检查内容 |
 | --- | --- |
-| `./.venv/Scripts/python.exe -m pytest` | 默认检查 `services/agent/tests` 中的 Python 测试。 |
-| `./.venv/Scripts/python.exe -m ruff check services/agent` | 检查 Python 代码的静态问题。 |
-| `pnpm test` | 递归执行 Node.js 工作区中各项目定义的测试。 |
-| `pnpm typecheck` | 递归执行 Node.js 工作区的类型检查。 |
+| `uv run pytest` | `services/agent/tests` 中的 Python 测试。 |
+| `uv run ruff check services/agent`、`uv run ruff format --check services/agent` | Python 静态检查和格式。 |
+| `pnpm test` | Node.js 工作区中各项目的测试。 |
+| `pnpm typecheck` | Node.js 工作区的类型检查。 |
+| `pnpm architecture:check` | JS 与 Python 的分层依赖规则。 |
+| `pnpm desktop:package`，再 `node scripts/accept-packaged.mjs "<exe 路径>"` | 打包便携版并启动真实 exe 做端到端验收（使用本地假模型）。 |
 
-真实数据库测试和 Agent 做题评测需要额外服务，分别见 [基础设施说明](infra/README.md) 和 [评测目录说明](evals/README.md)。
+默认跳过的真实集成测试：设置 `BIT_AGENT_TEST_LOCAL_RUNTIME=1` 运行 Gateway 与真实 Python 进程的串联测试；数据库测试和 Agent 做题评测需要额外服务，分别见 [基础设施说明](infra/README.md) 和 [评测目录说明](evals/README.md)。
 
 ## 为什么有些 README 还会提到“故障”或“未完成”
 
 `evals/fixtures` 中有专门准备的题目，故意保留错误或空实现，供 Agent 展示修复能力。`.test-runs` 中的某次运行副本可能已经完成。同一道题的“原始题目”和“完成后的副本”可以同时存在。
 
 例如工作流引擎原题仍有空实现，而已检查的那份运行副本有完整实现，历史记录显示当时 23 项测试通过。详见 [.test-runs 说明](.test-runs/README.md)。这个成绩不代表整个 Bit Agent 项目的测试都通过了。
-> 2026-09-09 验收更新：本地运行链路已通过回归和真实 Electron 串联检查。文中早先的“未验收”描述是修改阶段的记录；最新结果及未覆盖范围见 [本地版验收报告](docs/ACCEPTANCE_LOCAL_RUNTIME.md)。

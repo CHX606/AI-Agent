@@ -1,6 +1,6 @@
 # Bit Agent Multi-Agent
 
-更新日期：2026-09-09。本轮代码尚未运行验证。
+更新日期：2026-09-09。
 
 ## 默认桌面链路：关闭、开启、智能
 
@@ -99,4 +99,3 @@ python services/agent/evals/run_multi_agent_bug_fix.py
 主 Agent 工具轨迹、修改文件和测试状态；`direct` 的子 Agent 列表为空，测试和 Ruff 状态
 为未运行。Planner 输出不合法时会重试，仍失败的仓库任务会降级为代码调查与测试调查
 两个确定性任务。
-> 2026-09-09 验收更新：本地运行链路已通过回归和真实 Electron 串联检查。文中早先的“未验收”描述是修改阶段的记录；最新结果及未覆盖范围见 [本地版验收报告](ACCEPTANCE_LOCAL_RUNTIME.md)。

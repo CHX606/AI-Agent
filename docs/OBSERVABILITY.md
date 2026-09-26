@@ -35,7 +35,7 @@ Observability 在这里可以理解成“让执行过程看得见”。Agent 最
 | `.test-runs/.../artifacts/events.sse` | 某次运行保存下来的 SSE 文本记录。 |
 | `.test-runs/.../artifacts/gateway-result.json` | 某次任务保存下来的最终回执。 |
 
-默认运行可以写 JSONL。实际生成哪些文件，以该次运行的配置和结果中的路径为准，不能要求每个任务都生成完全相同的目录。
+默认运行可以写 JSONL。调用方没有指定事件接收器或上下文目录时，文件写到 `BIT_AGENT_ARTIFACTS_DIR`，未设置时写到当前目录下的 `artifacts/`；自动化测试会把它指向临时目录。桌面链路则写在本地数据目录里。实际生成哪些文件，以该次运行的配置和结果中的路径为准，不能要求每个任务都生成完全相同的目录。
 
 JSONL 每行就是一个完整对象；SSE 通常有 `id:`、`event:`、`data:` 和空行，不应直接当成一个普通 JSON 文件解析。
 

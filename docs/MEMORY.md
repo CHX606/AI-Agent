@@ -223,4 +223,3 @@ print(result.memory_context_tokens)
   Token 监控、工具结果外置与滚动摘要已经由 Context Manager 接管，详见
   [CONTEXT.md](CONTEXT.md)。
 - PostgreSQL 属于外部服务，默认测试使用内存实现，不要求开发机始终启动数据库。
-> 2026-09-09 验收更新：本地运行链路已通过回归和真实 Electron 串联检查。文中早先的“未验收”描述是修改阶段的记录；最新结果及未覆盖范围见 [本地版验收报告](ACCEPTANCE_LOCAL_RUNTIME.md)。

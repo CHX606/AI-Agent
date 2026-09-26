@@ -14,6 +14,9 @@
 | --- | --- | --- |
 | `QUEUED` | 已经接单，正在排队。 | 否 |
 | `RUNNING` | 本地执行进程已开始执行。 | 否 |
+| `PAUSE_REQUESTED` | 收到暂停请求，等当前模型请求或工具调用结束后停下。 | 否 |
+| `PAUSED` | 已暂停；可以继续执行，或补充、修改要求后再继续。 | 否 |
+| `WAITING_FOR_INPUT` | Agent 通过 `ask_user` 提了问题，等你回答。 | 否 |
 | `CANCELLATION_REQUESTED` | 收到取消请求，正在等待执行端停止。 | 否 |
 | `CANCELLED` | 任务已经取消。 | 是 |
 | `COMPLETED` | 本次执行报告为完成。 | 是 |
@@ -25,7 +28,14 @@ stateDiagram-v2
     [*] --> QUEUED
     QUEUED --> RUNNING
     QUEUED --> CANCELLED
+    RUNNING --> PAUSE_REQUESTED
+    PAUSE_REQUESTED --> PAUSED
+    PAUSED --> RUNNING
+    RUNNING --> WAITING_FOR_INPUT
+    WAITING_FOR_INPUT --> RUNNING
     RUNNING --> CANCELLATION_REQUESTED
+    PAUSED --> CANCELLATION_REQUESTED
+    WAITING_FOR_INPUT --> CANCELLATION_REQUESTED
     CANCELLATION_REQUESTED --> CANCELLED
     RUNNING --> COMPLETED
     RUNNING --> PARTIAL
@@ -37,6 +47,7 @@ stateDiagram-v2
 ```
 
 这是主要流程示意。取消和任务自然结束可能同时发生，最终状态以服务返回的任务记录为准。
+暂停、提问和补充要求的细节见 [交互说明](INTERACTION.md)。
 
 `CANCELLED` 只会在 Gateway 收到取消请求后出现。空工作区、模型异常和执行超时不会
 自动写成取消；这些执行异常应进入 `FAILED`。关闭 Desktop 的事件流也不等于取消任务。

@@ -1,4 +1,4 @@
-> 最新权限、暂停、审阅和独立包见 [功能说明](PRODUCT_HARDENING.md)，验收边界见 [最新报告](ACCEPTANCE_PRODUCT_HARDENING.md)。
+> 最新权限、暂停、审阅和独立包见 [功能说明](PRODUCT_HARDENING.md)，验收边界见 [最新报告](validation/ACCEPTANCE_PRODUCT_HARDENING.md)。
 
 # 本地运行：现在先从这里读
 
@@ -74,4 +74,3 @@ Gateway 的对应入口是 `apps/gateway/src/infrastructure/runtime/local-task-s
 早期的 Redis 队列 + Python Worker 链路已删除（git 标签 `legacy-redis` 保留了最后一版）。
 旧 Redis 中的任务从未导入 SQLite，删除代码也不会动那份数据。
 PostgreSQL 长期记忆仍是可选能力，没有删除；普通本地聊天不会默认启用向量记忆。
-> 2026-09-09 验收更新：本地运行链路已通过回归和真实 Electron 串联检查。文中早先的“未验收”描述是修改阶段的记录；最新结果及未覆盖范围见 [本地版验收报告](ACCEPTANCE_LOCAL_RUNTIME.md)。

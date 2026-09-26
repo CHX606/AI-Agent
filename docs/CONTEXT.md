@@ -7,7 +7,6 @@
 2026-09-09 补充：默认本地运行库会保存整个会话可继续的历史；上下文压缩仍由本模块负责。
 下面的 `artifacts/context/` 是直接调用旧入口时的位置。默认桌面链路将大型结果放在用户数据目录的
 `BitAgent/runtime/artifacts/<task_id>/` 中，而不是被操作项目里。详细路径见 [本地运行](LOCAL_RUNTIME.md)。
-本轮修改未运行验证。
 
 ## 先用大白话理解
 
@@ -130,4 +129,3 @@ print(result.context_warnings)
 这是 Provider 无关的客户端压缩实现，适用于不保存 `previous_response_id` 的中转站。
 未来可以增加 OpenAI/Anthropic 原生 Compaction 后端，但工具结果外置、Working Memory
 纠偏、协议完整性检查和硬上限仍由 Harness 保留。
-> 2026-09-09 验收更新：本地运行链路已通过回归和真实 Electron 串联检查。文中早先的“未验收”描述是修改阶段的记录；最新结果及未覆盖范围见 [本地版验收报告](ACCEPTANCE_LOCAL_RUNTIME.md)。
