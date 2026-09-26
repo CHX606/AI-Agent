@@ -188,9 +188,7 @@ async def test_compaction_preserves_recent_tool_pair_and_trusted_state() -> None
         and item["content"].startswith(CONTEXT_SUMMARY_PREFIX)
         for item in history
     )
-    assert {item.get("call_id") for item in history if isinstance(item, dict)} >= {
-        "call-4"
-    }
+    assert {item.get("call_id") for item in history if isinstance(item, dict)} >= {"call-4"}
     for call_id in {f"call-{number}" for number in range(1, 5)}:
         types = {
             item.get("type")
@@ -348,7 +346,9 @@ async def test_llm_summarizer_accepts_json_inside_markdown() -> None:
 async def test_llm_summarizer_reads_all_history_within_each_request_budget() -> None:
     responses = RecordingSummaryResponses()
     summarizer = LLMContextSummarizer(
-        SimpleNamespace(responses=responses), "summary-model", max_source_tokens=256,
+        SimpleNamespace(responses=responses),
+        "summary-model",
+        max_source_tokens=256,
     )
     history = [
         {"role": "user", "content": f"REQUIREMENT_{number:02d} " + "detail " * 80}
@@ -363,7 +363,8 @@ async def test_llm_summarizer_reads_all_history_within_each_request_budget() -> 
     assert len(responses.sources) > 1
     assert all(estimate_tokens(source) <= 256 for source in responses.sources)
     assert set(result.confirmed_facts) == {
-        "previous fact", *(f"REQUIREMENT_{number:02d}" for number in range(12)),
+        "previous fact",
+        *(f"REQUIREMENT_{number:02d}" for number in range(12)),
     }
 
 
@@ -373,7 +374,9 @@ async def test_compaction_keeps_middle_requirements_when_summary_input_is_smalle
     manager = ContextManager(
         policy=policy(),
         summarizer=LLMContextSummarizer(
-            SimpleNamespace(responses=responses), "summary-model", max_source_tokens=256,
+            SimpleNamespace(responses=responses),
+            "summary-model",
+            max_source_tokens=256,
         ),
     )
     history = [{"role": "user", "content": "Keep the existing public API"}]
@@ -399,7 +402,9 @@ async def test_failed_summary_batch_preserves_original_history(window: int) -> N
     manager = ContextManager(
         policy=policy(context_window_tokens=window),
         summarizer=LLMContextSummarizer(
-            SimpleNamespace(responses=responses), "summary-model", max_source_tokens=256,
+            SimpleNamespace(responses=responses),
+            "summary-model",
+            max_source_tokens=256,
         ),
     )
     history = [{"role": "user", "content": "Keep the existing public API"}]

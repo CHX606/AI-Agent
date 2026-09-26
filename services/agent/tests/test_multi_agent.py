@@ -175,9 +175,9 @@ async def test_llm_planner_can_choose_direct_route() -> None:
         def create(self, **_kwargs: Any) -> SimpleNamespace:
             return SimpleNamespace(output_text='{"route":"direct","tasks":[]}')
 
-    planned = await LLMTaskPlanner(
-        SimpleNamespace(responses=DirectResponses()), "test-model"
-    ).plan("我们可以先聊聊你的能力吗")
+    planned = await LLMTaskPlanner(SimpleNamespace(responses=DirectResponses()), "test-model").plan(
+        "我们可以先聊聊你的能力吗"
+    )
 
     assert planned.source is PlanSource.LLM
     assert planned.plan.route is TaskRoute.DIRECT
@@ -425,9 +425,7 @@ async def test_orchestrator_answers_direct_route_without_repository_work(tmp_pat
     assert result.tests_passed is False
     assert result.quality_checks_passed is False
     assert len(responses.calls) == 1
-    assert AgentEventType.DISPATCH_STARTED not in {
-        event.event_type for event in event_sink.events
-    }
+    assert AgentEventType.DISPATCH_STARTED not in {event.event_type for event in event_sink.events}
 
 
 @pytest.mark.asyncio

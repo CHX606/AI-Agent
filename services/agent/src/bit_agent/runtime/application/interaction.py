@@ -84,7 +84,11 @@ class TaskInteraction:
         self._remaining: float | None = None
 
     async def _state(
-        self, status: str, event: str, *, answered_question: dict[str, Any] | None = None,
+        self,
+        status: str,
+        event: str,
+        *,
+        answered_question: dict[str, Any] | None = None,
         **changes: Any,
     ) -> dict[str, Any]:
         fields = {"status": status, **changes}
@@ -214,7 +218,9 @@ class TaskInteraction:
                 if len(updates) >= 100:
                     raise InteractionError("本轮补充次数过多，请结束后继续新一轮对话")
                 update = {
-                    "id": uuid4().hex, "kind": action, "text": text.strip(),
+                    "id": uuid4().hex,
+                    "kind": action,
+                    "text": text.strip(),
                     "accepted_at": datetime.now(UTC).isoformat(),
                 }
                 result = await self._state(
@@ -262,8 +268,11 @@ class TaskInteraction:
                     "permission_granted": False,
                 }
                 result = await self._state(
-                    "RUNNING", "USER_ANSWERED", answered_question=question,
-                    question=None, last_answer=answer,
+                    "RUNNING",
+                    "USER_ANSWERED",
+                    answered_question=question,
+                    question=None,
+                    last_answer=answer,
                 )
                 self.question = None
                 future.set_result(answer)

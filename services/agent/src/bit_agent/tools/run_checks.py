@@ -109,10 +109,7 @@ async def run_checks(
         not isinstance(paths, list)
         or not paths
         or len(paths) > 100
-        or any(
-            not isinstance(path, str) or (path != "" and not path.strip())
-            for path in paths
-        )
+        or any(not isinstance(path, str) or (path != "" and not path.strip()) for path in paths)
     ):
         return result(
             context,

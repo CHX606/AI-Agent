@@ -90,8 +90,12 @@ class LocalStorage:
                 return getattr(self, f"_{operation}")(*args)
         except Exception as exc:
             identifiers = safe_fields(args[0]) if args and isinstance(args[0], dict) else {}
-            failure("storage_failed", exc, operation=operation,
-                    **{k: v for k, v in identifiers.items() if k in {"task_id", "session_id"}})
+            failure(
+                "storage_failed",
+                exc,
+                operation=operation,
+                **{k: v for k, v in identifiers.items() if k in {"task_id", "session_id"}},
+            )
             raise
 
     def _session(self, session_id: str) -> dict[str, Any] | None:
@@ -280,7 +284,8 @@ class LocalStorage:
     ) -> None:
         pending = self._db.execute(
             "SELECT a.question_id, a.data FROM user_answers a JOIN tasks t ON t.id=a.task_id "
-            "WHERE t.session_id=? AND a.applied=0", (session_id,),
+            "WHERE t.session_id=? AND a.applied=0",
+            (session_id,),
         ).fetchall()
         if not pending:
             return
@@ -305,8 +310,11 @@ class LocalStorage:
         # 工具结果或恢复后的输入与确认消费一起落盘，之后压缩历史也不会重复回放。
         self._db.executemany(
             "UPDATE user_answers SET applied=1 WHERE question_id=?",
-            [(row["question_id"],) for row in pending
-             if row["question_id"] in answered or json.loads(row["data"])["id"] in applied],
+            [
+                (row["question_id"],)
+                for row in pending
+                if row["question_id"] in answered or json.loads(row["data"])["id"] in applied
+            ],
         )
 
     def _migrate_session(self, session_id: str) -> None:
@@ -409,8 +417,13 @@ class LocalStorage:
         requirements = []
         for row in rows:
             task = json.loads(row["data"])
-            requirements.append({"task_id": task["task_id"], "objective": task["objective"],
-                                 "updates": self._task_inputs(task)})
+            requirements.append(
+                {
+                    "task_id": task["task_id"],
+                    "objective": task["objective"],
+                    "updates": self._task_inputs(task),
+                }
+            )
         return {"user_requests": requirements}
 
     def _record_undo(self, session_id: str, paths: list[str], objective: str) -> None:
@@ -448,8 +461,9 @@ class LocalStorage:
 
     def _diagnostic_snapshot(self, task_id: str | None = None) -> dict[str, Any]:
         rows = self._db.execute(
-            "SELECT data FROM tasks WHERE id=?" if task_id else
-            "SELECT data FROM tasks ORDER BY created_at DESC LIMIT 50",
+            "SELECT data FROM tasks WHERE id=?"
+            if task_id
+            else "SELECT data FROM tasks ORDER BY created_at DESC LIMIT 50",
             (task_id,) if task_id else (),
         ).fetchall()
         tasks = []
@@ -474,9 +488,16 @@ class LocalStorage:
             for item in reversed(records):
                 data = json.loads(item["data"])
                 payload = data.get("payload", {})
-                events.append({**safe_fields(data), **safe_fields(payload),
-                               "event_id": item["id"], "event": item["event_type"],
-                               "task_id": task["task_id"], "session_id": task["session_id"]})
+                events.append(
+                    {
+                        **safe_fields(data),
+                        **safe_fields(payload),
+                        "event_id": item["id"],
+                        "event": item["event_type"],
+                        "task_id": task["task_id"],
+                        "session_id": task["session_id"],
+                    }
+                )
             tasks.append(safe_task)
         return {"tasks": tasks, "events": events}
 
@@ -518,8 +539,9 @@ class LocalStorage:
             "('QUEUED','RUNNING','CANCELLATION_REQUESTED','PAUSE_REQUESTED','PAUSED','WAITING_FOR_INPUT')",
         ).fetchall()
         for row in rows:
-            identifier = failure("task_recovered_after_interruption", RuntimeError(),
-                                 level="warn", task_id=row["id"])
+            identifier = failure(
+                "task_recovered_after_interruption", RuntimeError(), level="warn", task_id=row["id"]
+            )
             self._update_task(
                 row["id"],
                 {

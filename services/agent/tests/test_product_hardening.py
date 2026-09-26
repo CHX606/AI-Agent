@@ -118,8 +118,13 @@ PATCH = "*** Begin Patch\n*** Add File: demo.py\n+print('hello')\n*** End Patch\
 
 async def test_readonly_blocks_tool_without_writing(tmp_path):
     provider = DelegatingToolProvider(
-        tmp_path, "off", InMemoryEventSink(), tmp_path / "artifacts", permission_mode="read_only",
-        journal=ChangeJournal(tmp_path, tmp_path / "artifacts"), verifier=verify_project,
+        tmp_path,
+        "off",
+        InMemoryEventSink(),
+        tmp_path / "artifacts",
+        permission_mode="read_only",
+        journal=ChangeJournal(tmp_path, tmp_path / "artifacts"),
+        verifier=verify_project,
     )
     result = await provider.call_tool("apply_patch", "call", json.dumps({"patch": PATCH}))
     assert result.error.code == "PERMISSION_DENIED"
@@ -129,8 +134,13 @@ async def test_readonly_blocks_tool_without_writing(tmp_path):
 async def test_confirm_requires_exact_explicit_approval_and_tracks_patch(tmp_path):
     interaction = await control(tmp_path)
     provider = DelegatingToolProvider(
-        tmp_path, "off", InMemoryEventSink(), tmp_path / "artifacts", interaction,
-        journal=ChangeJournal(tmp_path, tmp_path / "artifacts"), verifier=verify_project,
+        tmp_path,
+        "off",
+        InMemoryEventSink(),
+        tmp_path / "artifacts",
+        interaction,
+        journal=ChangeJournal(tmp_path, tmp_path / "artifacts"),
+        verifier=verify_project,
     )
     pending = asyncio.create_task(
         provider.call_tool("apply_patch", "call", json.dumps({"patch": PATCH}))
@@ -229,8 +239,13 @@ def test_symlink_cannot_bypass_secret_path_rule(tmp_path):
 async def test_user_edit_during_approval_prevents_write(tmp_path):
     interaction = await control(tmp_path)
     provider = DelegatingToolProvider(
-        tmp_path, "off", InMemoryEventSink(), tmp_path / "artifacts", interaction,
-        journal=ChangeJournal(tmp_path, tmp_path / "artifacts"), verifier=verify_project,
+        tmp_path,
+        "off",
+        InMemoryEventSink(),
+        tmp_path / "artifacts",
+        interaction,
+        journal=ChangeJournal(tmp_path, tmp_path / "artifacts"),
+        verifier=verify_project,
     )
     pending = asyncio.create_task(
         provider.call_tool("apply_patch", "call", json.dumps({"patch": PATCH}))

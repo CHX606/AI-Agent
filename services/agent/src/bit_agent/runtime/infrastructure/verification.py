@@ -81,8 +81,13 @@ async def verify_project(root: Path, changed: list[str], call_id: str) -> ToolRe
         tool_call_id=call_id,
         tool_name="verify_project",
         status=ToolStatus.ERROR if error else ToolStatus.SUCCESS,
-        output={"verified": error is None, "scope": "baseline", "acceptance_verified": False,
-                "checks": results, "covered_paths": changed},
+        output={
+            "verified": error is None,
+            "scope": "baseline",
+            "acceptance_verified": False,
+            "checks": results,
+            "covered_paths": changed,
+        },
         error=ToolError(code="VERIFICATION_FAILED", message=error, retryable=False)
         if error
         else None,

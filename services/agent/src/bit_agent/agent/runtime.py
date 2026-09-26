@@ -693,11 +693,15 @@ async def run_agent(
                         await emit_event(
                             AgentEventType.VERIFICATION_REQUIRED, {"round": completed_rounds}
                         )
-                        reminder = {"role": "user", "content": (
-                            "修改尚未完成验证：先调用 verify_project 运行基础检查，"
-                            "再调用 verify_task 独立验收。不能把基础检查通过当成需求验收通过。"
-                            if require_independent_acceptance else VERIFICATION_REQUIRED_MESSAGE
-                        )}
+                        reminder = {
+                            "role": "user",
+                            "content": (
+                                "修改尚未完成验证：先调用 verify_project 运行基础检查，"
+                                "再调用 verify_task 独立验收。不能把基础检查通过当成需求验收通过。"
+                                if require_independent_acceptance
+                                else VERIFICATION_REQUIRED_MESSAGE
+                            ),
+                        }
                         conversation_input.append(reminder)
                         await archive_items([reminder])
                         await persist_state()
@@ -765,17 +769,27 @@ async def run_agent(
             if record.error:
                 # Existing tool record is the source of truth; output/arguments stay there.
                 diagnostic_record = {
-                    "tool_call_id": tool_call.call_id, "operation": tool_call.name,
-                    "error_code": record.error.code, "duration_ms": record.metadata.duration_ms,
-                    "task_id": task_id, "session_id": active_thread_id, "run_id": run_id,
+                    "tool_call_id": tool_call.call_id,
+                    "operation": tool_call.name,
+                    "error_code": record.error.code,
+                    "duration_ms": record.metadata.duration_ms,
+                    "task_id": task_id,
+                    "session_id": active_thread_id,
+                    "run_id": run_id,
                     "agent_id": agent_id,
                 }
                 tool_diagnostic_id = diagnostic_id()
                 diagnostic_record["diagnostic_id"] = tool_diagnostic_id
                 from bit_agent.observability.diagnostics import record as log_record
-                log_record("info" if record.error.code in {"APPROVAL_DENIED", "PERMISSION_DENIED",
-                           "USER_REJECTED", "READ_ONLY"} else "warn",
-                           "tool_failed", **diagnostic_record)
+
+                log_record(
+                    "info"
+                    if record.error.code
+                    in {"APPROVAL_DENIED", "PERMISSION_DENIED", "USER_REJECTED", "READ_ONLY"}
+                    else "warn",
+                    "tool_failed",
+                    **diagnostic_record,
+                )
             await emit_event(
                 AgentEventType.TOOL_COMPLETED,
                 {
@@ -804,15 +818,17 @@ async def run_agent(
                 passed = record.status is ToolStatus.SUCCESS
                 tests_passed = quality_checks_passed = passed
                 acceptance_status = "NOT_RUN"
-                has_unverified_changes = (
-                    has_unverified_changes or bool(changed_files)
-                ) and (not passed or require_independent_acceptance)
+                has_unverified_changes = (has_unverified_changes or bool(changed_files)) and (
+                    not passed or require_independent_acceptance
+                )
             elif tool_call.name == "verify_task":
-                verdict = (record.output.get("verdict")
-                           if isinstance(record.output, dict) else None)
+                verdict = record.output.get("verdict") if isinstance(record.output, dict) else None
                 acceptance_status = (
-                    "PASSED" if record.status is ToolStatus.SUCCESS and verdict == "PASSED"
-                    else "FAILED" if verdict == "FAILED" else "NOT_VERIFIED"
+                    "PASSED"
+                    if record.status is ToolStatus.SUCCESS and verdict == "PASSED"
+                    else "FAILED"
+                    if verdict == "FAILED"
+                    else "NOT_VERIFIED"
                 )
                 has_unverified_changes = (has_unverified_changes or bool(changed_files)) and not (
                     tests_passed and quality_checks_passed and acceptance_status == "PASSED"
@@ -833,8 +849,11 @@ async def run_agent(
                             record.arguments.get("paths"),
                             changed_files,
                         )
-                        if (quality_checks_passed and tests_passed
-                                and not require_independent_acceptance):
+                        if (
+                            quality_checks_passed
+                            and tests_passed
+                            and not require_independent_acceptance
+                        ):
                             has_unverified_changes = False
             elif tool_call.name == "run_tests":
                 tests_passed = False
@@ -871,7 +890,10 @@ async def run_agent(
             name=agent_id,
             model=DiagnosticModel(
                 OpenAIResponsesModel(model=model_name, openai_client=sdk_client),
-                task_id=task_id, session_id=active_thread_id, run_id=run_id, agent_id=agent_id,
+                task_id=task_id,
+                session_id=active_thread_id,
+                run_id=run_id,
+                agent_id=agent_id,
             ),
             tools=[
                 FunctionTool(
@@ -930,7 +952,8 @@ async def run_agent(
     except Exception as exc:
         identifier = failure("agent_failed", exc)
         message = (
-            "修改后未完成验证，请检查验证工具和执行结果" if has_unverified_changes
+            "修改后未完成验证，请检查验证工具和执行结果"
+            if has_unverified_changes
             else "任务未完成，请查看日志与诊断"
         )
         return await finish_result(error=public_error(identifier, message))

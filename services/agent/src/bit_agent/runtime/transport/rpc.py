@@ -41,7 +41,8 @@ class JsonLineRpcServer:
                 rpc_id=str(request.get("id")),
                 operation=request.get("method"),
                 task_id=request.get("params", {}).get("task_id")
-                if isinstance(request.get("params", {}), dict) else None,
+                if isinstance(request.get("params", {}), dict)
+                else None,
             )
             response = {
                 "id": request.get("id"),

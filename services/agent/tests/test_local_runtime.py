@@ -102,10 +102,15 @@ async def test_round_budget_reaches_runner_and_survives_restart(
     await reopened.start()
     try:
         assert (await reopened.get_task(task["task_id"]))["max_tool_rounds"] == expected
-        next_task = await reopened.create_task({
-            "objective": "continue", "workspace_root": str(tmp_path),
-            "session_id": task["session_id"], "multi_agent_mode": "off", "max_tool_rounds": 250,
-        })
+        next_task = await reopened.create_task(
+            {
+                "objective": "continue",
+                "workspace_root": str(tmp_path),
+                "session_id": task["session_id"],
+                "multi_agent_mode": "off",
+                "max_tool_rounds": 250,
+            }
+        )
         assert (await finish(reopened, next_task))["status"] == "COMPLETED"
         assert budgets == [expected, 250]
         assert (await reopened.get_task(task["task_id"]))["max_tool_rounds"] == expected
@@ -120,9 +125,13 @@ async def test_runtime_rejects_invalid_round_budget(tmp_path: Path, limit: Any) 
     await runtime.start()
     try:
         with pytest.raises(ValueError, match="最大交互轮数"):
-            await runtime.create_task({
-                "objective": "inspect", "workspace_root": str(tmp_path), "max_tool_rounds": limit,
-            })
+            await runtime.create_task(
+                {
+                    "objective": "inspect",
+                    "workspace_root": str(tmp_path),
+                    "max_tool_rounds": limit,
+                }
+            )
         assert not runtime._running
         assert (await runtime.list_sessions())["sessions"] == []
     finally:
@@ -233,7 +242,8 @@ async def test_delegated_agents_cannot_write_or_delegate_recursively(
 
 @pytest.mark.asyncio
 async def test_main_runner_can_delegate_more_than_two_batches(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class RepeatedDelegationClient(FakeClient):
         def create(self, **kwargs: Any) -> SimpleNamespace:
@@ -241,14 +251,15 @@ async def test_main_runner_can_delegate_more_than_two_batches(
             names = {tool["name"] for tool in request["tools"]}
             if "delegate_tasks" in names:
                 outputs = [
-                    item for item in request["input"]
-                    if item.get("type") == "function_call_output"
+                    item for item in request["input"] if item.get("type") == "function_call_output"
                 ]
                 if len(outputs) < 4:
                     self.calls.append(request)
                     batch = len(outputs) + 1
                     call = SimpleNamespace(
-                        type="function_call", name="delegate_tasks", call_id=f"batch-{batch}",
+                        type="function_call",
+                        name="delegate_tasks",
+                        call_id=f"batch-{batch}",
                         arguments=json.dumps({"tasks": [{"objective": f"inspect {batch}"}]}),
                     )
                     return SimpleNamespace(output=[call], output_text="")
@@ -261,10 +272,13 @@ async def test_main_runner_can_delegate_more_than_two_batches(
     runtime = create_runtime(tmp_path / "data")
     await runtime.start()
     try:
-        task = await runtime.create_task({
-            "objective": "delegate repeatedly", "workspace_root": str(tmp_path),
-            "multi_agent_mode": "auto",
-        })
+        task = await runtime.create_task(
+            {
+                "objective": "delegate repeatedly",
+                "workspace_root": str(tmp_path),
+                "multi_agent_mode": "auto",
+            }
+        )
         result = await finish(runtime, task)
         assert result["status"] == "COMPLETED"
         records = result["result"]["tool_calls"]

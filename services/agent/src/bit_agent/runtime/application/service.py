@@ -97,10 +97,17 @@ class AgentRuntime:
                         since = datetime.fromisoformat(task["phase_since"])
                         elapsed = max(0, int((datetime.now(UTC) - since).total_seconds() * 1000))
                         if elapsed >= 60_000:
-                            record("info" if task["phase"] in {"paused", "approval", "user_input"}
-                                   else "warn", "task_wait_observed", elapsed_ms=elapsed,
-                                   task_id=task_id, session_id=task.get("session_id"),
-                                   phase=task["phase"], phase_since=task["phase_since"])
+                            record(
+                                "info"
+                                if task["phase"] in {"paused", "approval", "user_input"}
+                                else "warn",
+                                "task_wait_observed",
+                                elapsed_ms=elapsed,
+                                task_id=task_id,
+                                session_id=task.get("session_id"),
+                                phase=task["phase"],
+                                phase_since=task["phase_since"],
+                            )
                 except Exception as exc:
                     failure("diagnostic_observation_failed", exc, level="warn", task_id=task_id)
 
@@ -254,8 +261,11 @@ class AgentRuntime:
                             MODE_INSTRUCTIONS[task["multi_agent_mode"]]
                             + INTERACTION_INSTRUCTIONS
                             + "修改文件后必须调用 verify_project 完成基础检查。"
-                            + ("基础通过后调用 verify_task 独立验收；两者通过才可宣称完成。"
-                               if self.acceptance_workspace else "")
+                            + (
+                                "基础通过后调用 verify_task 独立验收；两者通过才可宣称完成。"
+                                if self.acceptance_workspace
+                                else ""
+                            )
                             + f"本轮权限模式：{task.get('permission_mode', 'confirm')}。"
                         ),
                         interaction=control.boundary,

@@ -149,7 +149,8 @@ async def test_sdk_executes_tool_batch_one_at_a_time(tmp_path):
 async def test_sdk_can_finish_more_than_twenty_tool_rounds(tmp_path, options):
     provider = Provider()
     result, responses = await run(
-        tmp_path, provider,
+        tmp_path,
+        provider,
         [[call("read_file", f"read-{index}")] for index in range(25)] + [[]],
         **options,
     )
@@ -167,9 +168,11 @@ async def test_configured_round_limit_blocks_the_next_tool_but_preserves_complet
         snapshots.append(state)
 
     result, _ = await run(
-        tmp_path, provider,
+        tmp_path,
+        provider,
         [[call("read_file", f"read-{index}")] for index in range(3)],
-        max_tool_rounds=2, save_progress=save_progress,
+        max_tool_rounds=2,
+        save_progress=save_progress,
     )
     assert result.status == "FAILED"
     assert result.rounds == 2

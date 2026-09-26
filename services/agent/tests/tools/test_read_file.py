@@ -21,8 +21,10 @@ async def test_line_range_guards_remain_enforced(
     tmp_path: Path, start_line: int, end_line: int
 ) -> None:
     result = await read_file(
-        ToolContext(tmp_path, "range-error"), "large.py",
-        start_line=start_line, end_line=end_line,
+        ToolContext(tmp_path, "range-error"),
+        "large.py",
+        start_line=start_line,
+        end_line=end_line,
     )
     assert result.status is ToolStatus.ERROR
     assert result.error and result.error.code == "INVALID_ARGUMENT"

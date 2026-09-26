@@ -33,8 +33,10 @@ _logger.setLevel(logging.INFO)
 
 
 def logging_available() -> bool:
-    return any(isinstance(handler, SafeRotatingHandler) and handler.available
-               for handler in _logger.handlers)
+    return any(
+        isinstance(handler, SafeRotatingHandler) and handler.available
+        for handler in _logger.handlers
+    )
 
 
 def register_secret(value: str) -> None:
@@ -121,8 +123,10 @@ def failure(event: str, error: BaseException, *, level: str = "error", **fields:
             "error_type": type(error).__name__,
             "frames": frames,
             "cause_type": type(error.__cause__).__name__ if error.__cause__ else None,
-            "error_code": getattr(error, "sqlite_errorname", None) or getattr(error, "code", None)
-            or errno.errorcode.get(getattr(error, "errno", None)) or fields.get("error_code"),
+            "error_code": getattr(error, "sqlite_errorname", None)
+            or getattr(error, "code", None)
+            or errno.errorcode.get(getattr(error, "errno", None))
+            or fields.get("error_code"),
         },
     )
     return identifier

@@ -80,8 +80,7 @@ async def test_mcp_server_lists_tools_and_binds_workspace(tmp_path: Path) -> Non
             "apply_patch",
         ]
         assert all(
-            "workspace_root" not in tool.input_schema.get("properties", {})
-            for tool in listed.tools
+            "workspace_root" not in tool.input_schema.get("properties", {}) for tool in listed.tools
         )
 
         response_result = await client.call_tool(
