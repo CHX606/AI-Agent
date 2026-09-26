@@ -18,7 +18,13 @@ from bit_agent.multi_agent.models import (
     TaskRoute,
 )
 from bit_agent.multi_agent.planner import LLMTaskPlanner, TaskPlanner, build_fallback_plan
-from bit_agent.observability import AgentEventType, EventBus, EventSink, JsonlEventSink
+from bit_agent.observability import (
+    AgentEventType,
+    EventBus,
+    EventSink,
+    JsonlEventSink,
+    default_artifact_root,
+)
 
 MainAgentRunner = Callable[..., Awaitable[AgentRunResult]]
 
@@ -84,7 +90,7 @@ class MultiAgentOrchestrator:
             run_id,
             [
                 event_sink
-                or JsonlEventSink(Path.cwd() / "artifacts" / "events" / f"multi-{run_id}.jsonl")
+                or JsonlEventSink(default_artifact_root() / "events" / f"multi-{run_id}.jsonl")
             ],
         )
         await event_bus.emit(

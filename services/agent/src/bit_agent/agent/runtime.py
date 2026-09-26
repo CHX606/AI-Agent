@@ -68,6 +68,7 @@ from bit_agent.observability import (
     EventBus,
     EventSink,
     JsonlEventSink,
+    default_artifact_root,
 )
 from bit_agent.observability.diagnostics import (
     diagnostic_context,
@@ -794,7 +795,7 @@ async def run_agent(
     run_id = uuid4().hex
     active_event_bus = event_bus or EventBus(
         run_id,
-        [event_sink or JsonlEventSink(Path.cwd() / "artifacts" / "events" / f"{run_id}.jsonl")],
+        [event_sink or JsonlEventSink(default_artifact_root() / "events" / f"{run_id}.jsonl")],
     )
 
     if context_manager is not None and (
@@ -813,7 +814,7 @@ async def run_agent(
                 max_source_tokens=policy.summarization_input_tokens,
             ),
             artifact_store=FileContextArtifactStore(
-                context_artifact_directory or (Path.cwd() / "artifacts" / "context" / run_id)
+                context_artifact_directory or (default_artifact_root() / "context" / run_id)
             ),
         )
 

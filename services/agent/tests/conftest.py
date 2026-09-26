@@ -104,6 +104,12 @@ class FixtureModel(Model):
 
 
 @pytest.fixture(autouse=True)
+def isolated_artifacts(tmp_path_factory, monkeypatch):
+    """没有显式指定目录的运行把事件和上下文写进临时目录，而不是仓库的 artifacts/。"""
+    monkeypatch.setenv("BIT_AGENT_ARTIFACTS_DIR", str(tmp_path_factory.mktemp("artifacts")))
+
+
+@pytest.fixture(autouse=True)
 def sdk_fixture_models(monkeypatch):
     original = runtime.OpenAIResponsesModel
 

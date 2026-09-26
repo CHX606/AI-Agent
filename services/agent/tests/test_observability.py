@@ -40,6 +40,18 @@ async def test_event_bus_assigns_global_sequence_and_writes_jsonl(tmp_path: Path
     assert bus.artifact_paths == [str(log_path.resolve())]
 
 
+def test_default_artifact_root_honours_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from bit_agent.observability import default_artifact_root
+
+    monkeypatch.setenv("BIT_AGENT_ARTIFACTS_DIR", str(tmp_path / "custom"))
+    assert default_artifact_root() == tmp_path / "custom"
+    monkeypatch.delenv("BIT_AGENT_ARTIFACTS_DIR")
+    monkeypatch.chdir(tmp_path)
+    assert default_artifact_root() == tmp_path / "artifacts"
+
+
 @pytest.mark.asyncio
 async def test_event_sink_failure_does_not_break_other_sinks() -> None:
     class BrokenSink:

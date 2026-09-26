@@ -2,12 +2,19 @@
 
 import asyncio
 import json
+import os
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
+
+
+def default_artifact_root() -> Path:
+    """调用方没有指定时，事件和上下文产物的根目录：BIT_AGENT_ARTIFACTS_DIR，否则 ./artifacts。"""
+    configured = os.getenv("BIT_AGENT_ARTIFACTS_DIR")
+    return Path(configured).expanduser() if configured else Path.cwd() / "artifacts"
 
 
 class AgentEventType(StrEnum):
