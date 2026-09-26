@@ -1,5 +1,6 @@
 // 生成独立便携目录。只写入一个全新目录，不覆盖已有发布包或用户数据。
-import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
@@ -47,9 +48,20 @@ for (const file of readdirSync(basePython)) {
 for (const directory of ["Lib", "DLLs"]) cpSync(join(basePython, directory), join(python, directory), {
   recursive: true, filter: (path) => !["site-packages", "__pycache__", "test", "tests", "idlelib", "tkinter", "turtledemo", "ensurepip"].includes(path.split(/[\\/]/u).at(-1)),
 });
-cpSync(join(root, ".venv", "Lib", "site-packages"), join(python, "Lib", "site-packages"), {
-  recursive: true, filter: (path) => !["__pycache__", ".pytest_cache"].includes(path.split(/[\\/]/u).at(-1)) && !path.split(/[\\/]/u).at(-1).startsWith("__editable__"),
-});
+// Python 依赖只装运行时需要的部分，版本完全按 uv.lock；pytest、ruff 等开发工具不进安装包。
+// 项目测试和检查都在 Docker 沙箱中执行，打包后的程序不会在本机调用它们。
+const lockExport = mkdtempSync(join(tmpdir(), "bit-agent-package-"));
+try {
+  const requirements = join(lockExport, "runtime-requirements.txt");
+  const uv = (args) => execFileSync("uv", args, { cwd: root, stdio: ["ignore", "inherit", "inherit"],
+    env: { ...process.env, UV_LINK_MODE: "copy" } });
+  uv(["export", "--frozen", "--no-dev", "--extra", "memory", "--no-emit-project",
+    "--format", "requirements-txt", "--output-file", requirements]);
+  uv(["pip", "install", "--no-deps", "--python", join(basePython, "python.exe"),
+    "--target", join(python, "Lib", "site-packages"), "--requirement", requirements]);
+} finally {
+  rmSync(lockExport, { recursive: true, force: true });
+}
 const backend = join(resources, "backend", "services", "agent", "src");
 cpSync(join(root, "services", "agent", "src"), backend, { recursive: true,
   filter: (path) => !["__pycache__"].includes(path.split(/[\\/]/u).at(-1)),
