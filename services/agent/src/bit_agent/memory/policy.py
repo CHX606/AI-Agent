@@ -8,9 +8,7 @@ from bit_agent.memory.models import MemoryCandidate, MemoryKind, MemoryScope
 
 _SECRET_PATTERNS = (
     re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"),
-    re.compile(
-        r"(?i)\b(?:api[_-]?key|access[_-]?token|password|secret)\b\s*[:=]\s*['\"]?\S{8,}"
-    ),
+    re.compile(r"(?i)\b(?:api[_-]?key|access[_-]?token|password|secret)\b\s*[:=]\s*['\"]?\S{8,}"),
 )
 
 
@@ -53,9 +51,7 @@ class MemoryWritePolicy(BaseModel):
             reasons.append("自动巩固默认禁止写入 GLOBAL Memory")
         if candidate.kind is MemoryKind.PREFERENCE and not self.allow_user_scope:
             reasons.append("用户偏好必须来自显式用户记忆流程")
-        candidate_text = "\n".join(
-            (candidate.title, candidate.content, candidate.evidence_summary)
-        )
+        candidate_text = "\n".join((candidate.title, candidate.content, candidate.evidence_summary))
         if any(pattern.search(candidate_text) for pattern in _SECRET_PATTERNS):
             reasons.append("候选疑似包含凭据或敏感信息")
         return reasons

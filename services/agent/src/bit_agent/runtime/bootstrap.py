@@ -17,12 +17,14 @@ from bit_agent.runtime.infrastructure.verification import verify_project
 def create_runtime(directory: Path | None = None, *, concurrency: int = 2) -> AgentRuntime:
     storage = LocalStorage(directory or default_data_directory())
     try:
-        return AgentRuntime(storage=storage, memory=SQLiteWorkingMemoryStore(storage),
-                            concurrency=concurrency, journal_factory=ChangeJournal,
-                            verifier=verify_project,
-                            acceptance_workspace=partial(
-                                AcceptanceWorkspace, excluded_roots=(storage.directory,)
-                            ))
+        return AgentRuntime(
+            storage=storage,
+            memory=SQLiteWorkingMemoryStore(storage),
+            concurrency=concurrency,
+            journal_factory=ChangeJournal,
+            verifier=verify_project,
+            acceptance_workspace=partial(AcceptanceWorkspace, excluded_roots=(storage.directory,)),
+        )
     except Exception:
         storage.close()
         raise

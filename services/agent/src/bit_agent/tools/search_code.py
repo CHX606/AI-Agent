@@ -86,7 +86,9 @@ async def search_code(
         args.extend(["--glob", glob])
     # 用户过滤条件不能重新包含受保护文件；后面的排除规则优先，且不区分大小写。
     protected_globs = [
-        ".env", ".env.*", *sorted(PRIVATE_KEY_NAMES),
+        ".env",
+        ".env.*",
+        *sorted(PRIVATE_KEY_NAMES),
         *(f"*{suffix}" for suffix in sorted(PRIVATE_KEY_SUFFIXES)),
         *(f"**/{name}/**" for name in sorted(PROTECTED_DIRECTORIES)),
     ]

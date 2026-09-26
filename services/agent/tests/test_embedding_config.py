@@ -48,9 +48,7 @@ def test_settings_create_profile_aware_provider(
         return SimpleNamespace()
 
     monkeypatch.setattr(embedding_config, "OpenAI", fake_openai)
-    provider = EmbeddingSettings.from_environment(
-        ollama_environment()
-    ).create_provider()
+    provider = EmbeddingSettings.from_environment(ollama_environment()).create_provider()
 
     assert captured["api_key"] == "ollama"
     assert captured["base_url"] == "http://localhost:11434/v1"

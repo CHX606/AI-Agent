@@ -148,7 +148,11 @@ class DelegatingToolProvider(LocalToolProvider):
 
     async def call_tool(self, tool_name: str, tool_call_id: str, raw_arguments: str) -> ToolResult:
         changing = tool_name in {
-            "apply_patch", "run_tests", "run_checks", "verify_project", "verify_task"
+            "apply_patch",
+            "run_tests",
+            "run_checks",
+            "verify_project",
+            "verify_task",
         }
         if changing and self.permission_mode == "read_only":
             return tool_error_result(
@@ -217,18 +221,26 @@ class DelegatingToolProvider(LocalToolProvider):
                             self.baseline = None
                             raise ValueError("基础检查期间文件发生变化，请重新检查")
                         if isinstance(self.baseline.output, dict):
-                            self.baseline = self.baseline.model_copy(update={"output": {
-                                **self.baseline.output, "snapshot_id": workspace.snapshot_id
-                            }})
+                            self.baseline = self.baseline.model_copy(
+                                update={
+                                    "output": {
+                                        **self.baseline.output,
+                                        "snapshot_id": workspace.snapshot_id,
+                                    }
+                                }
+                            )
                 return self.baseline
             except ValueError as exc:
                 return tool_error_result(tool_call_id, tool_name, "INVALID_ARGUMENT", str(exc))
         if tool_name == "verify_task":
             try:
                 arguments = json.loads(raw_arguments)
-                if (not isinstance(arguments, dict) or set(arguments) != {"focus"}
-                        or not isinstance(arguments["focus"], str)
-                        or len(arguments["focus"]) > 4000):
+                if (
+                    not isinstance(arguments, dict)
+                    or set(arguments) != {"focus"}
+                    or not isinstance(arguments["focus"], str)
+                    or len(arguments["focus"]) > 4000
+                ):
                     raise ValueError("verify_task 只接受 focus 字符串，最多 4000 字符")
                 if self.acceptance_workspace is None or self.acceptance_context is None:
                     raise ValueError("独立验收尚未配置")
@@ -239,23 +251,33 @@ class DelegatingToolProvider(LocalToolProvider):
                     "额外调用模型，依据原始需求检查改动，在隔离副本补写测试并运行。"
                     "不修改原项目；测试和报告保存为本次任务的验收记录。",
                 ):
-                    return tool_error_result(tool_call_id, tool_name, "PERMISSION_DENIED",
-                                             "未批准独立验收")
+                    return tool_error_result(
+                        tool_call_id, tool_name, "PERMISSION_DENIED", "未批准独立验收"
+                    )
                 requirements = await self.acceptance_context()
                 result = await run_acceptance(
-                    root=self.root, artifacts=self.artifacts, call_id=tool_call_id,
-                    context={"requirements": requirements,
-                             "changed_paths": sorted(self.changed_paths),
-                             "changes": self.journal.public(),
-                             "baseline": self.baseline.model_dump(mode="json"),
-                             "author_focus_untrusted": arguments["focus"]},
-                    workspace_factory=self.acceptance_workspace, sink=self.sink,
+                    root=self.root,
+                    artifacts=self.artifacts,
+                    call_id=tool_call_id,
+                    context={
+                        "requirements": requirements,
+                        "changed_paths": sorted(self.changed_paths),
+                        "changes": self.journal.public(),
+                        "baseline": self.baseline.model_dump(mode="json"),
+                        "author_focus_untrusted": arguments["focus"],
+                    },
+                    workspace_factory=self.acceptance_workspace,
+                    sink=self.sink,
                     max_tool_rounds=self.max_tool_rounds,
                     interaction=self.interaction.acceptance_boundary if self.interaction else None,
                 )
                 if requirements != await self.acceptance_context():
-                    return tool_error_result(tool_call_id, tool_name, "ACCEPTANCE_STALE",
-                                             "验收期间用户要求发生变化，需要按新要求重新验收")
+                    return tool_error_result(
+                        tool_call_id,
+                        tool_name,
+                        "ACCEPTANCE_STALE",
+                        "验收期间用户要求发生变化，需要按新要求重新验收",
+                    )
                 return result
             except (ValueError, RuntimeError) as exc:
                 return tool_error_result(

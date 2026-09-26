@@ -65,9 +65,7 @@ class MemoryConsolidator:
             created: list[MemoryRecord] = []
             updated: list[MemoryRecord] = []
             pending: list[_PendingMemory] = []
-            evidence_hash = hashlib.sha256(
-                evidence.model_dump_json().encode("utf-8")
-            ).hexdigest()
+            evidence_hash = hashlib.sha256(evidence.model_dump_json().encode("utf-8")).hexdigest()
             source_reference = MemorySourceReference(
                 run_id=evidence.run_id,
                 evidence_hash=evidence_hash,
@@ -95,13 +93,9 @@ class MemoryConsolidator:
                     scope=candidate.scope,
                     memory_key=candidate.memory_key,
                     project_id=(
-                        evidence.project_id
-                        if candidate.scope is MemoryScope.PROJECT
-                        else None
+                        evidence.project_id if candidate.scope is MemoryScope.PROJECT else None
                     ),
-                    user_id=(
-                        evidence.user_id if candidate.scope is MemoryScope.USER else None
-                    ),
+                    user_id=(evidence.user_id if candidate.scope is MemoryScope.USER else None),
                 )
                 if existing is not None:
                     if _normalize_content(existing.content) != _normalize_content(

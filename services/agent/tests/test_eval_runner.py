@@ -175,8 +175,7 @@ async def test_eval_runner_rejects_changes_to_immutable_test_files(tmp_path: Pat
     assert result.passed is False
     assert result.file_changes.modified == ["calculator.py", "tests/test_calculator.py"]
     assert any(
-        violation.code == "IMMUTABLE_PATH_CHANGED"
-        and violation.path == "tests/test_calculator.py"
+        violation.code == "IMMUTABLE_PATH_CHANGED" and violation.path == "tests/test_calculator.py"
         for violation in result.violations
     )
 
@@ -205,9 +204,7 @@ async def test_eval_runner_does_not_trust_agent_test_claim(tmp_path: Path) -> No
     assert result.agent_result.tests_passed is True
     assert result.verification_result.status is ToolStatus.ERROR
     assert result.passed is False
-    assert any(
-        violation.code == "INDEPENDENT_TESTS_FAILED" for violation in result.violations
-    )
+    assert any(violation.code == "INDEPENDENT_TESTS_FAILED" for violation in result.violations)
 
 
 @pytest.mark.skipif(not DOCKER_IMAGE_READY, reason="Docker 或 Bit Agent 沙箱镜像不可用")

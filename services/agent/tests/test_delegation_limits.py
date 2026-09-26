@@ -17,8 +17,12 @@ from bit_agent.tools.models import ToolStatus
 
 def make_provider(root: Path, mode: str = "auto") -> DelegatingToolProvider:
     return DelegatingToolProvider(
-        root, mode, InMemoryEventSink(), root / "artifacts",
-        journal=ChangeJournal(root, root / "journal"), verifier=verify_project,
+        root,
+        mode,
+        InMemoryEventSink(),
+        root / "artifacts",
+        journal=ChangeJournal(root, root / "journal"),
+        verifier=verify_project,
     )
 
 
@@ -33,7 +37,8 @@ def completed():
 
 async def invoke(provider, objectives, call_id="delegate"):
     return await provider.call_tool(
-        "delegate_tasks", call_id,
+        "delegate_tasks",
+        call_id,
         json.dumps({"tasks": [{"objective": objective} for objective in objectives]}),
     )
 
@@ -65,7 +70,10 @@ class BlockingRunner:
 @pytest.mark.parametrize("mode", ["on", "auto"])
 @pytest.mark.parametrize("permission", ["read_only", "confirm", "edit"])
 async def test_repeated_batches_keep_read_only_tools_and_child_round_limit(
-    provider, monkeypatch, mode, permission,
+    provider,
+    monkeypatch,
+    mode,
+    permission,
 ):
     runner = AsyncMock(return_value=completed())
     monkeypatch.setattr(delegation, "run_agent", runner)
@@ -101,7 +109,9 @@ async def test_overlapping_batches_share_three_slots(provider, monkeypatch):
         results = await asyncio.wait_for(asyncio.gather(*calls), timeout=3)
         assert all(result.status is ToolStatus.SUCCESS for result in results)
         assert [item["objective"] for item in results[1].output["investigations"]] == [
-            "c", "d", "e",
+            "c",
+            "d",
+            "e",
         ]
         assert runner.peak == 3
         assert len(runner.objectives) == 5
@@ -147,7 +157,9 @@ async def test_child_failures_release_slots_for_later_batches(provider, monkeypa
 
 @pytest.mark.parametrize("cancel_running", [False, True])
 async def test_cancelling_running_or_waiting_batch_does_not_leak_slots(
-    provider, monkeypatch, cancel_running,
+    provider,
+    monkeypatch,
+    cancel_running,
 ):
     runner = BlockingRunner()
     monkeypatch.setattr(delegation, "run_agent", runner)
@@ -194,14 +206,17 @@ async def test_timeout_cancels_children_and_releases_slots(provider, monkeypatch
     assert result.status is ToolStatus.SUCCESS
 
 
-@pytest.mark.parametrize("payload", [
-    {"tasks": []},
-    {"tasks": [{"objective": str(i)} for i in range(4)]},
-    {"tasks": [{"objective": " "}]},
-    {"tasks": [{"objective": "a" * 4001}]},
-    {"tasks": [{"objective": "inspect", "tools": ["apply_patch"]}]},
-    {"tasks": [{"objective": "inspect"}], "limit": 10},
-])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"tasks": []},
+        {"tasks": [{"objective": str(i)} for i in range(4)]},
+        {"tasks": [{"objective": " "}]},
+        {"tasks": [{"objective": "a" * 4001}]},
+        {"tasks": [{"objective": "inspect", "tools": ["apply_patch"]}]},
+        {"tasks": [{"objective": "inspect"}], "limit": 10},
+    ],
+)
 async def test_invalid_arguments_do_not_start_children(provider, monkeypatch, payload):
     runner = AsyncMock(return_value=completed())
     monkeypatch.setattr(delegation, "run_agent", runner)

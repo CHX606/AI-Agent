@@ -130,18 +130,44 @@ def test_search_schema_exposes_filters_in_strict_mode() -> None:
 async def test_model_receives_search_hint_and_can_narrow_results(tmp_path: Path) -> None:
     (tmp_path / "main.py").write_text("needle_one\nneedle_two\nneedle_three\n", encoding="utf-8")
     (tmp_path / "notes.txt").write_text("needle_excluded\n", encoding="utf-8")
-    client = FakeClient([
-        response(function_call("search_code", "broad", json.dumps({
-            "query": "needle", "path": "", "glob": None, "max_results": 1,
-        }))),
-        response(function_call("search_code", "narrow", json.dumps({
-            "query": "needle", "path": "", "glob": "*.py", "max_results": 50,
-        }))),
-        response(final_message("已定位代码"), text="已定位代码"),
-    ])
+    client = FakeClient(
+        [
+            response(
+                function_call(
+                    "search_code",
+                    "broad",
+                    json.dumps(
+                        {
+                            "query": "needle",
+                            "path": "",
+                            "glob": None,
+                            "max_results": 1,
+                        }
+                    ),
+                )
+            ),
+            response(
+                function_call(
+                    "search_code",
+                    "narrow",
+                    json.dumps(
+                        {
+                            "query": "needle",
+                            "path": "",
+                            "glob": "*.py",
+                            "max_results": 50,
+                        }
+                    ),
+                )
+            ),
+            response(final_message("已定位代码"), text="已定位代码"),
+        ]
+    )
     result = await runtime.run_agent(
-        "查找 needle", workspace_root=tmp_path,
-        response_client=client, model_name="test-model",
+        "查找 needle",
+        workspace_root=tmp_path,
+        response_client=client,
+        model_name="test-model",
     )
     assert result.status is AgentRunStatus.COMPLETED
     assert len(result.tool_calls) == 2
@@ -151,8 +177,10 @@ async def test_model_receives_search_hint_and_can_narrow_results(tmp_path: Path)
     assert len(second.output.splitlines()) == 3
     assert "notes.txt" not in second.output
     returned = next(
-        item for item in client.responses.requests[1]
-        if isinstance(item, dict) and item.get("type") == "function_call_output"
+        item
+        for item in client.responses.requests[1]
+        if isinstance(item, dict)
+        and item.get("type") == "function_call_output"
         and item["call_id"] == "broad"
     )
     payload = json.loads(returned["output"])
@@ -172,29 +200,42 @@ async def test_model_can_read_beyond_first_500_lines(
         "".join(f"v{number}\n" for number in range(1, 1401)),
         encoding="utf-8",
     )
-    client = FakeClient([
-        response(function_call("read_file", "range-read", json.dumps({
-            "path": "large.py", "start_line": 800, "end_line": end_line,
-        }))),
-        response(final_message("已读取指定范围"), text="已读取指定范围"),
-    ])
+    client = FakeClient(
+        [
+            response(
+                function_call(
+                    "read_file",
+                    "range-read",
+                    json.dumps(
+                        {
+                            "path": "large.py",
+                            "start_line": 800,
+                            "end_line": end_line,
+                        }
+                    ),
+                )
+            ),
+            response(final_message("已读取指定范围"), text="已读取指定范围"),
+        ]
+    )
 
     result = await runtime.run_agent(
         "读取 large.py 第 800 行附近的代码",
-        workspace_root=tmp_path, response_client=client, model_name="test-model",
+        workspace_root=tmp_path,
+        response_client=client,
+        model_name="test-model",
     )
 
-    expected = "\n".join(
-        f"{number:>6} | v{number}"
-        for number in range(800, expected_end + 1)
-    )
+    expected = "\n".join(f"{number:>6} | v{number}" for number in range(800, expected_end + 1))
     assert result.status is AgentRunStatus.COMPLETED
     assert len(result.tool_calls) == 1
     assert result.tool_calls[0].status is ToolStatus.SUCCESS
     assert result.tool_calls[0].output == expected
     returned = next(
-        item for item in client.responses.requests[-1]
-        if isinstance(item, dict) and item.get("type") == "function_call_output"
+        item
+        for item in client.responses.requests[-1]
+        if isinstance(item, dict)
+        and item.get("type") == "function_call_output"
         and item["call_id"] == "range-read"
     )
     assert json.loads(returned["output"])["output"] == expected
@@ -206,18 +247,41 @@ async def test_search_result_line_can_be_read_by_model(tmp_path: Path) -> None:
     (tmp_path / "large.py").write_text(
         "\n" * 799 + "def target_login():\n    return True\n", encoding="utf-8"
     )
-    client = FakeClient([
-        response(function_call("search_code", "locate", json.dumps({
-            "query": "target_login", "path": "large.py",
-        }))),
-        response(function_call("read_file", "read-match", json.dumps({
-            "path": "large.py", "start_line": 800, "end_line": 801,
-        }))),
-        response(final_message("已找到登录实现"), text="已找到登录实现"),
-    ])
+    client = FakeClient(
+        [
+            response(
+                function_call(
+                    "search_code",
+                    "locate",
+                    json.dumps(
+                        {
+                            "query": "target_login",
+                            "path": "large.py",
+                        }
+                    ),
+                )
+            ),
+            response(
+                function_call(
+                    "read_file",
+                    "read-match",
+                    json.dumps(
+                        {
+                            "path": "large.py",
+                            "start_line": 800,
+                            "end_line": 801,
+                        }
+                    ),
+                )
+            ),
+            response(final_message("已找到登录实现"), text="已找到登录实现"),
+        ]
+    )
     result = await runtime.run_agent(
-        "找到并读取登录实现", workspace_root=tmp_path,
-        response_client=client, model_name="test-model",
+        "找到并读取登录实现",
+        workspace_root=tmp_path,
+        response_client=client,
+        model_name="test-model",
     )
     assert result.status is AgentRunStatus.COMPLETED
     assert [record.tool_name for record in result.tool_calls] == ["search_code", "read_file"]

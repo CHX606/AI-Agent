@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# 项目面向 Windows（便携 exe、PowerShell 脚本），pnpm-workspace.yaml 的 storeDir 也是 D: 盘绝对路径，
+# 所以 CI 同样跑在 Windows 上。Docker、Redis、PostgreSQL 和真实模型相关测试会按原有条件自动跳过。
+jobs:
+  python:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install ripgrep
+        run: choco install ripgrep --no-progress -y
+      - name: Install package
+        run: python -m pip install -e ".[dev]"
+      - name: Ruff lint
+        run: python -m ruff check services/agent
+      - name: Ruff format
+        run: python -m ruff format --check services/agent
+      - name: Architecture contracts
+        run: node scripts/check-python-architecture.mjs
+      - name: Tests
+        run: python -m pytest
+
+  node:
+    runs-on: windows-latest
+    env:
+      # 单元测试不启动 Electron，跳过二进制下载以节省时间。
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Tests
+        run: pnpm test
+      - name: Architecture boundaries
+        run: pnpm architecture:js

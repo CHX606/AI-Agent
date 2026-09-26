@@ -6,10 +6,7 @@ from bit_agent.client.gateway import GatewayClient
 
 def test_sse_parser_ignores_heartbeats_and_decodes_json() -> None:
     stream = io.BytesIO(
-        b": heartbeat\n\n"
-        b"id: 1-0\n"
-        b"event: TOOL_COMPLETED\n"
-        b'data: {"status":"SUCCESS"}\n\n'
+        b': heartbeat\n\nid: 1-0\nevent: TOOL_COMPLETED\ndata: {"status":"SUCCESS"}\n\n'
     )
 
     events = list(GatewayClient._parse_sse(stream))

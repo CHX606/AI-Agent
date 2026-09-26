@@ -38,9 +38,7 @@ def path_matches(path: str, patterns: list[str]) -> bool:
     """判断 POSIX 相对路径是否命中一条精确路径或 glob 规则。"""
     candidate = PurePosixPath(path)
     for pattern in patterns:
-        if candidate.match(pattern) or (
-            pattern.startswith("**/") and candidate.match(pattern[3:])
-        ):
+        if candidate.match(pattern) or (pattern.startswith("**/") and candidate.match(pattern[3:])):
             return True
         if pattern.endswith("/**"):
             directory = pattern[:-3].rstrip("/")
@@ -87,9 +85,7 @@ def compare_snapshots(before: Mapping[str, str], after: Mapping[str, str]) -> Fi
     after_paths = set(after)
     return FileChanges(
         added=sorted(after_paths - before_paths),
-        modified=sorted(
-            path for path in before_paths & after_paths if before[path] != after[path]
-        ),
+        modified=sorted(path for path in before_paths & after_paths if before[path] != after[path]),
         deleted=sorted(before_paths - after_paths),
     )
 
@@ -379,9 +375,7 @@ def _build_verified_evidence(
             rounds=agent_result.rounds,
         )
 
-    tool_trace = "\n".join(
-        record.model_dump_json() for record in agent_result.tool_calls
-    )
+    tool_trace = "\n".join(record.model_dump_json() for record in agent_result.tool_calls)
     return VerifiedRunEvidence(
         run_id=run_id,
         thread_id=working_memory.thread_id,

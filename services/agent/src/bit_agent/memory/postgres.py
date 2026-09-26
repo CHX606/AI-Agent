@@ -1,43 +1,69 @@
 """PostgreSQL + pgvector 长期记忆存储。"""
 
-import asyncio #导入异步 I/O 库，用于异步操作
-import math #导入数学库
-from collections.abc import Iterator, Sequence #导入抽象基类 Iterator 和 Sequence，用于类型注解
-from contextlib import contextmanager #导入上下文管理器装饰器，用于创建上下文管理器
-from typing import Any #导入 Any 类型，用于表示任意类型的值
+import asyncio  # 导入异步 I/O 库，用于异步操作
+import math  # 导入数学库
+from collections.abc import Iterator, Sequence  # 导入抽象基类 Iterator 和 Sequence，用于类型注解
+from contextlib import contextmanager  # 导入上下文管理器装饰器，用于创建上下文管理器
+from typing import Any  # 导入 Any 类型，用于表示任意类型的值
 
-from bit_agent.memory.models import ( #导入内存模型，用于表示长期记忆的结构和属性
-    EmbeddingProfile, #这个类表示嵌入向量的提供者、模型、维度和版本等信息
-    MemoryMatch, #这个类表示内存匹配结果，包括匹配的内存记录、相似度评分和匹配方式等信息
-    MemoryRecord, #这个类表示长期记忆的基本单元，包括其元数据和内容
-    MemoryScope, #这个类表示内存的作用域，可以是全局、项目或用户级别
+from bit_agent.memory.models import (  # 导入内存模型，用于表示长期记忆的结构和属性
+    EmbeddingProfile,  # 这个类表示嵌入向量的提供者、模型、维度和版本等信息
+    MemoryMatch,  # 这个类表示内存匹配结果，包括匹配的内存记录、相似度评分和匹配方式等信息
+    MemoryRecord,  # 这个类表示长期记忆的基本单元，包括其元数据和内容
+    MemoryScope,  # 这个类表示内存的作用域，可以是全局、项目或用户级别
 )
-from bit_agent.memory.store import ( #导入内存存储相关的协议和工具函数
-    LongTermMemoryStore, #这个协议定义了长期记忆存储的接口，包括初始化、查找、保存和搜索等方法
-    cosine_similarity, #计算两个向量的余弦相似度
-    encode_json, #将 Python 对象编码为 JSON 字符串
-    lexical_similarity, #计算两个文本的词汇相似度
+from bit_agent.memory.store import (  # 导入内存存储相关的协议和工具函数
+    LongTermMemoryStore,  # 这个协议定义了长期记忆存储的接口，包括初始化、查找、保存和搜索等方法
+    cosine_similarity,  # 计算两个向量的余弦相似度
+    encode_json,  # 将 Python 对象编码为 JSON 字符串
+    lexical_similarity,  # 计算两个文本的词汇相似度
 )
 
 
-class PostgreSQLLongTermMemoryStore(LongTermMemoryStore): #这个类实现了 LongTermMemoryStore 协议，使用 PostgreSQL 数据库和 pgvector 扩展来存储和检索长期记忆记录。
-    def __init__(self, dsn: str, *, table_name: str = "bit_agent_memories") -> None: #初始化 PostgreSQL 长期记忆存储，接受数据库连接字符串和可选的表名参数。
-        '''保存连接配置、表名'''
-        if not dsn.strip(): #如果数据库连接字符串为空或仅包含空白字符，则抛出 ValueError 异常，提示 PostgreSQL DSN 不能为空。
+# 这个类实现了 LongTermMemoryStore 协议，使用 PostgreSQL 数据库和 pgvector
+# 扩展来存储和检索长期记忆记录。
+class PostgreSQLLongTermMemoryStore(LongTermMemoryStore):
+    # 初始化 PostgreSQL 长期记忆存储，接受数据库连接字符串和可选的表名参数。
+    def __init__(self, dsn: str, *, table_name: str = "bit_agent_memories") -> None:
+        """保存连接配置、表名"""
+        # 如果数据库连接字符串为空或仅包含空白字符，则抛出 ValueError 异常，提示 PostgreSQL DSN
+        # 不能为空。
+        if not dsn.strip():
             raise ValueError("PostgreSQL DSN 不能为空")
-        if not table_name.replace("_", "").isalnum(): #如果表名不符合字母、数字和下划线的规则，则抛出 ValueError 异常，提示表名只能包含字母、数字和下划线。
+        # 如果表名不符合字母、数字和下划线的规则，则抛出 ValueError 异常，
+        # 提示表名只能包含字母、数字和下划线。
+        if not table_name.replace("_", "").isalnum():
             raise ValueError("table_name 只能包含字母、数字和下划线")
-        self.dsn = dsn #self.dsn是数据库连接字符串，用于连接 PostgreSQL 数据库。dsn是一个字符串，包含数据库的主机、端口、用户名、密码和数据库名等信息。
-        self.table_name = table_name #self.table_name是存储长期记忆记录的表名，用于在数据库中创建和查询表。table_name是一个字符串，默认值为"bit_agent_memories"。
+        # self.dsn是数据库连接字符串，用于连接 PostgreSQL 数据库。dsn是一个字符串，
+        # 包含数据库的主机、端口、用户名、密码和数据库名等信息。
+        self.dsn = dsn
+        # self.table_name是存储长期记忆记录的表名，用于在数据库中创建和查询表。
+        # table_name是一个字符串，默认值为"bit_agent_memories"。
+        self.table_name = table_name
 
-    async def initialize(self) -> None: #这个函数是一个异步方法，用于初始化 PostgreSQL 长期记忆存储，包括创建表和索引等操作。它会在后台线程中执行同步的初始化逻辑，以避免阻塞事件循环。
-        '''初始化数据库、创建表和索引'''
+    # 这个函数是一个异步方法，用于初始化 PostgreSQL 长期记忆存储，包括创建表和索引等操作。
+    # 它会在后台线程中执行同步的初始化逻辑，以避免阻塞事件循环。
+    async def initialize(self) -> None:
+        """初始化数据库、创建表和索引"""
         await asyncio.to_thread(self._initialize_sync)
 
-    def _initialize_sync(self) -> None: #这个函数是一个同步方法，用于执行实际的初始化逻辑，包括创建表和索引等操作。它会在一个数据库连接上下文中执行 SQL 语句，以确保数据库的结构符合长期记忆存储的要求。
-        with self._connection() as connection: #self._connection()是一个上下文管理器，用于创建和管理数据库连接。它会在进入上下文时建立连接，并在退出上下文时关闭连接。connection是一个数据库连接对象，用于执行 SQL 语句和事务。
-            connection.execute("CREATE EXTENSION IF NOT EXISTS vector") #执行 SQL 语句，创建 pgvector 扩展，如果已经存在则忽略。pgvector 扩展提供了向量数据类型和相似度搜索功能，用于存储和检索嵌入向量。
-            connection.execute( #执行 SQL 语句，创建长期记忆表，如果已经存在则忽略。表的结构包括 id、scope、kind、memory_key、title、content、applicability、evidence_summary、tags、importance、confidence、project_id、user_id、source_run_ids、source_references、parent_memory_id、chunk_index、chunk_count、content_hash、embedding、embedding_provider、embedding_model、embedding_dimensions、embedding_version、status、created_at 和 updated_at 等字段。
+    # 这个函数是一个同步方法，用于执行实际的初始化逻辑，包括创建表和索引等操作。
+    # 它会在一个数据库连接上下文中执行 SQL 语句，以确保数据库的结构符合长期记忆存储的要求。
+    def _initialize_sync(self) -> None:
+        # self._connection()是一个上下文管理器，用于创建和管理数据库连接。
+        # 它会在进入上下文时建立连接，并在退出上下文时关闭连接。connection是一个数据库连接对象，
+        # 用于执行 SQL 语句和事务。
+        with self._connection() as connection:
+            # 执行 SQL 语句，创建 pgvector 扩展，如果已经存在则忽略。pgvector
+            # 扩展提供了向量数据类型和相似度搜索功能，用于存储和检索嵌入向量。
+            connection.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            # 执行 SQL 语句，创建长期记忆表，如果已经存在则忽略。表的结构包括
+            # id、scope、kind、memory_key、title、content、applicability、evidence_summary、tags、im
+            # portance、confidence、project_id、user_id、source_run_ids、source_references、parent_m
+            # emory_id、chunk_index、chunk_count、content_hash、embedding、embedding_provider、embed
+            # ding_model、embedding_dimensions、embedding_version、status、created_at 和 updated_at
+            # 等字段。
+            connection.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS {self.table_name} (
                     id TEXT PRIMARY KEY,
@@ -70,7 +96,10 @@ class PostgreSQLLongTermMemoryStore(LongTermMemoryStore): #这个类实现了 Lo
                 )
                 """
             )
-            migrations = ( #这个是一个元组，包含了需要添加到长期记忆表中的新字段定义。每个定义都是一个字符串，表示一个 SQL 列定义，包括列名、数据类型和约束条件等。这个元组用于在初始化时执行 ALTER TABLE 语句，以确保表结构符合最新的要求。
+            # 这个是一个元组，包含了需要添加到长期记忆表中的新字段定义。每个定义都是一个字符串，
+            # 表示一个 SQL 列定义，包括列名、数据类型和约束条件等。这个元组用于在初始化时执行 ALTER
+            # TABLE 语句，以确保表结构符合最新的要求。
+            migrations = (
                 "source_references JSONB NOT NULL DEFAULT '[]'::jsonb",
                 "parent_memory_id TEXT",
                 "chunk_index INTEGER NOT NULL DEFAULT 0",
@@ -81,17 +110,26 @@ class PostgreSQLLongTermMemoryStore(LongTermMemoryStore): #这个类实现了 Lo
                 "embedding_dimensions INTEGER",
                 "embedding_version TEXT",
             )
-            for definition in migrations: #遍历 migrations 元组中的每个字段定义，执行 ALTER TABLE 语句，将新字段添加到长期记忆表中。如果字段已经存在，则忽略该操作。
-                connection.execute( #执行 ALTER TABLE 语句，将新字段添加到长期记忆表中。
-                    f"ALTER TABLE {self.table_name} ADD COLUMN IF NOT EXISTS {definition}" #执行 SQL 语句，向长期记忆表中添加新字段，如果已经存在则忽略。definition 是一个字符串，表示一个 SQL 列定义，包括列名、数据类型和约束条件等。
+            # 遍历 migrations 元组中的每个字段定义，执行 ALTER TABLE 语句，
+            # 将新字段添加到长期记忆表中。如果字段已经存在，则忽略该操作。
+            for definition in migrations:
+                connection.execute(  # 执行 ALTER TABLE 语句，将新字段添加到长期记忆表中。
+                    # 执行 SQL 语句，向长期记忆表中添加新字段，如果已经存在则忽略。definition
+                    # 是一个字符串，表示一个 SQL 列定义，包括列名、数据类型和约束条件等。
+                    f"ALTER TABLE {self.table_name} ADD COLUMN IF NOT EXISTS {definition}"
                 )
-            connection.execute( #执行 SQL 语句，创建索引 lookup_idx，用于加速按作用域、内存键、项目 ID、用户 ID 和状态查询长期记忆记录的操作。如果索引已经存在，则忽略该操作。
+            # 执行 SQL 语句，创建索引 lookup_idx，用于加速按作用域、内存键、项目 ID、用户 ID
+            # 和状态查询长期记忆记录的操作。如果索引已经存在，则忽略该操作。
+            connection.execute(
                 f"""
                 CREATE INDEX IF NOT EXISTS {self.table_name}_lookup_idx
                 ON {self.table_name} (scope, memory_key, project_id, user_id, status)
                 """
             )
-            connection.execute( #执行 SQL 语句，创建索引 profile_idx，用于加速按嵌入向量提供者、模型、维度、版本和状态查询长期记忆记录的操作。如果索引已经存在，则忽略该操作。
+            # 执行 SQL 语句，创建索引 profile_idx，
+            # 用于加速按嵌入向量提供者、模型、维度、版本和状态查询长期记忆记录的操作。
+            # 如果索引已经存在，则忽略该操作。
+            connection.execute(
                 f"""
                 CREATE INDEX IF NOT EXISTS {self.table_name}_profile_idx
                 ON {self.table_name} (
@@ -101,8 +139,10 @@ class PostgreSQLLongTermMemoryStore(LongTermMemoryStore): #这个类实现了 Lo
                 """
             )
 
-    async def find_by_key( #这个函数是一个异步方法，用于根据作用域、内存键、项目 ID 和用户 ID 查找长期记忆记录。它会在后台线程中执行同步的查找逻辑，以避免阻塞事件循环。
-        #按业务键精确查找记忆
+    # 这个函数是一个异步方法，用于根据作用域、内存键、项目 ID 和用户 ID 查找长期记忆记录。
+    # 它会在后台线程中执行同步的查找逻辑，以避免阻塞事件循环。
+    async def find_by_key(
+        # 按业务键精确查找记忆
         self,
         *,
         scope: MemoryScope,
@@ -110,7 +150,7 @@ class PostgreSQLLongTermMemoryStore(LongTermMemoryStore): #这个类实现了 Lo
         project_id: str | None,
         user_id: str | None,
     ) -> MemoryRecord | None:
-        return await asyncio.to_thread( #在后台线程中执行同步的查找逻辑，以避免阻塞事件循环。
+        return await asyncio.to_thread(  # 在后台线程中执行同步的查找逻辑，以避免阻塞事件循环。
             self._find_by_key_sync,
             scope,
             memory_key,
@@ -118,14 +158,19 @@ class PostgreSQLLongTermMemoryStore(LongTermMemoryStore): #这个类实现了 Lo
             user_id,
         )
 
-    def _find_by_key_sync( #这个函数是一个同步方法，用于执行实际的查找逻辑，包括在数据库中查询长期记忆记录。它会在一个数据库连接上下文中执行 SQL 语句，以确保查询操作的正确性和效率。
+    # 这个函数是一个同步方法，用于执行实际的查找逻辑，包括在数据库中查询长期记忆记录。
+    # 它会在一个数据库连接上下文中执行 SQL 语句，以确保查询操作的正确性和效率。
+    def _find_by_key_sync(
         self,
         scope: MemoryScope,
         memory_key: str,
         project_id: str | None,
         user_id: str | None,
     ) -> MemoryRecord | None:
-        with self._connection() as connection: #self._connection()是一个上下文管理器，用于创建和管理数据库连接。它会在进入上下文时建立连接，并在退出上下文时关闭连接。connection是一个数据库连接对象，用于执行 SQL 语句和事务。
+        # self._connection()是一个上下文管理器，用于创建和管理数据库连接。
+        # 它会在进入上下文时建立连接，并在退出上下文时关闭连接。connection是一个数据库连接对象，
+        # 用于执行 SQL 语句和事务。
+        with self._connection() as connection:
             cursor = connection.execute(
                 f"""
                 SELECT * FROM {self.table_name}
@@ -144,11 +189,11 @@ class PostgreSQLLongTermMemoryStore(LongTermMemoryStore): #这个类实现了 Lo
         return self._row_to_memory(row) if row is not None else None
 
     async def save(self, memory: MemoryRecord) -> None:
-        '''保存单条记忆'''
+        """保存单条记忆"""
         await self.save_many([memory])
 
     async def save_many(self, memories: Sequence[MemoryRecord]) -> None:
-        '''批量保存记忆'''
+        """批量保存记忆"""
         if not memories:
             return
         await asyncio.to_thread(self._save_many_sync, list(memories))
@@ -157,9 +202,7 @@ class PostgreSQLLongTermMemoryStore(LongTermMemoryStore): #这个类实现了 Lo
         with self._connection() as connection:
             for memory in memories:
                 embedding = (
-                    _vector_literal(memory.embedding)
-                    if memory.embedding is not None
-                    else None
+                    _vector_literal(memory.embedding) if memory.embedding is not None else None
                 )
                 profile = memory.embedding_profile
                 connection.execute(
@@ -242,7 +285,7 @@ class PostgreSQLLongTermMemoryStore(LongTermMemoryStore): #这个类实现了 Lo
                 )
 
     async def search(
-        #搜索相关记忆
+        # 搜索相关记忆
         self,
         embedding: Sequence[float],
         *,
@@ -378,9 +421,7 @@ class PostgreSQLLongTermMemoryStore(LongTermMemoryStore): #这个类实现了 Lo
             memory = self._row_to_memory(row)
             semantic = cosine_similarity(embedding, memory.embedding or [])
             lexical = lexical_similarity(query_text or "", memory)
-            combined = (
-                semantic * semantic_weight + lexical * lexical_weight
-            ) / weight_total
+            combined = (semantic * semantic_weight + lexical * lexical_weight) / weight_total
             matched_by = ["semantic"]
             if lexical > 0:
                 matched_by.append("lexical")
@@ -400,7 +441,7 @@ class PostgreSQLLongTermMemoryStore(LongTermMemoryStore): #这个类实现了 Lo
 
     @contextmanager
     def _connection(self) -> Iterator[Any]:
-        '''管理数据库连接'''
+        """管理数据库连接"""
         try:
             import psycopg
             from psycopg.rows import dict_row
@@ -418,7 +459,7 @@ class PostgreSQLLongTermMemoryStore(LongTermMemoryStore): #这个类实现了 Lo
 
     @staticmethod
     def _row_to_memory(row: Any) -> MemoryRecord:
-        '''数据库记录转成记忆对象'''
+        """数据库记录转成记忆对象"""
         data = dict(row)
         data.pop("similarity", None)
         data.pop("semantic_similarity", None)
@@ -445,7 +486,7 @@ class PostgreSQLLongTermMemoryStore(LongTermMemoryStore): #这个类实现了 Lo
 
 
 def _vector_literal(values: Sequence[float]) -> str:
-    '''向量转成数据库需要的文本'''
+    """向量转成数据库需要的文本"""
     if not values:
         raise ValueError("Embedding 不能为空")
     normalized = [float(value) for value in values]
@@ -455,7 +496,7 @@ def _vector_literal(values: Sequence[float]) -> str:
 
 
 def _parse_vector(value: Any) -> list[float] | None:
-    '''数据库向量转回数字列表'''
+    """数据库向量转回数字列表"""
     if value is None:
         return None
     if isinstance(value, (list, tuple)):

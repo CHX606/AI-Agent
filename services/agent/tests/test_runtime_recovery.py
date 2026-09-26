@@ -34,12 +34,20 @@ async def finished(runtime, task):
 
 def task_record(root, **changes):
     return {
-        "task_id": "task", "session_id": "session", "multi_agent_mode": "off",
-        "objective": "build a UI", "workspace_root": str(root), "status": "RUNNING",
+        "task_id": "task",
+        "session_id": "session",
+        "multi_agent_mode": "off",
+        "objective": "build a UI",
+        "workspace_root": str(root),
+        "status": "RUNNING",
         "created_at": "2026-09-12T00:00:00+00:00",
         "updated_at": "2026-09-12T00:00:00+00:00",
-        "started_at": "2026-09-12T00:00:00+00:00", "completed_at": None,
-        "worker_id": "local", "run_id": None, "result": None, "error": None,
+        "started_at": "2026-09-12T00:00:00+00:00",
+        "completed_at": None,
+        "worker_id": "local",
+        "run_id": None,
+        "result": None,
+        "error": None,
         **changes,
     }
 
@@ -47,9 +55,12 @@ def task_record(root, **changes):
 def question(*, confirmation=False):
     return UserQuestion(
         question="Which color?",
-        options=[QuestionOption(id="red", label="Red", description="Red UI"),
-                 QuestionOption(id="blue", label="Blue", description="Blue UI")],
-        recommended_option_id="blue", requires_confirmation=confirmation,
+        options=[
+            QuestionOption(id="red", label="Red", description="Red UI"),
+            QuestionOption(id="blue", label="Blue", description="Blue UI"),
+        ],
+        recommended_option_id="blue",
+        requires_confirmation=confirmation,
     )
 
 
@@ -128,9 +139,14 @@ async def test_waiting_user_retains_overlap_reservation_but_releases_execution_s
         sibling = await runtime.create_task({"objective": "sibling", "workspace_root": str(other)})
         assert (await finished(runtime, sibling))["status"] == "COMPLETED"
         assert entered == ["first", "sibling"]
-        await runtime.interact_task(first["task_id"], {
-            "action": "answer", "question_id": control.question["id"], "option_id": "red",
-        })
+        await runtime.interact_task(
+            first["task_id"],
+            {
+                "action": "answer",
+                "question_id": control.question["id"],
+                "option_id": "red",
+            },
+        )
         assert (await finished(runtime, first))["status"] == "COMPLETED"
         assert (await finished(runtime, second))["status"] == "COMPLETED"
     finally:
@@ -174,9 +190,13 @@ class Responses:
 
     def create(self, **kwargs):
         self.calls.append(to_json_value(kwargs))
-        message = SimpleNamespace(type="message", role="assistant", content=[
-            {"type": "output_text", "text": "Done", "annotations": []},
-        ])
+        message = SimpleNamespace(
+            type="message",
+            role="assistant",
+            content=[
+                {"type": "output_text", "text": "Done", "annotations": []},
+            ],
+        )
         return SimpleNamespace(output=[message], output_text="Done")
 
 
@@ -197,10 +217,13 @@ async def test_accepted_answer_survives_slot_wait_interruption_and_is_applied_on
     asking = asyncio.create_task(ask())
     await until(lambda: control.question is not None and semaphore._value == 1)
     await semaphore.acquire()
-    await control.request({
-        "action": "answer", "question_id": control.question["id"],
-        "text": "Please use red, never blue.",
-    })
+    await control.request(
+        {
+            "action": "answer",
+            "question_id": control.question["id"],
+            "text": "Please use red, never blue.",
+        }
+    )
     await asyncio.sleep(0.01)
     assert not asking.done()
     asking.cancel()
@@ -210,23 +233,35 @@ async def test_accepted_answer_survives_slot_wait_interruption_and_is_applied_on
     storage.close()
 
     responses = Responses()
-    monkeypatch.setitem(sys.modules, "bit_agent.llm.client", SimpleNamespace(
-        client=SimpleNamespace(responses=responses), model_name="fixture",
-    ))
+    monkeypatch.setitem(
+        sys.modules,
+        "bit_agent.llm.client",
+        SimpleNamespace(
+            client=SimpleNamespace(responses=responses),
+            model_name="fixture",
+        ),
+    )
     runtime = create_runtime(directory)
     await runtime.start()
     try:
         detail = await runtime.get_session("session")
         assert "Please use red, never blue." in detail["turns"][0]["intent_updates"][0]["text"]
         for prompt in ("continue", "continue again"):
-            task = await runtime.create_task({
-                "objective": prompt, "workspace_root": str(tmp_path),
-                "session_id": "session", "multi_agent_mode": "off",
-            })
+            task = await runtime.create_task(
+                {
+                    "objective": prompt,
+                    "workspace_root": str(tmp_path),
+                    "session_id": "session",
+                    "multi_agent_mode": "off",
+                }
+            )
             assert (await finished(runtime, task))["status"] == "COMPLETED"
             assert await runtime.storage.call("pending_intents", "session") == []
-            users = [item.get("content", "") for item in responses.calls[-1]["input"]
-                     if item.get("role") == "user"]
+            users = [
+                item.get("content", "")
+                for item in responses.calls[-1]["input"]
+                if item.get("role") == "user"
+            ]
             assert sum("Please use red, never blue." in content for content in users) == 1
     finally:
         await runtime.close()
@@ -239,14 +274,28 @@ async def test_normal_answer_is_not_replayed_after_history_compaction(tmp_path):
     asking = asyncio.create_task(control.ask(question()))
     try:
         await until(lambda: control.question is not None)
-        await control.request({
-            "action": "answer", "question_id": control.question["id"], "option_id": "red",
-        })
+        await control.request(
+            {
+                "action": "answer",
+                "question_id": control.question["id"],
+                "option_id": "red",
+            }
+        )
         answer = await asking
         assert len(await storage.call("pending_intents", "session")) == 1
-        history = [{"type": "function_call_output", "call_id": "call", "output": json.dumps({
-            "tool_name": "ask_user", "status": "SUCCESS", "output": answer,
-        })}]
+        history = [
+            {
+                "type": "function_call_output",
+                "call_id": "call",
+                "output": json.dumps(
+                    {
+                        "tool_name": "ask_user",
+                        "status": "SUCCESS",
+                        "output": answer,
+                    }
+                ),
+            }
+        ]
         memory = WorkingMemory(thread_id="session", objective="build a UI")
         await storage.call("save_progress", "session", {"history": history}, memory)
         assert await storage.call("pending_intents", "session") == []
@@ -269,13 +318,19 @@ async def test_answer_acknowledgement_rolls_back_with_context(tmp_path, monkeypa
     asking = asyncio.create_task(control.ask(question()))
     try:
         await until(lambda: control.question is not None)
-        await control.request({
-            "action": "answer", "question_id": control.question["id"], "option_id": "red",
-        })
+        await control.request(
+            {
+                "action": "answer",
+                "question_id": control.question["id"],
+                "option_id": "red",
+            }
+        )
         await asking
         pending = await storage.call("pending_intents", "session")
         memory = WorkingMemory(
-            thread_id="session", objective="build a UI", applied_interaction_ids=[pending[0]["id"]],
+            thread_id="session",
+            objective="build a UI",
+            applied_interaction_ids=[pending[0]["id"]],
         )
         original_acknowledge = storage._acknowledge_answers
 
@@ -285,9 +340,16 @@ async def test_answer_acknowledgement_rolls_back_with_context(tmp_path, monkeypa
 
         monkeypatch.setattr(storage, "_acknowledge_answers", fail_after_acknowledgement)
         with pytest.raises(OSError, match="interrupted transaction"):
-            await storage.call("save_progress", "session", {"history": [
-                {"role": "user", "content": pending[0]["text"]},
-            ]}, memory)
+            await storage.call(
+                "save_progress",
+                "session",
+                {
+                    "history": [
+                        {"role": "user", "content": pending[0]["text"]},
+                    ]
+                },
+                memory,
+            )
         assert await storage.call("load_context", "session") == {"history": []}
         assert await storage.call("load_memory", "session") is None
         assert await storage.call("pending_intents", "session") == pending
@@ -303,9 +365,13 @@ async def test_recovered_answers_keep_order_with_later_goal_replacement(tmp_path
     asking = asyncio.create_task(control.ask(question()))
     try:
         await until(lambda: control.question is not None)
-        await control.request({
-            "action": "answer", "question_id": control.question["id"], "option_id": "red",
-        })
+        await control.request(
+            {
+                "action": "answer",
+                "question_id": control.question["id"],
+                "option_id": "red",
+            }
+        )
         await asking
         await control.request({"action": "pause"})
         boundary = asyncio.create_task(control.boundary())
@@ -333,9 +399,13 @@ async def test_approval_answers_never_enter_recovery_queue(tmp_path, confirmatio
     )
     try:
         await until(lambda: control.question is not None)
-        await control.request({
-            "action": "answer", "question_id": control.question["id"], "option_id": "red",
-        })
+        await control.request(
+            {
+                "action": "answer",
+                "question_id": control.question["id"],
+                "option_id": "red",
+            }
+        )
         assert (await asking)["source"] == "user"
         assert await storage.call("pending_intents", "session") == []
         assert (await storage.call("get_task", "task"))["last_answer"] is not None
