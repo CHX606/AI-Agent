@@ -45,13 +45,14 @@ class IsolatedWorkspaceManager:
         if not source_root.is_dir():
             raise ValueError(f"工作区不存在：{source_root}")
 
+        # resolve()：TEMP 可能是 8.3 短名，统一成工具内部使用的规范长路径。
         parent = Path(
             await asyncio.to_thread(
                 tempfile.mkdtemp,
                 prefix=f"bit-agent-subagent-{task_id}-",
                 dir=str(self.temporary_root) if self.temporary_root else None,
             )
-        )
+        ).resolve()
         workspace = parent / "workspace"
         try:
             await asyncio.to_thread(

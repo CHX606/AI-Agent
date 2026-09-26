@@ -54,7 +54,9 @@ class AcceptanceWorkspace:
 
     async def __aenter__(self):
         self._temporary = TemporaryDirectory(prefix="bit-agent-acceptance-")
-        self.root = Path(self._temporary.name) / "workspace"
+        # 解析成规范长路径：Windows 的 TEMP 可能是 8.3 短名（如 RUNNER~1），
+        # 而 resolve_workspace_path 返回长路径，二者不统一会让 relative_to 失败。
+        self.root = Path(self._temporary.name).resolve() / "workspace"
         try:
             await _finish_io(self._stage, self.root)
             self.snapshot_id = await _finish_io(_fingerprint, self.root)
