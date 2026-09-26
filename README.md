@@ -82,7 +82,19 @@ AI Agent/
 
 ## 本地启动
 
-以下命令在项目根目录的 PowerShell 中执行。需要 Python 3.12+、Node.js 24+、pnpm、Git、ripgrep 和可用的 Docker Engine。项目 `package.json` 指定的包管理器是 `pnpm@11.19.0`，与当前使用版本一致。Node.js 的具体版本写在根目录 `.node-version`，CI 读取同一个文件；本地可用 fnm、mise 等版本管理工具自动切换到该版本。
+以下命令在项目根目录的 PowerShell 中执行。需要 Python 3.12+、Node.js 24+、pnpm、Git、ripgrep 和可用的 Docker Engine。项目 `package.json` 指定的包管理器是 `pnpm@11.19.0`，与当前使用版本一致。Node.js 和 Python 的具体版本分别写在根目录 `.node-version` 和 `.python-version`，CI 读取同样的文件。
+
+### 0. 准备 Node 和 Python（推荐 mise）
+
+根目录的 `mise.toml` 让 [mise](https://mise.jdx.dev/) 读取上面两个版本文件，并在进入项目目录时自动激活 `.venv`。安装 mise 并在 PowerShell `$PROFILE` 中加入 `(&mise activate pwsh) | Out-String | Invoke-Expression` 后，在项目根目录执行：
+
+```powershell
+mise install
+mise current
+corepack enable pnpm
+```
+
+`mise install` 把指定版本下载到 mise 自己的目录，不改系统里已装的 Node/Python；`mise current` 应显示 `.node-version` 和 `.python-version` 中的版本；`corepack enable pnpm` 把 `pnpm` 命令放进 mise 管理的那份 Node 里。不使用 mise 时，自行准备这两个版本即可。
 
 ### 1. 安装依赖
 
