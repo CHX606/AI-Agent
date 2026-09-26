@@ -82,7 +82,7 @@ AI Agent/
 
 ## 本地启动
 
-以下命令在项目根目录的 PowerShell 中执行。需要 Python 3.12+、Node.js 24+、pnpm、Git、ripgrep 和可用的 Docker Engine。项目 `package.json` 指定的包管理器是 `pnpm@11.19.0`，与当前使用版本一致。
+以下命令在项目根目录的 PowerShell 中执行。需要 Python 3.12+、Node.js 24+、pnpm、Git、ripgrep 和可用的 Docker Engine。项目 `package.json` 指定的包管理器是 `pnpm@11.19.0`，与当前使用版本一致。Node.js 的具体版本写在根目录 `.node-version`，CI 读取同一个文件；本地可用 fnm、mise 等版本管理工具自动切换到该版本。
 
 ### 1. 安装依赖
 
