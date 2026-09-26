@@ -1,12 +1,60 @@
 import { randomUUID } from "node:crypto";
 
-import type { CreateTaskBody, TaskEvent, TaskRecord } from "../../domain/protocol.js";
+import type { CreateTaskBody, TaskEvent, TaskInteractionBody, TaskRecord } from "../../domain/protocol.js";
 import { DEFAULT_MAX_TOOL_ROUNDS, terminalTaskStatuses } from "../../domain/protocol.js";
 import type { CancellationResult, TaskStore } from "../../application/ports/task-store.js";
 
+function notFound(message: string): Error {
+  return Object.assign(new Error(message), { statusCode: 404 });
+}
+
+/** 测试用的内存实现：只保存任务和事件，其余操作给出最简单的合法结果。 */
 export class MemoryTaskStore implements TaskStore {
   private readonly tasks = new Map<string, TaskRecord>();
   private readonly events = new Map<string, TaskEvent[]>();
+
+  async health(): Promise<"ready"> {
+    return "ready";
+  }
+
+  async diagnosticSnapshot(taskId?: string): Promise<Record<string, unknown>> {
+    const tasks = [...this.tasks.values()].filter((task) => !taskId || task.task_id === taskId);
+    return { tasks: structuredClone(tasks), events: [] };
+  }
+
+  async interactTask(taskId: string, _input: TaskInteractionBody): Promise<TaskRecord> {
+    const task = this.tasks.get(taskId);
+    if (!task) throw notFound("任务不存在");
+    return structuredClone(task);
+  }
+
+  async listSessions(_offset = 0): Promise<Record<string, unknown>> {
+    return { sessions: [] };
+  }
+
+  async getSession(_sessionId: string): Promise<Record<string, unknown> | null> {
+    return null;
+  }
+
+  async setSessionMode(_sessionId: string, _mode: string): Promise<Record<string, unknown> | null> {
+    return null;
+  }
+
+  async getChanges(taskId: string): Promise<Record<string, unknown>> {
+    if (!this.tasks.has(taskId)) throw notFound("任务不存在");
+    return { changes: [] };
+  }
+
+  async reviewChange(taskId: string, _changeId: string, _action: string): Promise<Record<string, unknown>> {
+    if (!this.tasks.has(taskId)) throw notFound("任务不存在");
+    throw notFound("改动不存在");
+  }
+
+  async configureModel(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return { configured: true, model: input.model, base_url: input.base_url };
+  }
+
+  async close(): Promise<void> {}
 
   async createTask(input: CreateTaskBody): Promise<TaskRecord> {
     const now = new Date().toISOString();

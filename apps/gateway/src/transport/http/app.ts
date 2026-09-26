@@ -1,4 +1,5 @@
 import Fastify, { LogController, type FastifyInstance, type FastifyBaseLogger } from "fastify";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { isAbsolute } from "node:path";
 
 import {
@@ -8,6 +9,12 @@ import {
 } from "../../domain/protocol.js";
 import type { TaskStore } from "../../application/ports/task-store.js";
 import { diagnosticId, publicError, type DiagnosticService } from "@bit-agent/diagnostics";
+
+/** 常量时间比较，避免按响应耗时逐字符猜出令牌；先哈希以统一长度。 */
+function tokenMatches(header: string | undefined, token: string): boolean {
+    const digest = (value: string) => createHash("sha256").update(value).digest();
+    return timingSafeEqual(digest(header ?? ""), digest(`Bearer ${token}`));
+}
 
 export interface BuildAppOptions {
     logger?: boolean;
@@ -47,8 +54,7 @@ export function createHttpApp(
                 status_code: reply.statusCode, duration_ms: reply.elapsedTime });
     });
 
-    app.get<{ Querystring: { task_id?: string } }>("/v1/diagnostics", async (request, reply) => {
-        if (!taskStore.diagnosticSnapshot) return reply.code(501).send({ error: "LOCAL_RUNTIME_REQUIRED" });
+    app.get<{ Querystring: { task_id?: string } }>("/v1/diagnostics", async (request) => {
         const snapshot = await taskStore.diagnosticSnapshot(request.query.task_id);
         return { ...snapshot, available: diagnostics.available() && snapshot.available !== false };
     });
@@ -59,8 +65,8 @@ export function createHttpApp(
             service: "bit-agent-gateway",
             version: "0.1.0",
         };
-        const runtime = await taskStore.health?.();
-        if (runtime && runtime !== "ready") {
+        const runtime = await taskStore.health();
+        if (runtime !== "ready") {
             return reply.code(503).send({ ...health, status: "error", runtime_status: runtime,
                 restart_required: runtime === "stopped",
                 message: runtime === "stopped" ? "本地执行服务已退出，请重新启动应用" : "本地执行服务暂时无法响应" });
@@ -69,28 +75,26 @@ export function createHttpApp(
     });
 
     app.addHook("onRequest", async (request, reply) => {
-        if (process.env.BIT_AGENT_GATEWAY_TOKEN && request.headers.authorization !== `Bearer ${process.env.BIT_AGENT_GATEWAY_TOKEN}`) {
+        const token = process.env.BIT_AGENT_GATEWAY_TOKEN;
+        if (token && !tokenMatches(request.headers.authorization, token)) {
             return reply.code(401).send({ error: "UNAUTHORIZED" });
         }
         if (request.headers.origin) return reply.code(403).send({ error: "BROWSER_ORIGIN_NOT_ALLOWED" });
     });
 
     app.get<{ Querystring: { offset?: string } }>("/v1/sessions", async (request, reply) => {
-        if (!taskStore.listSessions) return reply.code(501).send({ error: "LOCAL_SESSIONS_UNAVAILABLE" });
         const offset = Number(request.query.offset ?? 0);
         if (!Number.isSafeInteger(offset) || offset < 0) return reply.code(400).send({ error: "INVALID_OFFSET" });
         return taskStore.listSessions(offset);
     });
 
     app.get<{ Params: { sessionId: string } }>("/v1/sessions/:sessionId", async (request, reply) => {
-        if (!taskStore.getSession) return reply.code(501).send({ error: "LOCAL_SESSIONS_UNAVAILABLE" });
         const session = await taskStore.getSession(request.params.sessionId);
         return session ?? reply.code(404).send({ error: "SESSION_NOT_FOUND" });
     });
 
     app.patch<{ Params: { sessionId: string }; Body: { multi_agent_mode?: string } }>(
         "/v1/sessions/:sessionId", async (request, reply) => {
-            if (!taskStore.setSessionMode) return reply.code(501).send({ error: "LOCAL_SESSIONS_UNAVAILABLE" });
             const mode = request.body?.multi_agent_mode;
             if (!mode || !["off", "on", "auto"].includes(mode)) return reply.code(400).send({ error: "INVALID_MODE" });
             const session = await taskStore.setSessionMode(request.params.sessionId, mode);
@@ -100,18 +104,16 @@ export function createHttpApp(
 
     app.post<{ Body: Record<string, unknown> }>("/v1/model", async (request, reply) => {
         // 模型密钥只接受桌面主进程的认证请求，不开放给旧的无认证网关。
-        if (!process.env.BIT_AGENT_GATEWAY_TOKEN || !taskStore.configureModel) {
+        if (!process.env.BIT_AGENT_GATEWAY_TOKEN) {
             return reply.code(403).send({ error: "MANAGED_DESKTOP_REQUIRED" });
         }
         return taskStore.configureModel(request.body);
     });
-    app.get<{ Params: { taskId: string } }>("/v1/tasks/:taskId/changes", async (request, reply) => {
-        if (!taskStore.getChanges) return reply.code(501).send({ error: "LOCAL_RUNTIME_REQUIRED" });
+    app.get<{ Params: { taskId: string } }>("/v1/tasks/:taskId/changes", async (request) => {
         return taskStore.getChanges(request.params.taskId);
     });
     app.post<{ Params: { taskId: string }; Body: { change_id?: string; action?: string } }>(
         "/v1/tasks/:taskId/changes", async (request, reply) => {
-            if (!taskStore.reviewChange) return reply.code(501).send({ error: "LOCAL_RUNTIME_REQUIRED" });
             if (!request.body || typeof request.body.change_id !== "string" || !["accept", "undo"].includes(request.body.action ?? "")) {
                 return reply.code(400).send({ error: "INVALID_REVIEW" });
             }
@@ -133,17 +135,11 @@ export function createHttpApp(
                 message: "workspace_root 必须是绝对路径",
             });
         }
-        if (!taskStore.getSession && (parsed.data.session_id || parsed.data.multi_agent_mode || parsed.data.permission_mode)) {
-            return reply.code(400).send({
-                error: "LOCAL_RUNTIME_REQUIRED", message: "会话恢复和三档模式需要默认的 local 运行方式",
-            });
-        }
         const task = await taskStore.createTask(parsed.data);
         return reply.code(202).send(task);
     });
 
     app.post<{ Params: { taskId: string } }>("/v1/tasks/:taskId/interaction", async (request, reply) => {
-        if (!taskStore.interactTask) return reply.code(501).send({ error: "LOCAL_INTERACTION_REQUIRED" });
         const parsed = taskInteractionSchema.safeParse(request.body);
         if (!parsed.success) return reply.code(400).send({ error: "INVALID_INTERACTION", details: parsed.error.issues });
         return taskStore.interactTask(request.params.taskId, parsed.data);
@@ -244,7 +240,7 @@ export function createHttpApp(
     });
 
     app.addHook("onClose", async () => {
-        await taskStore.close?.();
+        await taskStore.close();
     });
 
     return app;

@@ -98,6 +98,23 @@ describe("task API", () => {
     }
   });
 
+  it("serves session, change and diagnostic routes from any TaskStore", async () => {
+    const store = new MemoryTaskStore();
+    const app = buildApp({ logger: false, taskStore: store });
+    try {
+      const task = (await app.inject({ method: "POST", url: "/v1/tasks", payload: {
+        objective: "inspect", workspace_root: "D:\\workspace", session_id: "s-1", multi_agent_mode: "on",
+      } })).json();
+      expect((await app.inject({ url: "/v1/sessions" })).json()).toEqual({ sessions: [] });
+      expect((await app.inject({ url: "/v1/sessions/s-1" })).statusCode).toBe(404);
+      expect((await app.inject({ url: `/v1/tasks/${task.task_id}/changes` })).json()).toEqual({ changes: [] });
+      expect((await app.inject({ url: "/v1/tasks/missing/changes" })).statusCode).toBe(404);
+      const diagnostics = await app.inject({ url: `/v1/diagnostics?task_id=${task.task_id}` });
+      expect(diagnostics.statusCode).toBe(200);
+      expect(diagnostics.json().tasks).toHaveLength(1);
+    } finally { await app.close(); }
+  });
+
   it("streams structured events with SSE", async () => {
     const store = new MemoryTaskStore();
     const app = buildApp({ logger: false, taskStore: store });
