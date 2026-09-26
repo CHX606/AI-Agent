@@ -24,7 +24,7 @@ let closing = false;
 const shutdown = async () => {
   if (closing) return;
   closing = true;
-  await taskStore.close?.();
+  await taskStore.close();
   await app.close();
   await gatewayDiagnostics.close();
 };
@@ -36,7 +36,7 @@ try {
   app.log.info({ address }, "Bit Agent Gateway started");
 } catch (error) {
   gatewayDiagnostics.failure("gateway_startup_failed", error);
-  await taskStore.close?.();
+  await taskStore.close();
   await gatewayDiagnostics.close();
   process.exit(1);
 }
