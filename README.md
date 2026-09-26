@@ -84,9 +84,9 @@ AI Agent/
 
 以下命令在项目根目录的 PowerShell 中执行。需要 Python 3.12+、Node.js 24+、pnpm、Git、ripgrep 和可用的 Docker Engine。项目 `package.json` 指定的包管理器是 `pnpm@11.19.0`，与当前使用版本一致。Node.js 和 Python 的具体版本分别写在根目录 `.node-version` 和 `.python-version`，CI 读取同样的文件。
 
-### 0. 准备 Node 和 Python（推荐 mise）
+### 0. 准备 Node、Python 和 uv（推荐 mise）
 
-根目录的 `mise.toml` 让 [mise](https://mise.jdx.dev/) 读取上面两个版本文件，并在进入项目目录时自动激活 `.venv`。安装 mise 并在 PowerShell `$PROFILE` 中加入 `(&mise activate pwsh) | Out-String | Invoke-Expression` 后，在项目根目录执行：
+根目录的 `mise.toml` 让 [mise](https://mise.jdx.dev/) 读取上面两个版本文件、安装固定版本的 [uv](https://docs.astral.sh/uv/)，并在进入项目目录时自动激活 `.venv`。安装 mise 并在 PowerShell `$PROFILE` 中加入 `(&mise activate pwsh) | Out-String | Invoke-Expression` 后，在项目根目录执行：
 
 ```powershell
 mise install
@@ -94,17 +94,18 @@ mise current
 corepack enable pnpm
 ```
 
-`mise install` 把指定版本下载到 mise 自己的目录，不改系统里已装的 Node/Python；`mise current` 应显示 `.node-version` 和 `.python-version` 中的版本；`corepack enable pnpm` 把 `pnpm` 命令放进 mise 管理的那份 Node 里。不使用 mise 时，自行准备这两个版本即可。
+`mise install` 把指定版本下载到 mise 自己的目录，不改系统里已装的 Node/Python；`mise current` 应显示 node、python 和 uv 的版本；`corepack enable pnpm` 把 `pnpm` 命令放进 mise 管理的那份 Node 里。不使用 mise 时，自行准备这两个版本的 Node/Python 并安装 `mise.toml` 中写明版本的 uv。
 
 ### 1. 安装依赖
 
 ```powershell
-python -m venv .venv
-./.venv/Scripts/python.exe -m pip install -e ".[dev]"
+uv sync --locked
 pnpm install --frozen-lockfile
 ```
 
-第一条建立 Python 环境；第二条安装本项目和开发依赖；第三条安装 Gateway、Desktop 等 Node.js 依赖。只有使用 PostgreSQL 长期记忆时才需要另外安装 `.[memory]`。
+两边都按锁文件安装：`uv sync` 按 `uv.lock` 建立或更新 `.venv`，安装本项目和开发工具；`pnpm install` 按 `pnpm-lock.yaml` 安装 Gateway、Desktop 等 Node.js 依赖。`--locked` / `--frozen-lockfile` 表示锁文件与声明不一致时直接报错，而不是悄悄改版本。使用 PostgreSQL 长期记忆时改用 `uv sync --locked --extra memory`。
+
+`uv sync` 会让 `.venv` 与锁文件完全一致，手动 `pip install` 的额外包会被移除。新增或升级 Python 依赖用 `uv add <包名>`（开发工具加 `--group dev`）或 `uv lock --upgrade-package <包名>`，并提交更新后的 `uv.lock`。
 
 Node.js 依赖仓库由根目录 `pnpm-workspace.yaml` 的 `storeDir` 统一指定为 `D:\myproject\AI Agent.pnpm-store`（与项目目录同级、专供本项目使用）。pnpm 11 的这类项目配置写在该 YAML 文件中，不写入 `.npmrc`。在项目根目录或任一子包运行 `pnpm install`、`pnpm add`、`pnpm update` 都会使用该仓库；不要通过命令行或环境变量覆盖仓库路径。`--frozen-lockfile` 保持锁定的依赖版本和锁文件内容。
 
@@ -120,8 +121,6 @@ pnpm -r build
 ```
 
 前三条应统一返回 `D:\myproject\AI Agent.pnpm-store\v11`。该目录位于 Git 仓库之外；项目内遗留的 `.pnpm-store/` 也已被 `.gitignore` 忽略。本次保留旧的 `D:\.pnpm-store` 和项目内旧缓存。以后须先将其他项目逐一迁移、重新安装并验证构建，确认配置及依赖链接不再引用共享仓库，且没有安装任务运行，再清理 `D:\.pnpm-store`。
-
-直接写 `./.venv/Scripts/python.exe -m pip`，表示明确使用这个项目里的 Python 去运行 pip，不依赖终端当前激活了哪个环境。
 
 ### 2. 配置模型
 

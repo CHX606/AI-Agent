@@ -21,14 +21,17 @@ dependencies = [
 bit-agent = "bit_agent.cli:main"
 
 [project.optional-dependencies]
+memory = [
+    "psycopg[binary]>=3.2,<4",
+]
+
+# 开发工具；`uv sync` 默认安装。版本由 uv.lock 锁定。
+[dependency-groups]
 dev = [
     "import-linter>=2.15,<3",
     "pytest>=8",
     "pytest-asyncio>=0.24",
     "ruff>=0.9",
-]
-memory = [
-    "psycopg[binary]>=3.2,<4",
 ]
 
 [tool.setuptools]

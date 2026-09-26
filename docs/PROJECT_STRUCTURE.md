@@ -281,6 +281,9 @@ Ruff 用它减少重复检查。你看到的 `0.16.3` 是相关版本的缓存�
 | `package.json` | Node.js 项目信息、包管理器版本和常用脚本。 |
 | `pnpm-workspace.yaml` | 定义工作区子包、统一的依赖仓库路径和允许执行安装脚本的依赖。 |
 | `pnpm-lock.yaml` | 记录 Node.js 依赖解析结果，让安装更一致。 |
+| `uv.lock` | 记录 Python 依赖解析结果；`uv sync --locked` 按它安装 `.venv`。 |
+| `.node-version`、`.python-version` | 本项目使用的 Node.js 和 Python 具体版本，本地工具和 CI 都读取。 |
+| `mise.toml` | 本地开发环境：让 mise 读取上面两个版本文件、固定 uv 版本并自动激活 `.venv`。 |
 | `.env.example` | 本地配置的示例模板。 |
 | `.env` | 这台机器实际使用的配置，可能包括模型凭据。 |
 | `.gitignore` | 告诉 Git 哪些文件通常不作为源码跟踪。 |

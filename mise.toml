@@ -1,10 +1,19 @@
-# 本地开发环境（mise）。版本号只写在 .node-version 和 .python-version，CI 也读这两个文件。
-# 首次使用：安装 mise 并在 PowerShell $PROFILE 中启用后，在项目根目录执行 `mise install`。
+# 本地开发环境（mise）。Node/Python 版本只写在 .node-version 和 .python-version，CI 也读这两个文件。
+# 首次使用：安装 mise 并在 PowerShell $PROFILE 中启用后，在项目根目录执行 `mise install`，再执行 `uv sync`。
 
 [settings]
 # 让 mise 读取 .node-version / .python-version，而不是在这里再写一遍版本。
 idiomatic_version_file_enable_tools = ["node", "python"]
 
+[tools]
+# Python 依赖由 uv 按 uv.lock 安装；CI 使用同一版本。
+uv = "0.12.19"
+
 [env]
-# 进入项目目录时自动激活 .venv；不存在时用上面的 Python 创建。
+# 进入项目目录时自动激活 .venv；不存在时用 mise 管理的 Python 创建。
 _.python.venv = { path = ".venv", create = true }
+# uv 只使用 mise 提供的 Python，不自行下载解释器。
+UV_PYTHON_DOWNLOADS = "never"
+UV_PYTHON_PREFERENCE = "only-system"
+# uv 缓存在 C 盘、项目在 D 盘，无法硬链接，直接复制。
+UV_LINK_MODE = "copy"
