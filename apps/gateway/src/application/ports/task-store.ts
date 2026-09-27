@@ -20,5 +20,8 @@ export interface TaskStore {
   getChanges(taskId: string): Promise<Record<string, unknown>>;
   reviewChange(taskId: string, changeId: string, action: string): Promise<Record<string, unknown>>;
   configureModel(input: Record<string, unknown>): Promise<Record<string, unknown>>;
+  /** 长期记忆；workspaceRoot 为空时返回所有项目的记忆。 */
+  listMemories(workspaceRoot?: string): Promise<Record<string, unknown>>;
+  deleteMemory(memoryId: string): Promise<Record<string, unknown>>;
   close(): Promise<void>;
 }

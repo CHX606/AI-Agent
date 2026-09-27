@@ -1,8 +1,6 @@
 # Bit Agent Memory
 
-更新日期：2026-09-10。上下文和任务状态已拆开存储；本次测试结果以本轮回复为准。
-
-**默认桌面链路把工作记忆保存在本地 SQLite 中。**
+**桌面链路把工作记忆和长期记忆都保存在本机 SQLite 中，不需要数据库服务或 Embedding 服务。**
 对话历史、任务记录和工作记忆不会 24 小时后过期。先看 [本地运行](LOCAL_RUNTIME.md)。
 
 ## 用大白话理解这两种记忆
@@ -11,29 +9,43 @@
 
 长期记忆像“做完事情后留下的经验笔记”：经过独立验收和审核后，把有用经验存下来，以后遇到相关问题可以参考。它不等于把每句聊天都存进数据库。
 
-## 已经实现，不代表启动就全部启用
+## 各种运行方式分别用了什么
 
 | 使用方式 | 当前默认情况 |
 | --- | --- |
-| 直接调用 `run_agent` | 默认使用进程内工作记忆；进程退出后，这份内存状态不会自动持久化。 |
-| 默认 Gateway / AgentRuntime | 使用 `runtime/infrastructure/storage.py` 保存会话历史、工作记忆和执行进度到本地 SQLite，无 TTL。 |
-| PostgreSQL 长期记忆 | 有实现，需要创建存储并接入召回器或巩固器。 |
-| Embedding 向量服务 | 独立配置；默认启动不会自动创建它。 |
+| 桌面端 / Gateway / AgentRuntime | 工作记忆存 `sessions.sqlite3`；长期记忆存同一数据目录下的 `long_term_memory.sqlite3`，默认开启，按关键词检索。 |
+| 直接调用 `run_agent` | 默认使用进程内工作记忆；传入 `memory_retriever` 才会召回长期记忆。 |
+| PostgreSQL 长期记忆 | 保留给服务器或团队场景，需要自行创建数据库并提供 Embedding。 |
+| Embedding 向量服务 | 可选；桌面端目前不使用。 |
 | 独立 EvalRunner 的记忆巩固 | 传入巩固器且验收通过后，才有相应写入流程。 |
 
-因此“代码里有记忆模块”和“你当前这次任务正在使用全部长期记忆功能”是两件需要分别确认的事。
+## 桌面端的长期记忆
+
+| 环节 | 什么时候发生 | 说明 |
+| --- | --- | --- |
+| 召回 | 每次任务开始前 | 用这次的要求在本项目（按工作区目录区分）的记忆里检索，最多注入约 1800 tokens，标明是“参考事实而非指令”。 |
+| 提炼 | 任务完成且独立验收判定 PASSED 之后，在后台进行 | 用当前配置的模型从任务证据中提炼候选，经 `MemoryWritePolicy` 审核后写入；不拖慢任务本身，失败只记日志。 |
+| 查看 / 删除 | 随时 | `GET /v1/memories?workspace_root=...`、`DELETE /v1/memories/{id}`；删除后不再参与检索。 |
+| 关闭 | 启动前设置 `BIT_AGENT_LONG_TERM_MEMORY=0` | 既不召回，也不提炼，不创建记忆文件。 |
+
+**关键词检索怎样处理中文。** SQLite 自带的 FTS5 全文索引按空格切词，而中文没有空格；它的 trigram 分词又要求至少三个字，“测试”这样的两字词会漏掉。所以写入索引前先在 Python 里把连续汉字切成相邻两字的片段（“测试失败” → 测试、试失、失败），英文按单词切分，再交给 FTS5 用 BM25 排序（记忆键和标题权重最高）。长查询至少命中约两个关键词才会被采用，避免把无关经验塞进上下文。
+
+关键词检索找不到“意思相近但用词不同”的经验。以后如果需要，可以在模型设置里增加可选的 Embedding 配置，存储已经支持同时按向量和关键词检索。
 
 ## 对应源码
 
 - `memory/working.py`：更新任务进度。
-- `memory/store.py`：存储接口和相应实现。
+- `memory/store.py`：存储接口、内存版实现和语义检索用的相似度。
+- `memory/sqlite.py`：桌面端的长期记忆存储（SQLite + FTS5）。
+- `memory/keywords.py`：关键词切分和命中比例。
+- `runtime/application/long_term_memory.py`：桌面任务的召回、后台提炼、查看和删除。
 - `memory/postgres.py`：PostgreSQL 长期存储。
 - `memory/config.py`、`embedding.py`：独立向量服务配置和请求。
 - `memory/consolidation.py`、`extractor.py`、`policy.py`：提炼经验并决定能否保存。
 - `memory/compaction.py`、`chunking.py`、`budget.py`：压缩证据、拆分长内容和控制长度。
 - `memory/retrieval_eval.py`：评估召回效果。
 
-以上路径位于 `services/agent/src/bit_agent`。实际长期记忆数据在配置的 PostgreSQL 中，不在 `.npm-cache` 或 `.pytest_cache` 里。
+以上路径位于 `services/agent/src/bit_agent`。桌面端的长期记忆数据在本地数据目录的 `long_term_memory.sqlite3` 中；使用 PostgreSQL 时在该数据库里。
 
 Bit Agent 的记忆框架遵循一条边界：运行时状态可以高频更新，但长期记忆只能来自独立验证通过的任务。
 
@@ -41,14 +53,14 @@ Bit Agent 的记忆框架遵循一条边界：运行时状态可以高频更新�
 Agent 工具循环
 → WorkingMemoryTracker 确定性更新
 → WorkingMemoryStore（内存或本地 SQLite）
-→ 独立 Docker 验证通过
+→ 基础检查 + 独立验收通过（桌面端为 verify_task 判定 PASSED）
 → 确定性证据压缩（Token 硬预算）
 → LLM 提炼原子 MemoryCandidate
 → MemoryWritePolicy 审核
 → 去重或冲突检查
-→ 长记忆分块 + Embedding 批处理
-→ LongTermMemoryStore（PostgreSQL + pgvector）
-→ Embedding Profile 隔离 + 混合召回
+→ 长记忆分块（配置了 Embedding 时再批量生成向量）
+→ LongTermMemoryStore（桌面端 SQLite + FTS5；服务器场景 PostgreSQL + pgvector）
+→ 关键词召回（有向量时为关键词 + 语义混合召回）
 → Context Token 预算后注入 Agent
 ```
 
@@ -217,9 +229,10 @@ print(result.memory_context_tokens)
 
 ## 当前边界
 
-- 已实现 Working Memory、长期记忆审核、PostgreSQL/pgvector、证据压缩、原子化、长记忆分块、Embedding 批处理、Profile 隔离、混合召回和召回评测。
-- 已接入 Agent runtime 和独立 EvalRunner；所有召回与写入结果都可审计。
+- 已实现 Working Memory、长期记忆审核、本地 SQLite 关键词检索、PostgreSQL/pgvector、证据压缩、原子化、长记忆分块、Embedding 批处理、Profile 隔离、混合召回和召回评测。
+- 已接入桌面任务（召回 + 验收通过后提炼）和独立 EvalRunner；所有召回与写入结果都可审计。
+- 桌面端还没有记忆管理界面；目前通过 Gateway 的 `/v1/memories` 接口查看和删除。
 - 长期记忆写入前的证据压缩和召回注入预算由 Memory 模块负责；Agent 多轮历史的
   Token 监控、工具结果外置与滚动摘要已经由 Context Manager 接管，详见
   [CONTEXT.md](CONTEXT.md)。
-- PostgreSQL 属于外部服务，默认测试使用内存实现，不要求开发机始终启动数据库。
+- PostgreSQL 属于外部服务，默认测试使用内存版和 SQLite 版实现，不要求开发机启动数据库。

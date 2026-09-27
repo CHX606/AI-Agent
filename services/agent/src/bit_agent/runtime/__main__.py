@@ -56,6 +56,8 @@ async def main() -> None:
         "list_sessions": runtime.list_sessions,
         "get_session": runtime.get_session,
         "set_mode": runtime.set_mode,
+        "list_memories": runtime.list_memories,
+        "delete_memory": runtime.delete_memory,
     }
 
     async def health():

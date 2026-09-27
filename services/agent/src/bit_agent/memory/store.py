@@ -7,6 +7,7 @@ import re
 from collections.abc import Sequence
 from typing import Any, Protocol, runtime_checkable
 
+from bit_agent.memory.keywords import is_searchable, keyword_coverage, query_tokens
 from bit_agent.memory.models import (
     EmbeddingProfile,
     MemoryMatch,
@@ -50,7 +51,9 @@ class LongTermMemoryStore(Protocol):
 
     async def save_many(self, memories: Sequence[MemoryRecord]) -> None: ...  # 保存多条长期记忆
 
-    async def search(  # 根据给定的嵌入向量进行语义搜索
+    # 根据给定的嵌入向量进行语义搜索；embedding 为空或 semantic_weight 为 0 时只按关键词检索
+    # （PostgreSQL 实现仍要求提供 embedding）。
+    async def search(
         self,
         embedding: Sequence[float],
         *,
@@ -146,6 +149,8 @@ class InMemoryLongTermMemoryStore:  # 用于自动化测试和本地调试，用
             raise ValueError("limit 必须大于 0")
         if semantic_weight + lexical_weight <= 0:
             raise ValueError("语义与关键词权重不能同时为 0")
+        if not embedding or semantic_weight == 0:
+            return await self._keyword_search(query_text or "", project_id, user_id, limit)
         weight_total = semantic_weight + lexical_weight
         matches: list[MemoryMatch] = []
         async with self._lock:
@@ -175,6 +180,31 @@ class InMemoryLongTermMemoryStore:  # 用于自动化测试和本地调试，用
                         matched_by=matched_by,
                     )
                 )
+        return sorted(matches, key=lambda match: (-match.similarity, match.memory.id))[:limit]
+
+    async def _keyword_search(
+        self, text: str, project_id: str | None, user_id: str | None, limit: int
+    ) -> list[MemoryMatch]:
+        tokens = query_tokens(text)
+        matches: list[MemoryMatch] = []
+        async with self._lock:
+            for memory in self._items.values():
+                if memory.status is not MemoryRecordStatus.ACTIVE or not is_searchable(memory):
+                    continue
+                if memory.scope is MemoryScope.PROJECT and memory.project_id != project_id:
+                    continue
+                if memory.scope is MemoryScope.USER and memory.user_id != user_id:
+                    continue
+                coverage = keyword_coverage(tokens, memory)
+                if coverage > 0:
+                    matches.append(
+                        MemoryMatch(
+                            memory=memory,
+                            similarity=coverage,
+                            lexical_similarity=coverage,
+                            matched_by=["lexical"],
+                        )
+                    )
         return sorted(matches, key=lambda match: (-match.similarity, match.memory.id))[:limit]
 
     async def all(self) -> list[MemoryRecord]:

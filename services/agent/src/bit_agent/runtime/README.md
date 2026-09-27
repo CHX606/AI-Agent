@@ -69,6 +69,7 @@ runtime/
   sessions.sqlite3       会话、每轮任务、历史记录、工作记忆、事件
   sessions.sqlite3-wal   SQLite 工作时可能产生的配套文件
   sessions.sqlite3-shm   SQLite 工作时可能产生的配套文件
+  long_term_memory.sqlite3  长期记忆（验收通过后提炼的经验）；可用 BIT_AGENT_LONG_TERM_MEMORY=0 关闭
   runtime.lock          防止同一数据目录启动两套互相干扰的服务
   artifacts/            大型工具结果，按任务编号分开
 ```

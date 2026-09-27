@@ -28,6 +28,7 @@ from bit_agent.runtime.application.interaction import (
     InteractionError,
     TaskInteraction,
 )
+from bit_agent.runtime.application.long_term_memory import ProjectMemory, project_id_for
 from bit_agent.runtime.application.ports import (
     AcceptanceWorkspaceFactory,
     JournalFactory,
@@ -65,6 +66,7 @@ class AgentRuntime:
         journal_factory: JournalFactory,
         verifier: ProjectVerifier,
         acceptance_workspace: AcceptanceWorkspaceFactory | None = None,
+        long_term_memory: ProjectMemory | None = None,
     ) -> None:
         if concurrency < 1:
             raise ValueError("并发数量必须大于 0")
@@ -73,6 +75,9 @@ class AgentRuntime:
         self.journal_factory = journal_factory
         self.verifier = verifier
         self.acceptance_workspace = acceptance_workspace
+        self.long_term_memory = long_term_memory
+        # 任务结束后在后台提炼经验，不拖慢任务本身；关闭时统一收尾。
+        self._background: set[asyncio.Task[None]] = set()
         self._slots = asyncio.Semaphore(concurrency)
         self._workspaces = WorkspaceReservations()
         self._running: dict[str, asyncio.Task[None]] = {}
@@ -228,6 +233,7 @@ class AgentRuntime:
                 async def acceptance_context():
                     return await self.storage.call("acceptance_context", session_id)
 
+                journal = self.journal_factory(root, artifacts)
                 provider = DelegatingToolProvider(
                     root,
                     task["multi_agent_mode"],
@@ -236,7 +242,7 @@ class AgentRuntime:
                     control,
                     permission_mode=task.get("permission_mode", "confirm"),
                     inherited_changes=memory.verification_paths if memory else [],
-                    journal=self.journal_factory(root, artifacts),
+                    journal=journal,
                     verifier=self.verifier,
                     acceptance_workspace=self.acceptance_workspace,
                     acceptance_context=acceptance_context,
@@ -274,6 +280,10 @@ class AgentRuntime:
                         event_sink=sink,
                         task_id=task_id,
                         context_artifact_directory=artifacts / "main",
+                        memory_retriever=(
+                            self.long_term_memory.retriever() if self.long_term_memory else None
+                        ),
+                        memory_project_id=project_id_for(root),
                     )
                 current = await self.get_task(task_id)
                 status = (
@@ -284,6 +294,8 @@ class AgentRuntime:
                 await self._finish(
                     task_id, status, result=result.model_dump(mode="json"), error=result.error
                 )
+                if status == "COMPLETED":
+                    self._learn_later(task, result, [entry["patch"] for entry in journal.entries])
         except asyncio.CancelledError:
             record("info", "task_cancelled")
             await self._finish(
@@ -304,6 +316,44 @@ class AgentRuntime:
             self._running.pop(task_id, None)
             if self._sessions.get(session_id) == task_id:
                 self._sessions.pop(session_id, None)
+
+    def _learn_later(self, task: dict[str, Any], result: Any, patches: list[str]) -> None:
+        if self.long_term_memory is None or self._closing:
+            return
+        job = asyncio.create_task(self._learn(task, result, patches))
+        self._background.add(job)
+        job.add_done_callback(self._background.discard)
+
+    async def _learn(self, task: dict[str, Any], result: Any, patches: list[str]) -> None:
+        assert self.long_term_memory is not None
+        with diagnostic_context(task_id=task["task_id"], session_id=task["session_id"]):
+            try:
+                outcome = await self.long_term_memory.learn(task, result, patches)
+            except Exception as exc:
+                failure("memory_consolidation_failed", exc, level="warn")
+                return
+            if outcome is None:
+                return
+            record(
+                "info" if outcome.error is None else "warn",
+                "memory_consolidated",
+                status=str(outcome.status),
+                count=len(outcome.created) + len(outcome.updated),
+                error_type=outcome.error.split(":", 1)[0] if outcome.error else None,
+            )
+
+    async def list_memories(self, workspace_root: str | None = None) -> dict[str, Any]:
+        if self.long_term_memory is None:
+            return {"enabled": False, "memories": []}
+        return {
+            "enabled": True,
+            "memories": await self.long_term_memory.list_memories(workspace_root),
+        }
+
+    async def delete_memory(self, memory_id: str) -> dict[str, Any]:
+        if self.long_term_memory is None or not await self.long_term_memory.delete(memory_id):
+            raise InteractionError("记忆不存在或已删除", 404)
+        return {"deleted": True, "memory_id": memory_id}
 
     async def _finish(self, task_id: str, status: str, **fields: Any) -> None:
         control = self._interactions.get(task_id)
@@ -497,4 +547,11 @@ class AgentRuntime:
             if not execution.cancelling():
                 execution.cancel()
         await asyncio.gather(*executions, return_exceptions=True)
+        # 后台提炼经验只是锦上添花，关闭时直接取消，不拖延退出。
+        background = list(self._background)
+        for job in background:
+            job.cancel()
+        await asyncio.gather(*background, return_exceptions=True)
         await asyncio.to_thread(self.storage.close)
+        if self.long_term_memory is not None:
+            await asyncio.to_thread(self.long_term_memory.close)

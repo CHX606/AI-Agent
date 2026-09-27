@@ -60,6 +60,8 @@ pnpm --dir apps/gateway dev
 | `GET`/`POST /v1/tasks/{task_id}/changes` | 查看和审阅（保留或撤销）本次任务的文件改动。 |
 | `GET /v1/sessions`、`GET /v1/sessions/{session_id}` | 会话列表和详情。 |
 | `PATCH /v1/sessions/{session_id}` | 切换多 Agent 模式（`off`、`on`、`auto`）。 |
+| `GET /v1/memories?workspace_root=...` | 本项目（省略参数时为全部项目）的长期记忆，见 [记忆说明](MEMORY.md)。 |
+| `DELETE /v1/memories/{memory_id}` | 删除一条长期记忆，之后不再参与召回。 |
 | `POST /v1/model` | 桌面主进程写入模型配置；需要设置 `BIT_AGENT_GATEWAY_TOKEN`。 |
 | `GET /v1/diagnostics` | 诊断快照，见 [桌面诊断](DESKTOP_DIAGNOSTICS.md)。 |
 
