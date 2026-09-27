@@ -1,5 +1,5 @@
 // 启动发布目录中的真正 exe。浏览器调试端口仅由本验收进程临时启用。
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { createServer as createSocketServer } from "node:net";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -225,7 +225,33 @@ async function captureLayouts(command, evaluate, stage) {
   await command("Emulation.setDeviceMetricsOverride", { width:1280, height:820, deviceScaleFactor:1, mobile:false });
   await evaluate("if(document.documentElement.dataset.theme!=='light')document.querySelector('#theme-toggle').click();if(getComputedStyle(document.querySelector('.sidebar-right')).display==='none')document.querySelector('#inspector-toggle').click()");
 }
+// 用安装包自带的 Python 和代码预先写入两条长期记忆：一条属于验收工作区，一条属于别的项目。
+function seedMemories() {
+  const python = join(executable, "..", "resources", "python", "python.exe");
+  const code = `
+import asyncio, sys
+from pathlib import Path
+from bit_agent.memory import MemoryCandidate, MemoryKind, MemoryRecord, SQLiteLongTermMemoryStore
+from bit_agent.runtime.application.long_term_memory import project_id_for
+data, workspace = sys.argv[1], sys.argv[2]
+def record(title, project):
+    item = MemoryCandidate(kind=MemoryKind.PROCEDURE, memory_key="project.package." + title.lower().replace("-", "_"),
+        title=title, content=title + "：打包验收写入的长期记忆内容，用于检查面板显示。", applicability="打包验收",
+        evidence_summary="打包验收", importance=0.8, confidence=0.9)
+    return MemoryRecord.from_candidate(item, source_run_id="package-run", project_id=project, user_id=None)
+async def main():
+    store = SQLiteLongTermMemoryStore(Path(data) / "long_term_memory.sqlite3")
+    await store.save_many([record("PACKAGE-MEMORY-CANARY", project_id_for(Path(workspace))),
+                           record("OTHER-PROJECT-MEMORY", "d:/elsewhere/other-project")])
+    store.close()
+asyncio.run(main())
+`;
+  mkdirSync(join(directory, "data"), { recursive: true });
+  const result = spawnSync(python, ["-c", code, join(directory, "data"), workspace], { encoding: "utf8" });
+  assert.equal(result.status, 0, `写入验收记忆失败：${result.stderr}`);
+}
 try {
+  seedMemories();
   let { command, evaluate } = await launch();
   const configuration = await evaluate("window.bitAgent.runtimeConfig");
   assert.equal(configuration.managed, true);
@@ -280,10 +306,22 @@ try {
   await captureLayouts(command, evaluate, "review");
   await evaluate("Array.from(document.querySelectorAll('.change-entry button')).find(button=>button.textContent==='撤销这次改动').click()");
   await check(async () => !existsSync(join(workspace, "package-demo.py")), "界面撤销没有恢复原文件状态");
+  await evaluate("document.querySelector('.product-dialog-header button').click()");
+  await evaluate("document.querySelector('#memory-settings').click()");
+  const memoryTitles = "Array.from(document.querySelectorAll('.memory-entry strong')).map(item=>item.textContent)";
+  await check(async () => JSON.stringify(await evaluate(memoryTitles)) === JSON.stringify(["PACKAGE-MEMORY-CANARY"]), "记忆面板没有只显示本项目的记忆");
+  await evaluate("document.querySelector('#memory-show-all').click()");
+  await check(async () => (await evaluate(memoryTitles)).length === 2, "勾选“显示所有项目”后没有列出全部记忆");
+  await captureLayouts(command, evaluate, "memory");
+  await evaluate("Array.from(document.querySelectorAll('.memory-entry')).find(item=>item.textContent.includes('OTHER-PROJECT-MEMORY')).querySelector('.memory-delete').click()");
+  await check(async () => JSON.stringify(await evaluate(memoryTitles)) === JSON.stringify(["PACKAGE-MEMORY-CANARY"]), "界面删除记忆没有生效");
+  // 重启后 Gateway 端口会变，用当前这次启动的地址。
+  const remaining = await evaluate("window.bitAgent.listMemories({ gatewayUrl: window.bitAgent.runtimeConfig.gatewayUrl })");
+  assert.deepEqual(remaining.memories.map((item) => item.title), ["PACKAGE-MEMORY-CANARY"]);
   await close();
   writeFileSync(join(directory, "result.json"), JSON.stringify({ passed: true, executable,
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,
-    unauthorizedGatewayRejected: true, restartAndContinue: true, pauseAndSteer: true, approvalBeforeWrite: true, diffAndUndo: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
+    unauthorizedGatewayRejected: true, restartAndContinue: true, pauseAndSteer: true, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
   }, null, 2));
   console.log(`PACKAGED_ACCEPTANCE_PASSED ${directory}`);
 } finally {

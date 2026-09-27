@@ -25,7 +25,7 @@
 | --- | --- | --- |
 | 召回 | 每次任务开始前 | 用这次的要求在本项目（按工作区目录区分）的记忆里检索，最多注入约 1800 tokens，标明是“参考事实而非指令”。 |
 | 提炼 | 任务完成且独立验收判定 PASSED 之后，在后台进行 | 用当前配置的模型从任务证据中提炼候选，经 `MemoryWritePolicy` 审核后写入；不拖慢任务本身，失败只记日志。 |
-| 查看 / 删除 | 随时 | `GET /v1/memories?workspace_root=...`、`DELETE /v1/memories/{id}`；删除后不再参与检索。 |
+| 查看 / 删除 | 随时 | 桌面侧栏“长期记忆”：默认列出当前工作区的记忆，可勾选“显示所有项目”；删除后不再参与检索。接口为 `GET /v1/memories?workspace_root=...`、`DELETE /v1/memories/{id}`。 |
 | 关闭 | 启动前设置 `BIT_AGENT_LONG_TERM_MEMORY=0` | 既不召回，也不提炼，不创建记忆文件。 |
 
 **关键词检索怎样处理中文。** SQLite 自带的 FTS5 全文索引按空格切词，而中文没有空格；它的 trigram 分词又要求至少三个字，“测试”这样的两字词会漏掉。所以写入索引前先在 Python 里把连续汉字切成相邻两字的片段（“测试失败” → 测试、试失、失败），英文按单词切分，再交给 FTS5 用 BM25 排序（记忆键和标题权重最高）。长查询至少命中约两个关键词才会被采用，避免把无关经验塞进上下文。
@@ -231,7 +231,6 @@ print(result.memory_context_tokens)
 
 - 已实现 Working Memory、长期记忆审核、本地 SQLite 关键词检索、PostgreSQL/pgvector、证据压缩、原子化、长记忆分块、Embedding 批处理、Profile 隔离、混合召回和召回评测。
 - 已接入桌面任务（召回 + 验收通过后提炼）和独立 EvalRunner；所有召回与写入结果都可审计。
-- 桌面端还没有记忆管理界面；目前通过 Gateway 的 `/v1/memories` 接口查看和删除。
 - 长期记忆写入前的证据压缩和召回注入预算由 Memory 模块负责；Agent 多轮历史的
   Token 监控、工具结果外置与滚动摘要已经由 Context Manager 接管，详见
   [CONTEXT.md](CONTEXT.md)。

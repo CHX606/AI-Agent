@@ -52,6 +52,36 @@ export interface RepositoryFileResult {
   truncated: boolean;
 }
 
+export interface MemoryListInput {
+  gatewayUrl: string;
+  /** 为空时列出所有项目的记忆。 */
+  workspaceRoot?: string;
+}
+
+export interface MemoryDeleteInput {
+  gatewayUrl: string;
+  memoryId: string;
+}
+
+export interface LongTermMemory {
+  id: string;
+  kind: "FACT" | "DECISION" | "EPISODE" | "PROCEDURE" | "PREFERENCE";
+  memory_key: string;
+  title: string;
+  content: string;
+  applicability: string;
+  tags: string[];
+  project_id: string | null;
+  source_run_ids: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MemoryListResult {
+  enabled: boolean;
+  memories: LongTermMemory[];
+}
+
 export interface TaskEvent {
   taskId?: string;
   id: string | null;
@@ -83,6 +113,8 @@ export interface DesktopApi {
   listSessions(gatewayUrl: string, offset?: number): Promise<Record<string, unknown>>;
   getSession(input: SessionRequestInput): Promise<Record<string, unknown>>;
   setSessionMode(input: SessionRequestInput & { mode: MultiAgentMode }): Promise<Record<string, unknown>>;
+  listMemories(input: MemoryListInput): Promise<MemoryListResult>;
+  deleteMemory(input: MemoryDeleteInput): Promise<Record<string, unknown>>;
   getTask(input: TaskRequestInput): Promise<Record<string, unknown>>;
   getResult(input: TaskRequestInput): Promise<Record<string, unknown>>;
   cancelTask(input: TaskRequestInput): Promise<Record<string, unknown>>;
