@@ -10,6 +10,8 @@ import { taskRequestBody } from "../application/task-input.js";
 import type {
   ColorTheme,
   CreateTaskInput,
+  MemoryDeleteInput,
+  MemoryListInput,
   MultiAgentMode,
   SessionRequestInput,
   TaskRequestInput,
@@ -243,6 +245,18 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
         method: "PATCH", body: JSON.stringify({ multi_agent_mode: input.mode }),
       }),
     );
+    handle("memories:list", (_event, input: MemoryListInput) => {
+      const root = typeof input?.workspaceRoot === "string" ? input.workspaceRoot.trim() : "";
+      return requestJson(input.gatewayUrl,
+        `/v1/memories${root ? `?workspace_root=${encodeURIComponent(root)}` : ""}`);
+    });
+    handle("memories:delete", (_event, input: MemoryDeleteInput) => {
+      if (typeof input?.memoryId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/u.test(input.memoryId)) {
+        throw new Error("记忆编号无效");
+      }
+      return requestJson(input.gatewayUrl, `/v1/memories/${encodeURIComponent(input.memoryId)}`,
+        { method: "DELETE" });
+    });
     handle("tasks:get", (_event, raw: TaskRequestInput) => {
       const input = validateTaskRequest(raw);
       return requestJson(input.gatewayUrl, `/v1/tasks/${encodeURIComponent(input.taskId)}`);

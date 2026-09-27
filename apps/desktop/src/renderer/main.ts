@@ -741,7 +741,8 @@ window.addEventListener("pointerup", () => {
 
 interactionView = createInteractionView({ current: requestInput, apply: applyInteractionTask });
 mountProductControls(requestInput, () => ({ gatewayUrl: gatewayInput.value.trim(),
-  ...(activeTaskId ? { taskId: activeTaskId } : {}) }));
+  ...(activeTaskId ? { taskId: activeTaskId } : {}) }),
+() => ({ gatewayUrl: gatewayInput.value.trim(), workspaceRoot: workspaceInput.value.trim() }));
 window.bitAgent.onTaskEvent(appendEvent);
 
 onAgentModeChange((mode) => {

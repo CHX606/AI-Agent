@@ -157,6 +157,19 @@
 .change-actions { display: flex; gap: 6px; margin-left: auto; }
 .change-actions .button-secondary { min-height: 27px; padding: 0 8px; font-size: 11px; font-weight: 500; }
 .change-actions .change-undo:hover:not(:disabled) { border-color: var(--red); background: var(--red-soft); color: var(--red); }
+.memory-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; color: var(--text-soft); font-size: 12px; }
+.memory-scope { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.memory-count { color: var(--text-muted); }
+.memory-list { display: grid; gap: 12px; min-width: 0; }
+.memory-entry { min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; }
+.memory-entry-header { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.memory-entry-header > strong { min-width: 0; overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.memory-kind { flex: none; padding: 1px 7px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); font-size: 11px; }
+.memory-delete { flex: none; min-height: 27px; margin-left: auto; padding: 0 8px; font-size: 11px; font-weight: 500; }
+.memory-delete:hover:not(:disabled) { border-color: var(--red); background: var(--red-soft); color: var(--red); }
+.memory-content { margin-top: 8px; color: var(--text); font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.memory-applicability { margin-top: 6px; color: var(--text-soft); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.memory-meta { margin-top: 8px; color: var(--text-muted); font-size: 11px; }
 .change-file { min-width: 0; border-top: 1px solid var(--border); }
 .change-file > summary { padding: 9px 12px; overflow: hidden; color: var(--text-soft); font: 12px/1.6 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .product-diff { max-height: 360px; padding: 8px 0; overflow: auto; background: var(--bg-code); color: var(--text-soft); font: 12px/1.75 var(--font-mono); tab-size: 4; }

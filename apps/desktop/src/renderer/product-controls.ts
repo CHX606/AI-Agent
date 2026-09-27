@@ -2,8 +2,10 @@ import type { TaskRequestInput } from "../shared/contracts.js";
 import "@awesome.me/webawesome/dist/components/select/select.js";
 import "./product-controls.css";
 import { mountExecutionSettings } from "./execution-settings.js";
+import { createMemoryEntry } from "./memory-panel.js";
 
 const settingsIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>`;
+const memoryIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16l-6-4-6 4Z"/></svg>`;
 
 interface SelectElement extends HTMLElement {
   disabled: boolean;
@@ -16,7 +18,8 @@ export function permissionMode(): "read_only" | "confirm" | "edit" {
 }
 
 export function mountProductControls(current: () => TaskRequestInput,
-  diagnosticCurrent: () => { gatewayUrl: string; taskId?: string }): void {
+  diagnosticCurrent: () => { gatewayUrl: string; taskId?: string },
+  memoryCurrent: () => { gatewayUrl: string; workspaceRoot: string }): void {
   // 和多 Agent 开关放在一起：这些选项都只影响下一次发送的任务。
   const permission = document.createElement("div");
   permission.className = "permission-control";
@@ -66,7 +69,7 @@ export function mountProductControls(current: () => TaskRequestInput,
   modal.setAttribute("aria-labelledby", "product-dialog-title");
   document.body.append(modal);
 
-  function open(kind: "model" | "review" | "diagnostics", title: string, description: string): HTMLElement {
+  function open(kind: "model" | "review" | "diagnostics" | "memory", title: string, description: string): HTMLElement {
     modal.replaceChildren();
     modal.dataset.view = kind;
     const header = document.createElement("header");
@@ -161,6 +164,83 @@ export function mountProductControls(current: () => TaskRequestInput,
   };
   diagnosticsButton.onclick = () => { void showDiagnostics(); };
   compactDiagnostics.onclick = () => { void showDiagnostics(); };
+
+  const memoryButton = document.createElement("button");
+  memoryButton.type = "button";
+  memoryButton.id = "memory-settings";
+  memoryButton.className = "sidebar-model-settings";
+  memoryButton.innerHTML = `${memoryIcon}<span>长期记忆</span>`;
+  diagnosticsButton.after(memoryButton);
+  const compactMemory = document.createElement("button");
+  compactMemory.type = "button";
+  compactMemory.className = "rail-item rail-model-settings";
+  compactMemory.title = "长期记忆";
+  compactMemory.setAttribute("aria-label", "长期记忆");
+  compactMemory.innerHTML = memoryIcon;
+  compactDiagnostics.after(compactMemory);
+  const showMemories = async () => {
+    const body = open("memory", "长期记忆",
+      "通过独立验收的任务会自动提炼经验，只保存在本机；新任务开始前按关键词召回本项目的相关经验。");
+    const context = memoryCurrent();
+    const toolbar = document.createElement("div");
+    toolbar.className = "memory-toolbar";
+    const scope = document.createElement("label");
+    scope.className = "memory-scope";
+    const showAll = document.createElement("input");
+    showAll.type = "checkbox";
+    showAll.id = "memory-show-all";
+    // 没选工作区时只能看全部项目。
+    showAll.checked = !context.workspaceRoot;
+    showAll.disabled = !context.workspaceRoot;
+    scope.append(showAll, document.createTextNode("显示所有项目"));
+    const count = document.createElement("span");
+    count.className = "memory-count";
+    toolbar.append(scope, count);
+    const list = document.createElement("div");
+    list.className = "memory-list";
+    list.setAttribute("aria-live", "polite");
+    body.append(toolbar, list);
+
+    const draw = async (): Promise<void> => {
+      const all = showAll.checked;
+      try {
+        const result = await window.bitAgent.listMemories({ gatewayUrl: context.gatewayUrl,
+          ...(all ? {} : { workspaceRoot: context.workspaceRoot }) });
+        if (!active(body)) return;
+        ready(body);
+        list.replaceChildren();
+        const memories = result.enabled ? result.memories : [];
+        count.textContent = result.enabled ? `${memories.length} 条` : "";
+        if (!result.enabled || !memories.length) {
+          const empty = document.createElement("p");
+          empty.className = "product-empty";
+          empty.textContent = !result.enabled
+            ? "长期记忆已关闭。去掉环境变量 BIT_AGENT_LONG_TERM_MEMORY=0 后重新启动应用即可开启。"
+            : all ? "还没有记忆。完成一个通过独立验收的修改任务后，这里会出现提炼出的经验。"
+              : "这个项目还没有记忆。可以勾选“显示所有项目”查看其他项目。";
+          list.append(empty);
+          return;
+        }
+        for (const memory of memories) {
+          list.append(createMemoryEntry(memory, all, async (button) => {
+            if (!window.confirm(`删除这条记忆？\n\n${memory.title}\n\n删除后，新任务不会再参考它。`)) return;
+            button.disabled = true;
+            try {
+              await window.bitAgent.deleteMemory({ gatewayUrl: context.gatewayUrl, memoryId: memory.id });
+              await draw();
+            } catch (error) {
+              button.disabled = false;
+              feedback(body, error);
+            }
+          }));
+        }
+      } catch (error) { feedback(body, error); }
+    };
+    showAll.onchange = () => { void draw(); };
+    await draw();
+  };
+  memoryButton.onclick = () => { void showMemories(); };
+  compactMemory.onclick = () => { void showMemories(); };
   function ready(body: HTMLElement): void {
     body.querySelector(".product-loading")?.remove();
     body.setAttribute("aria-busy", "false");
