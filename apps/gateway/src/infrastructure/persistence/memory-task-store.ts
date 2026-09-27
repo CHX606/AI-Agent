@@ -54,6 +54,14 @@ export class MemoryTaskStore implements TaskStore {
     return { configured: true, model: input.model, base_url: input.base_url };
   }
 
+  async listMemories(_workspaceRoot?: string): Promise<Record<string, unknown>> {
+    return { enabled: false, memories: [] };
+  }
+
+  async deleteMemory(_memoryId: string): Promise<Record<string, unknown>> {
+    throw notFound("记忆不存在或已删除");
+  }
+
   async close(): Promise<void> {}
 
   async createTask(input: CreateTaskBody): Promise<TaskRecord> {

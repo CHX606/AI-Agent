@@ -102,6 +102,18 @@ export function createHttpApp(
         },
     );
 
+    app.get<{ Querystring: { workspace_root?: string } }>("/v1/memories", async (request, reply) => {
+        const workspaceRoot = request.query.workspace_root;
+        if (workspaceRoot !== undefined && !isAbsolute(workspaceRoot)) {
+            return reply.code(400).send({ error: "INVALID_WORKSPACE_ROOT" });
+        }
+        return taskStore.listMemories(workspaceRoot);
+    });
+
+    app.delete<{ Params: { memoryId: string } }>("/v1/memories/:memoryId", async (request) => {
+        return taskStore.deleteMemory(request.params.memoryId);
+    });
+
     app.post<{ Body: Record<string, unknown> }>("/v1/model", async (request, reply) => {
         // 模型密钥只接受桌面主进程的认证请求，不开放给旧的无认证网关。
         if (!process.env.BIT_AGENT_GATEWAY_TOKEN) {

@@ -82,6 +82,8 @@ class MemoryRetrievalPolicy(BaseModel):
     candidate_limit: int = Field(default=40, gt=0, le=200)
     limit: int = Field(default=8, gt=0, le=50)
     minimum_similarity: float = Field(default=0.55, ge=-1.0, le=1.0)
+    # 只用关键词检索时的门槛：长查询至少命中约两个关键词，短查询命中一个即可。
+    minimum_lexical_similarity: float = Field(default=0.3, ge=0.0, le=1.0)
     max_context_tokens: int = Field(default=1_800, gt=0)
     max_memory_tokens: int = Field(default=500, gt=0)
     max_chunks_per_parent: int = Field(default=2, gt=0, le=10)
@@ -100,12 +102,12 @@ class MemoryRetrievalPolicy(BaseModel):
 
 
 class MemoryRetriever:
-    """以项目/用户范围过滤后执行少量语义召回。"""
+    """以项目/用户范围过滤后执行少量召回；没有 Embedding 服务时只用关键词。"""
 
     def __init__(
         self,
         store: LongTermMemoryStore,
-        embedding_provider: EmbeddingProvider,
+        embedding_provider: EmbeddingProvider | None = None,
         *,
         policy: MemoryRetrievalPolicy | None = None,
     ) -> None:
@@ -122,25 +124,38 @@ class MemoryRetriever:
     ) -> list[MemoryMatch]:
         if not query.strip():
             return []
-        vectors = await self.embedding_provider.embed([query])
-        if len(vectors) != 1 or not vectors[0]:
-            raise ValueError("EmbeddingProvider 没有返回查询向量")
-        profile = resolve_embedding_profile(self.embedding_provider, vectors[0])
-        matches = await self.store.search(
-            vectors[0],
-            query_text=query,
-            embedding_profile=profile,
-            project_id=project_id,
-            user_id=user_id,
-            limit=self.policy.candidate_limit,
-            semantic_weight=self.policy.semantic_weight,
-            lexical_weight=self.policy.lexical_weight,
-        )
+        if self.embedding_provider is None:
+            matches = await self.store.search(
+                [],
+                query_text=query,
+                project_id=project_id,
+                user_id=user_id,
+                limit=self.policy.candidate_limit,
+                semantic_weight=0.0,
+                lexical_weight=1.0,
+            )
+            threshold = self.policy.minimum_lexical_similarity
+        else:
+            vectors = await self.embedding_provider.embed([query])
+            if len(vectors) != 1 or not vectors[0]:
+                raise ValueError("EmbeddingProvider 没有返回查询向量")
+            profile = resolve_embedding_profile(self.embedding_provider, vectors[0])
+            matches = await self.store.search(
+                vectors[0],
+                query_text=query,
+                embedding_profile=profile,
+                project_id=project_id,
+                user_id=user_id,
+                limit=self.policy.candidate_limit,
+                semantic_weight=self.policy.semantic_weight,
+                lexical_weight=self.policy.lexical_weight,
+            )
+            threshold = self.policy.minimum_similarity
         selected: list[MemoryMatch] = []
         used_tokens = 0
         parent_counts: dict[str, int] = {}
         for match in matches:
-            if match.similarity < self.policy.minimum_similarity:
+            if match.similarity < threshold:
                 continue
             logical_id = match.memory.parent_memory_id or match.memory.id
             if parent_counts.get(logical_id, 0) >= self.policy.max_chunks_per_parent:

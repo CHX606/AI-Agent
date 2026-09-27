@@ -56,6 +56,7 @@ from bit_agent.memory.retrieval_eval import (
     MemoryRetrievalEvalResult,
     evaluate_memory_retrieval,
 )
+from bit_agent.memory.sqlite import SQLiteLongTermMemoryStore
 from bit_agent.memory.store import (
     InMemoryLongTermMemoryStore,
     InMemoryWorkingMemoryStore,
@@ -101,6 +102,7 @@ __all__ = [
     "MemoryWritePolicy",
     "OpenAIEmbeddingProvider",
     "PostgreSQLLongTermMemoryStore",
+    "SQLiteLongTermMemoryStore",
     "TestStatus",
     "VerifiedRunEvidence",
     "WorkingMemory",

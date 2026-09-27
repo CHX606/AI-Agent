@@ -115,6 +115,27 @@ describe("task API", () => {
     } finally { await app.close(); }
   });
 
+  it("lists and deletes long-term memories through the store", async () => {
+    const store = new MemoryTaskStore();
+    const deleted: string[] = [];
+    Object.assign(store, {
+      listMemories: async (root?: string) => ({ enabled: true, memories: [{ id: "m1", project: root ?? null }] }),
+      deleteMemory: async (id: string) => { deleted.push(id); return { deleted: true, memory_id: id }; },
+    });
+    const app = buildApp({ logger: false, taskStore: store });
+    try {
+      const listed = await app.inject({ url: "/v1/memories?workspace_root=D%3A%5Cdemo" });
+      expect(listed.json()).toEqual({ enabled: true, memories: [{ id: "m1", project: "D:\\demo" }] });
+      expect((await app.inject({ url: "/v1/memories?workspace_root=relative" })).statusCode).toBe(400);
+      expect((await app.inject({ method: "DELETE", url: "/v1/memories/m1" })).json().deleted).toBe(true);
+      expect(deleted).toEqual(["m1"]);
+    } finally { await app.close(); }
+    const plain = buildApp({ logger: false, taskStore: new MemoryTaskStore() });
+    try {
+      expect((await plain.inject({ method: "DELETE", url: "/v1/memories/missing" })).statusCode).toBe(404);
+    } finally { await plain.close(); }
+  });
+
   it("streams structured events with SSE", async () => {
     const store = new MemoryTaskStore();
     const app = buildApp({ logger: false, taskStore: store });

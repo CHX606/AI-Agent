@@ -192,6 +192,14 @@ export class LocalTaskStore implements TaskStore {
     return this.call("set_mode", { session_id: sessionId, mode });
   }
 
+  listMemories(workspaceRoot?: string): Promise<Record<string, unknown>> {
+    return this.call("list_memories", workspaceRoot ? { workspace_root: workspaceRoot } : {});
+  }
+
+  deleteMemory(memoryId: string): Promise<Record<string, unknown>> {
+    return this.call("delete_memory", { memory_id: memoryId });
+  }
+
   async close(): Promise<void> {
     this.closing = true;
     if (this.child.exitCode !== null || this.child.signalCode !== null) return;
