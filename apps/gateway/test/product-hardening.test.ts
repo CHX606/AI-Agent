@@ -71,12 +71,49 @@ test("session search, rename and delete reach local storage", async () => {
   } finally { await app.close(); }
 });
 
+test("only runtime messages meant for users are passed through", async () => {
+  const store = new MemoryTaskStore();
+  Object.assign(store, {
+    deleteSession: async () => { throw Object.assign(new Error("RPC failed"), { statusCode: 409, userMessage: "这个对话还在执行" }); },
+    renameSession: async () => { throw Object.assign(new Error("C:/secret/path"), { statusCode: 400 }); },
+  });
+  const app = buildApp({ logger: false, taskStore: store });
+  try {
+    const busy = await app.inject({ method: "DELETE", url: "/v1/sessions/s" });
+    expect(busy.statusCode).toBe(409);
+    expect(busy.json().user_message).toBe("这个对话还在执行");
+    expect(busy.json().message).toContain("这个对话还在执行");
+    const internal = (await app.inject({ method: "PATCH", url: "/v1/sessions/s", payload: { title: "x" } })).json();
+    expect(internal.user_message).toBeUndefined();
+    expect(internal.message).not.toContain("secret");
+  } finally { await app.close(); }
+});
+
 test("unmanaged gateway cannot receive model credentials", async () => {
   vi.stubEnv("BIT_AGENT_GATEWAY_TOKEN", "");
   const app = buildApp({ logger: false });
   try {
     expect((await app.inject({ method: "POST", url: "/v1/model", payload: {} })).statusCode).toBe(403);
     expect((await app.inject({ method: "POST", url: "/v1/model/test", payload: {} })).statusCode).toBe(403);
+    expect((await app.inject({ method: "POST", url: "/v1/mcp", payload: { servers: [] } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "POST", url: "/v1/mcp/test", payload: { server: {} } })).statusCode).toBe(403);
+  } finally { await app.close(); }
+});
+
+test("managed gateway forwards external tool configuration", async () => {
+  vi.stubEnv("BIT_AGENT_GATEWAY_TOKEN", "test-token");
+  const store = new MemoryTaskStore();
+  const configure = vi.fn(async () => ({ configured: 1, enabled: 1 }));
+  Object.assign(store, { configureMcp: configure });
+  const app = buildApp({ logger: false, taskStore: store });
+  const headers = { authorization: "Bearer test-token" };
+  try {
+    expect((await app.inject({ method: "POST", url: "/v1/mcp", headers, payload: { servers: {} } })).statusCode).toBe(400);
+    const servers = [{ name: "docs", type: "http", url: "https://x.test" }];
+    expect((await app.inject({ method: "POST", url: "/v1/mcp", headers, payload: { servers } })).json())
+      .toEqual({ configured: 1, enabled: 1 });
+    expect(configure).toHaveBeenCalledExactlyOnceWith(servers);
+    expect((await app.inject({ method: "POST", url: "/v1/mcp/test", headers, payload: { server: [] } })).statusCode).toBe(400);
   } finally { await app.close(); }
 });
 

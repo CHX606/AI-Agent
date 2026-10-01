@@ -30,6 +30,10 @@ export interface TaskStore {
   configureModel(input: Record<string, unknown>): Promise<Record<string, unknown>>;
   /** 用一次真实请求测试模型配置，不改变当前生效的配置。 */
   testModel(input: Record<string, unknown>): Promise<Record<string, unknown>>;
+  /** 替换外部工具（MCP Server）配置；只保存在运行服务内存中。 */
+  configureMcp(servers: unknown[]): Promise<Record<string, unknown>>;
+  /** 连接一个外部工具服务并列出工具，不调用工具。 */
+  testMcp(server: Record<string, unknown>): Promise<Record<string, unknown>>;
   /** 长期记忆；workspaceRoot 为空时返回所有项目的记忆。 */
   listMemories(workspaceRoot?: string): Promise<Record<string, unknown>>;
   deleteMemory(memoryId: string): Promise<Record<string, unknown>>;

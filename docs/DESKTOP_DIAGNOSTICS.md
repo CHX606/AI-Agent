@@ -8,6 +8,8 @@
 
 界面错误显示简明中文和 `D-…` 诊断编号。客户反馈时提供编号、发生时间和主动导出的 ZIP 即可。
 
+大多数错误只显示通用提示，避免把内部细节（路径、异常堆栈、服务返回的原文）带到界面上。专门写给用户看的错误会显示原因本身，例如“提交失败：钩子返回…”“这个对话还在执行，请先停止再删除”“请填写 API Key”：运行服务里是 `InteractionError`，经 RPC 的 `user_message` 字段、Gateway 响应的 `user_message` 字段传到桌面；桌面主进程自己的这类错误是 `UserFacingError`。两种都仍然附带诊断编号。
+
 ## 日志位置与容量
 
 - 打包桌面默认：Electron `userData/runtime/logs`，通常是 `%APPDATA%/bit-agent/runtime/logs`。以诊断界面显示的绝对路径为准。

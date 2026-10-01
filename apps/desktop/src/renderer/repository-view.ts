@@ -1,6 +1,6 @@
 /** 仓库页面：按需展开的目录树和只读文件预览。状态只在本模块内维护。 */
 import type { RepositoryDirectoryResult, RepositoryEntry } from "../shared/contracts";
-import { element, formatFileSize, projectName } from "./dom";
+import { element, errorText, formatFileSize, projectName } from "./dom";
 
 export interface RepositoryView {
   /** 工作区变化时调用；active 表示仓库页面当前可见，需要立即重新加载。 */
@@ -159,7 +159,7 @@ export function createRepositoryView(options: {
     } catch (error) {
       if (generation !== loadGeneration) return;
       children.classList.add("repository-entry-loading", "is-error");
-      children.textContent = error instanceof Error ? error.message : "目录读取失败";
+      children.textContent = errorText(error, "目录读取失败");
     }
   }
 
@@ -192,7 +192,7 @@ export function createRepositoryView(options: {
     } catch (error) {
       if (generation !== previewGeneration) return;
       previewNotice.dataset.tone = "error";
-      previewNotice.textContent = error instanceof Error ? error.message : "文件读取失败";
+      previewNotice.textContent = errorText(error, "文件读取失败");
     }
   }
 
@@ -223,7 +223,7 @@ export function createRepositoryView(options: {
       if (result.entries.length === 0) setTreeState("当前工作区为空。");
     } catch (error) {
       if (generation !== loadGeneration) return;
-      setTreeState(error instanceof Error ? error.message : "工作区读取失败", { browse: true, error: true });
+      setTreeState(errorText(error, "工作区读取失败"), { browse: true, error: true });
     } finally {
       if (generation === loadGeneration) refreshButton.disabled = false;
     }

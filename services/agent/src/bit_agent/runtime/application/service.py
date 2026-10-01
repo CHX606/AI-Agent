@@ -42,6 +42,12 @@ from bit_agent.runtime.application.ports import (
     ProjectVerifier,
     StoragePort,
 )
+from bit_agent.tool_provider.external import (
+    ExternalMcpTools,
+    ExternalServerConfigError,
+    build_servers,
+    validate_servers,
+)
 
 TERMINAL = {"COMPLETED", "PARTIAL", "FAILED", "CANCELLED"}
 PROJECT_INSTRUCTIONS_PREFIX = (
@@ -111,6 +117,8 @@ class AgentRuntime:
         self.long_term_memory = long_term_memory
         self.project_instructions = project_instructions
         self.git = git
+        # 桌面“外部工具”里配置的 MCP Server；只保存在内存里，密钥不落盘。
+        self.mcp_servers: list[dict[str, Any]] = []
         # 任务结束后在后台提炼经验，不拖慢任务本身；关闭时统一收尾。
         self._background: set[asyncio.Task[None]] = set()
         self._slots = asyncio.Semaphore(concurrency)
@@ -274,6 +282,13 @@ class AgentRuntime:
                     return await self.storage.call("acceptance_context", session_id)
 
                 journal = self.journal_factory(root, artifacts)
+
+                async def report(event_type: str, data: dict[str, Any]) -> None:
+                    await self.storage.call(
+                        "event", task_id, event_type, {"task_id": task_id, **data}
+                    )
+
+                servers = build_servers(self.mcp_servers, root)
                 provider = DelegatingToolProvider(
                     root,
                     task["multi_agent_mode"],
@@ -287,6 +302,8 @@ class AgentRuntime:
                     acceptance_workspace=self.acceptance_workspace,
                     acceptance_context=acceptance_context,
                     max_tool_rounds=task.get("max_tool_rounds", DEFAULT_MAX_TOOL_ROUNDS),
+                    external=ExternalMcpTools(servers) if servers else None,
+                    report=report,
                 )
                 timeout = float(os.getenv("BIT_AGENT_TASK_TIMEOUT_SECONDS", "3600"))
                 if timeout <= 0:
@@ -730,6 +747,33 @@ class AgentRuntime:
             "api": api,
             "aux_model": auxiliary.strip() or None,
         }
+
+    async def configure_mcp(self, servers: list[dict[str, Any]]) -> dict[str, Any]:
+        """替换外部工具配置；从下一轮任务开始生效。"""
+        try:
+            self.mcp_servers = validate_servers(servers)
+        except ExternalServerConfigError as exc:
+            raise InteractionError(str(exc), 400) from exc
+        return {
+            "configured": len(self.mcp_servers),
+            "enabled": sum(1 for server in self.mcp_servers if server["enabled"]),
+        }
+
+    async def test_mcp(self, server: dict[str, Any]) -> dict[str, Any]:
+        """连接一个服务并列出它的工具，不调用任何工具。stdio 命令在用户目录下运行。"""
+        try:
+            config = validate_servers([{**server, "enabled": True}])
+        except ExternalServerConfigError as exc:
+            raise InteractionError(str(exc), 400) from exc
+        tools = ExternalMcpTools(build_servers(config, Path.home()))
+        async with tools:
+            if tools.failed:
+                return {"ok": False, "tools": [], "message": tools.failed[0]["error"]}
+            return {
+                "ok": True,
+                "tools": [tools.original_name(item["name"]) for item in tools.model_tools()],
+                "message": f"连接成功，共 {len(tools.model_tools())} 个工具",
+            }
 
     async def test_model(self, input: dict[str, Any]) -> dict[str, Any]:
         """真实请求一次模型；不修改当前生效的配置。"""

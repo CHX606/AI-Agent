@@ -25,6 +25,7 @@ from bit_agent.runtime.application.ports import (
 from bit_agent.runtime.domain.acceptance import VERIFY_TASK_SCHEMA
 from bit_agent.runtime.domain.tool_schemas import VERIFY_SCHEMA
 from bit_agent.tool_provider import LocalToolProvider, RestrictedToolProvider
+from bit_agent.tool_provider.external import ExternalMcpTools
 from bit_agent.tools.apply_patch import patch_deletes_files
 from bit_agent.tools.models import ToolMetadata, ToolResult, ToolStatus
 
@@ -107,8 +108,13 @@ class DelegatingToolProvider(LocalToolProvider):
         acceptance_workspace: AcceptanceWorkspaceFactory | None = None,
         acceptance_context: Callable[[], Awaitable[dict]] | None = None,
         max_tool_rounds: int = DEFAULT_MAX_TOOL_ROUNDS,
+        external: ExternalMcpTools | None = None,
+        report: Callable[[str, dict], Awaitable[None]] | None = None,
     ) -> None:
         super().__init__(root, execute_tool)
+        # 只读模式不连接外部工具：它们可能写文件、联网或改动外部系统。
+        self.external = external if permission_mode != "read_only" else None
+        self.report = report
         self.root = root
         self.mode = mode
         self.sink = sink
@@ -165,8 +171,24 @@ class DelegatingToolProvider(LocalToolProvider):
             return True
         return answer.get("option_id") == "approve"
 
+    async def __aenter__(self) -> "DelegatingToolProvider":
+        if self.external is not None:
+            await self.external.__aenter__()
+            if self.report is not None and (self.external.connected or self.external.failed):
+                await self.report(
+                    "EXTERNAL_TOOLS_LOADED",
+                    {"connected": self.external.connected, "failed": self.external.failed},
+                )
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        if self.external is not None:
+            await self.external.__aexit__(*exc_info)
+
     async def model_tools(self) -> list[dict[str, object]]:
         tools = list(await super().model_tools())
+        if self.external is not None:
+            tools.extend(self.external.model_tools())
         tools.append(VERIFY_SCHEMA)
         if self.acceptance_workspace is not None and self.acceptance_context is not None:
             tools.append(VERIFY_TASK_SCHEMA)
@@ -176,7 +198,31 @@ class DelegatingToolProvider(LocalToolProvider):
             tools.append(DELEGATION_SCHEMA)
         return tools
 
+    async def _call_external(
+        self, tool_name: str, tool_call_id: str, raw_arguments: str
+    ) -> ToolResult:
+        assert self.external is not None
+        server = self.external.server_for(tool_name)
+        assert server is not None
+        # “允许修改”且用户把这个服务标为自动批准时才不问；其他情况逐次确认，可按服务整轮批准。
+        if not (self.permission_mode == "edit" and server.auto_approve):
+            try:
+                shown = json.dumps(json.loads(raw_arguments), ensure_ascii=False, indent=2)
+            except (ValueError, TypeError):
+                shown = raw_arguments
+            if not await self._approve(
+                f"调用外部工具 {server.name} · {self.external.original_name(tool_name)}",
+                "外部工具在本机或远程服务上运行，不在隔离环境中，也不会进入改动审阅。\n" + shown,
+                f"mcp:{server.name}",
+            ):
+                return tool_error_result(
+                    tool_call_id, tool_name, "PERMISSION_DENIED", "未批准调用外部工具"
+                )
+        return await self.external.call(tool_name, tool_call_id, raw_arguments)
+
     async def call_tool(self, tool_name: str, tool_call_id: str, raw_arguments: str) -> ToolResult:
+        if self.external is not None and self.external.server_for(tool_name) is not None:
+            return await self._call_external(tool_name, tool_call_id, raw_arguments)
         changing = tool_name in {
             "apply_patch",
             "run_tests",

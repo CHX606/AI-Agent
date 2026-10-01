@@ -69,6 +69,8 @@ pnpm --dir apps/gateway dev
 | `GET /v1/tasks/:taskId/git` | 这次任务改过的文件在 Git 里的状态和当前分支。 |
 | `POST /v1/tasks/:taskId/git/message` | 用当前模型根据目标和差异起草提交信息，模型不可用时返回按目标生成的草稿。 |
 | `POST /v1/tasks/:taskId/git/commit` | 只提交这次任务的文件；`branch` 可选，填写时先新建分支。 |
+| `POST /v1/mcp` | 桌面主进程替换外部工具（MCP Server）配置，可能含密钥；需要令牌。只保存在运行服务内存中。 |
+| `POST /v1/mcp/test` | 连接一个外部工具服务并列出工具，不调用工具；需要令牌。 |
 | `POST /v1/model/test` | 桌面主进程用一次真实请求测试模型配置，`api` 为 `auto` 时自动检测接口类型；不改变当前配置；同样需要令牌。 |
 | `GET /v1/diagnostics` | 诊断快照，见 [桌面诊断](DESKTOP_DIAGNOSTICS.md)。 |
 

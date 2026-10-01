@@ -23,6 +23,9 @@ export interface RuntimePort {
   modelSettings(includeSecret?: boolean): Record<string, string | boolean>;
   saveModelSettings(input: unknown): Promise<Record<string, string | boolean>>;
   testModelSettings(input: unknown): Promise<Record<string, unknown>>;
+  mcpServers(): Record<string, unknown>[];
+  saveMcpServers(input: unknown): Promise<Record<string, unknown>[]>;
+  testMcpServer(input: unknown): Promise<Record<string, unknown>>;
   dockerStatus(): Promise<"ready" | "not_installed" | "not_running">;
   startManagedRuntime(): Promise<void>;
   stopManagedRuntime(): Promise<void>;

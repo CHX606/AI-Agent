@@ -1,12 +1,15 @@
 import type { TaskRequestInput } from "../shared/contracts.js";
 import "@awesome.me/webawesome/dist/components/select/select.js";
 import "./product-controls.css";
+import { errorText } from "./dom.js";
 import { mountExecutionSettings } from "./execution-settings.js";
 import { createGitCommitPanel } from "./git-commit-panel.js";
 import { createMemoryEntry } from "./memory-panel.js";
+import { renderMcpPanel } from "./mcp-panel.js";
 
 const settingsIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>`;
 const memoryIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16l-6-4-6 4Z"/></svg>`;
+const toolsIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg>`;
 
 interface SelectElement extends HTMLElement {
   disabled: boolean;
@@ -70,7 +73,7 @@ export function mountProductControls(current: () => TaskRequestInput,
   modal.setAttribute("aria-labelledby", "product-dialog-title");
   document.body.append(modal);
 
-  function open(kind: "model" | "review" | "diagnostics" | "memory", title: string, description: string): HTMLElement {
+  function open(kind: "model" | "review" | "diagnostics" | "memory" | "mcp", title: string, description: string): HTMLElement {
     modal.replaceChildren();
     modal.dataset.view = kind;
     const header = document.createElement("header");
@@ -242,6 +245,27 @@ export function mountProductControls(current: () => TaskRequestInput,
   };
   memoryButton.onclick = () => { void showMemories(); };
   compactMemory.onclick = () => { void showMemories(); };
+
+  const toolsButton = document.createElement("button");
+  toolsButton.type = "button";
+  toolsButton.id = "mcp-settings";
+  toolsButton.className = "sidebar-model-settings";
+  toolsButton.innerHTML = `${toolsIcon}<span>外部工具</span>`;
+  memoryButton.after(toolsButton);
+  const compactTools = document.createElement("button");
+  compactTools.type = "button";
+  compactTools.className = "rail-item rail-model-settings";
+  compactTools.title = "外部工具";
+  compactTools.setAttribute("aria-label", "外部工具");
+  compactTools.innerHTML = toolsIcon;
+  compactMemory.after(compactTools);
+  const showTools = async () => {
+    const body = open("mcp", "外部工具", "通过 MCP 给 Agent 增加工具，只对主 Agent 开放。");
+    try { await renderMcpPanel(body, (value, success) => feedback(body, value, success)); }
+    catch (error) { feedback(body, error); }
+  };
+  toolsButton.onclick = () => { void showTools(); };
+  compactTools.onclick = () => { void showTools(); };
   function ready(body: HTMLElement): void {
     body.querySelector(".product-loading")?.remove();
     body.setAttribute("aria-busy", "false");
@@ -257,7 +281,7 @@ export function mountProductControls(current: () => TaskRequestInput,
     }
     message.dataset.kind = success ? "success" : "error";
     message.setAttribute("role", success ? "status" : "alert");
-    message.textContent = value instanceof Error ? value.message : String(value);
+    message.textContent = errorText(value);
   }
 
   reviewButton.addEventListener("click", async () => {

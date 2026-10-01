@@ -4,7 +4,7 @@ import "./styles.css";
 
 import type { ColorTheme, TaskEvent } from "../shared/contracts";
 import { createActivityCard } from "./activity-card";
-import { element, formatHistoryTime, object, projectName } from "./dom";
+import { element, errorText, formatHistoryTime, object, projectName } from "./dom";
 import { renderMarkdown } from "./markdown";
 import {
   estimateCost, eventPresentation, formatTokens, isMainAgentText, summarizeResult,
@@ -247,7 +247,7 @@ function startRename(entry: TaskHistoryEntry, title: HTMLElement): void {
       saveHistory(history);
       if (entry.taskId === activeTaskId) taskIdText.textContent = name;
     } catch (error) {
-      connection.textContent = `重命名失败：${error instanceof Error ? error.message : String(error)}`;
+      connection.textContent = `重命名失败：${errorText(error)}`;
     }
     renderHistory();
   };
@@ -265,7 +265,7 @@ async function deleteConversation(entry: TaskHistoryEntry): Promise<void> {
       await window.bitAgent.deleteSession({ gatewayUrl: entry.gatewayUrl, sessionId: entry.sessionId });
     }
   } catch (error) {
-    connection.textContent = `删除失败：${error instanceof Error ? error.message : String(error)}`;
+    connection.textContent = `删除失败：${errorText(error)}`;
     return;
   }
   const removed = (item: TaskHistoryEntry) => item.taskId === entry.taskId
@@ -364,7 +364,7 @@ async function refreshInteraction(): Promise<void> {
     }
   } catch (error) {
     if (generation === viewGeneration && input.taskId === activeTaskId) {
-      connection.textContent = `交互状态暂未同步：${error instanceof Error ? error.message : String(error)}`;
+      connection.textContent = `交互状态暂未同步：${errorText(error)}`;
     }
   }
 }
@@ -416,7 +416,7 @@ function showThinking(message = "Agent 正在分析项目并选择下一步操�
 }
 
 function showError(error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorText(error);
   setStatus("ERROR");
   assistantMessage.hidden = false;
   delete answer.dataset.state;
@@ -696,9 +696,13 @@ async function runAgent(): Promise<void> {
     interactionView?.update(task);
     taskIdText.title = `任务 ID：${activeTaskId}`;
     const status = typeof task.status === "string" ? task.status : "QUEUED";
+    // 继续已有对话时保留它的标题（可能是用户改过的名字），不用最新一句话覆盖。
+    const existing = previousSession
+      ? history.find((item) => item.sessionId === previousSession && item.gatewayUrl === gatewayInput.value.trim())
+      : undefined;
     upsertHistory({
       taskId: activeTaskId,
-      objective,
+      objective: existing?.objective ?? objective,
       workspaceRoot,
       gatewayUrl: gatewayInput.value.trim(),
       status,
@@ -838,10 +842,10 @@ healthButton.addEventListener("click", async () => {
     try {
       await refreshSessions();
     } catch (error) {
-      connection.textContent = `Gateway 已连接，但本地会话列表不可用：${error instanceof Error ? error.message : String(error)}`;
+      connection.textContent = `Gateway 已连接，但本地会话列表不可用：${errorText(error)}`;
     }
   } catch (error) {
-    connection.textContent = error instanceof Error ? error.message : "连接失败";
+    connection.textContent = errorText(error, "连接失败");
     connection.dataset.connected = "false";
     connectionDot.dataset.connected = "false";
   }
@@ -909,7 +913,7 @@ onAgentModeChange((mode) => {
   void window.bitAgent.setSessionMode({
     gatewayUrl: gatewayInput.value.trim(), sessionId: activeSessionId, mode,
   }).catch((error: unknown) => {
-    connection.textContent = `模式尚未保存：${error instanceof Error ? error.message : String(error)}`;
+    connection.textContent = `模式尚未保存：${errorText(error)}`;
   });
 });
 
@@ -922,7 +926,7 @@ sessionSearch.addEventListener("input", () => {
 
 element<HTMLButtonElement>("#more-sessions").addEventListener("click", () => {
   void refreshSessions(true).catch((error: unknown) => {
-    connection.textContent = error instanceof Error ? error.message : String(error);
+    connection.textContent = errorText(error);
   });
 });
 

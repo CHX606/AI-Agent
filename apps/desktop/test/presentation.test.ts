@@ -160,6 +160,15 @@ it("summarizes task usage including sub agents and estimates cost", () => {
   expect(summarizeResult({ result: { task_usage: { requests: 0 } } }).usage).toBeNull();
 });
 
+it("presents external MCP connections and calls", () => {
+  expect(eventTitle({ id: "4-0", event_type: "EXTERNAL_TOOLS_LOADED", data: {
+    connected: [{ name: "docs", tools: 3 }], failed: [{ name: "github", error: "x" }] } }))
+    .toBe("已连接外部工具 docs（3 个工具）；外部工具连接失败：github");
+  expect(eventPresentation({ id: "5-0", event_type: "TOOL_COMPLETED", data: { payload: {
+    tool_name: "mcp__docs__search_pages", tool_call_id: "m1", status: "SUCCESS" } } }))
+    .toMatchObject({ title: "外部工具已返回 docs · search_pages", tone: "success" });
+});
+
 it("names the project instruction files that were read", () => {
   expect(eventTitle({ id: "3-0", event_type: "PROJECT_INSTRUCTIONS_LOADED",
     data: { paths: ["AGENTS.md", ".bit-agent/instructions.md"], truncated: false } }))

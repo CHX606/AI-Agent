@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, TextIO
 
 from bit_agent.observability.diagnostics import diagnostic_context, failure, public_error
+from bit_agent.runtime.domain.errors import InteractionError
 
 
 class JsonLineRpcServer:
@@ -44,14 +45,16 @@ class JsonLineRpcServer:
                 if isinstance(request.get("params", {}), dict)
                 else None,
             )
-            response = {
-                "id": request.get("id"),
-                "error": {
-                    "message": public_error(identifier, "请求未完成，请检查输入和任务状态"),
-                    "diagnostic_id": identifier,
-                    "status_code": status,
-                },
+            error: dict[str, Any] = {
+                "message": public_error(identifier, "请求未完成，请检查输入和任务状态"),
+                "diagnostic_id": identifier,
+                "status_code": status,
             }
+            # 只有专门写给用户看的错误才透传原文（例如“提交钩子失败”“对话还在执行”），
+            # 其他异常可能带内部细节，仍只给通用提示和诊断编号。
+            if isinstance(exc, InteractionError):
+                error["user_message"] = str(exc)[:2000]
+            response = {"id": request.get("id"), "error": error}
         try:
             self.output.write(json.dumps(response, ensure_ascii=False) + "\n")
             self.output.flush()
