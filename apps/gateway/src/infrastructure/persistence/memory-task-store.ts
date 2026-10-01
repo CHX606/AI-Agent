@@ -28,8 +28,16 @@ export class MemoryTaskStore implements TaskStore {
     return structuredClone(task);
   }
 
-  async listSessions(_offset = 0): Promise<Record<string, unknown>> {
+  async listSessions(_offset = 0, _query = ""): Promise<Record<string, unknown>> {
     return { sessions: [] };
+  }
+
+  async renameSession(_sessionId: string, _title: string): Promise<Record<string, unknown>> {
+    throw notFound("对话不存在");
+  }
+
+  async deleteSession(_sessionId: string): Promise<Record<string, unknown>> {
+    throw notFound("对话不存在");
   }
 
   async getSession(_sessionId: string): Promise<Record<string, unknown> | null> {

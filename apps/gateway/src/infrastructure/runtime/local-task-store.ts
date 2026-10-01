@@ -196,8 +196,16 @@ export class LocalTaskStore implements TaskStore {
     return this.call("read_events", { task_id: taskId, after_id: afterId, block_ms: blockMs });
   }
 
-  listSessions(offset = 0): Promise<Record<string, unknown>> {
-    return this.call("list_sessions", { offset });
+  listSessions(offset = 0, query = ""): Promise<Record<string, unknown>> {
+    return this.call("list_sessions", { offset, ...(query ? { query } : {}) });
+  }
+
+  renameSession(sessionId: string, title: string): Promise<Record<string, unknown>> {
+    return this.call("rename_session", { session_id: sessionId, title });
+  }
+
+  deleteSession(sessionId: string): Promise<Record<string, unknown>> {
+    return this.call("delete_session", { session_id: sessionId });
   }
 
   getSession(sessionId: string): Promise<Record<string, unknown> | null> {

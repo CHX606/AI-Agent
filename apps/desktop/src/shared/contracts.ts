@@ -138,7 +138,10 @@ export interface DesktopApi {
   readRepositoryFile(input: RepositoryPathInput): Promise<RepositoryFileResult>;
   health(gatewayUrl: string): Promise<unknown>;
   createTask(input: CreateTaskInput): Promise<Record<string, unknown>>;
-  listSessions(gatewayUrl: string, offset?: number): Promise<Record<string, unknown>>;
+  /** query 非空时按标题、要求和回答搜索。 */
+  listSessions(gatewayUrl: string, offset?: number, query?: string): Promise<Record<string, unknown>>;
+  renameSession(input: SessionRequestInput & { title: string }): Promise<Record<string, unknown>>;
+  deleteSession(input: SessionRequestInput): Promise<Record<string, unknown>>;
   getSession(input: SessionRequestInput): Promise<Record<string, unknown>>;
   setSessionMode(input: SessionRequestInput & { mode: MultiAgentMode }): Promise<Record<string, unknown>>;
   listMemories(input: MemoryListInput): Promise<MemoryListResult>;

@@ -63,6 +63,9 @@ pnpm --dir apps/gateway dev
 | `GET /v1/memories?workspace_root=...` | 本项目（省略参数时为全部项目）的长期记忆，见 [记忆说明](MEMORY.md)。 |
 | `DELETE /v1/memories/{memory_id}` | 删除一条长期记忆，之后不再参与召回。 |
 | `POST /v1/model` | 桌面主进程写入模型配置（含接口类型 `api`）；需要设置 `BIT_AGENT_GATEWAY_TOKEN`。 |
+| `GET /v1/sessions?query=` | `query` 非空时只返回标题、任何一轮要求或回答中包含它的对话。 |
+| `PATCH /v1/sessions/:sessionId` | 传 `title` 重命名对话；传 `multi_agent_mode` 修改多 Agent 模式。 |
+| `DELETE /v1/sessions/:sessionId` | 删除对话的全部记录和改动快照；正在执行的对话返回 409。 |
 | `GET /v1/tasks/:taskId/git` | 这次任务改过的文件在 Git 里的状态和当前分支。 |
 | `POST /v1/tasks/:taskId/git/message` | 用当前模型根据目标和差异起草提交信息，模型不可用时返回按目标生成的草稿。 |
 | `POST /v1/tasks/:taskId/git/commit` | 只提交这次任务的文件；`branch` 可选，填写时先新建分支。 |

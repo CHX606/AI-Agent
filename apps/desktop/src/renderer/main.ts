@@ -115,6 +115,9 @@ let activeObjective = "";
 let eventCount = 0;
 const activityCards = new Map<string, HTMLLIElement>();
 let history = loadHistory();
+/** 搜索时显示的结果；为 null 时显示完整历史。 */
+let searchResults: TaskHistoryEntry[] | null = null;
+const sessionSearch = element<HTMLInputElement>("#session-search");
 let activeView: "tasks" | "repository" = "tasks";
 let interactionView: ReturnType<typeof createInteractionView> | null = null;
 let interactionRefreshSequence = 0;
@@ -162,12 +165,19 @@ function setActiveView(view: "tasks" | "repository"): void {
   }
 }
 
+const renameIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/></svg>`;
+const deleteIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg>`;
+
 function renderHistory(): void {
   taskHistory.replaceChildren();
-  historyCount.textContent = String(history.length);
-  historyEmpty.hidden = history.length > 0;
+  const visible = searchResults ?? history;
+  historyCount.textContent = String(visible.length);
+  historyEmpty.hidden = visible.length > 0;
+  historyEmpty.textContent = searchResults ? "没有找到匹配的对话。" : "运行第一个任务后，会话会保存在这里。";
 
-  for (const entry of history) {
+  for (const entry of visible) {
+    const row = document.createElement("div");
+    row.className = "history-row";
     const button = document.createElement("button");
     button.type = "button";
     button.className = "history-item";
@@ -189,8 +199,101 @@ function renderHistory(): void {
     copy.append(title, meta);
     button.append(icon, copy);
     button.addEventListener("click", () => void restoreTask(entry));
-    taskHistory.append(button);
+
+    const actions = document.createElement("div");
+    actions.className = "history-actions";
+    for (const [action, label, svg] of [["rename", "重命名", renameIcon], ["delete", "删除", deleteIcon]] as const) {
+      const control = document.createElement("button");
+      control.type = "button";
+      control.dataset.action = action;
+      control.title = label;
+      control.setAttribute("aria-label", `${label}对话：${entry.objective}`);
+      control.innerHTML = svg;
+      control.disabled = submitting;
+      control.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (action === "rename") startRename(entry, title);
+        else void deleteConversation(entry);
+      });
+      actions.append(control);
+    }
+    row.append(button, actions);
+    taskHistory.append(row);
   }
+}
+
+/** 在列表里直接改名：回车或失去焦点保存，Esc 放弃。 */
+function startRename(entry: TaskHistoryEntry, title: HTMLElement): void {
+  const input = document.createElement("input");
+  input.className = "history-rename";
+  input.value = entry.objective;
+  input.maxLength = 100;
+  input.setAttribute("aria-label", "新的对话名称");
+  title.replaceWith(input);
+  input.focus();
+  input.select();
+  let finished = false;
+  const finish = async (save: boolean): Promise<void> => {
+    if (finished) return;
+    finished = true;
+    const name = input.value.trim();
+    if (!save || !name || name === entry.objective) { renderHistory(); return; }
+    try {
+      if (entry.sessionId) {
+        await window.bitAgent.renameSession({ gatewayUrl: entry.gatewayUrl, sessionId: entry.sessionId, title: name });
+      }
+      history = history.map((item) => item.taskId === entry.taskId ? { ...item, objective: name } : item);
+      searchResults = searchResults?.map((item) => item.taskId === entry.taskId ? { ...item, objective: name } : item) ?? null;
+      saveHistory(history);
+      if (entry.taskId === activeTaskId) taskIdText.textContent = name;
+    } catch (error) {
+      connection.textContent = `重命名失败：${error instanceof Error ? error.message : String(error)}`;
+    }
+    renderHistory();
+  };
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); void finish(true); }
+    else if (event.key === "Escape") { event.preventDefault(); void finish(false); }
+  });
+  input.addEventListener("blur", () => void finish(true));
+}
+
+async function deleteConversation(entry: TaskHistoryEntry): Promise<void> {
+  if (!window.confirm(`删除对话“${entry.objective}”？\n\n会删除这段对话的全部记录和改动快照，无法恢复。项目里的文件不受影响。`)) return;
+  try {
+    if (entry.sessionId) {
+      await window.bitAgent.deleteSession({ gatewayUrl: entry.gatewayUrl, sessionId: entry.sessionId });
+    }
+  } catch (error) {
+    connection.textContent = `删除失败：${error instanceof Error ? error.message : String(error)}`;
+    return;
+  }
+  const removed = (item: TaskHistoryEntry) => item.taskId === entry.taskId
+    || (entry.sessionId !== undefined && item.sessionId === entry.sessionId && item.gatewayUrl === entry.gatewayUrl);
+  history = history.filter((item) => !removed(item));
+  searchResults = searchResults?.filter((item) => !removed(item)) ?? null;
+  saveHistory(history);
+  if ((entry.sessionId && entry.sessionId === activeSessionId) || entry.taskId === activeTaskId) resetTask();
+  else renderHistory();
+}
+
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
+let searchSequence = 0;
+/** 搜索标题、各轮要求和回答；没有会话编号的旧本地记录只按标题匹配。 */
+async function searchSessions(query: string): Promise<void> {
+  const sequence = ++searchSequence;
+  if (!query) { searchResults = null; renderHistory(); return; }
+  const gatewayUrl = gatewayInput.value.trim();
+  const local = history.filter((entry) => !entry.sessionId && entry.objective.includes(query));
+  try {
+    const payload = await window.bitAgent.listSessions(gatewayUrl, 0, query);
+    if (sequence !== searchSequence) return;
+    searchResults = [...sessionEntries(payload, gatewayUrl), ...local];
+  } catch {
+    if (sequence !== searchSequence) return;
+    searchResults = history.filter((entry) => entry.objective.includes(query));
+  }
+  renderHistory();
 }
 
 function upsertHistory(entry: TaskHistoryEntry): void {
@@ -454,7 +557,10 @@ function renderResult(payload: Record<string, unknown>): void {
 
 async function renderUsage(usage: UsageSummary | null): Promise<void> {
   if (!usage) { usageState.textContent = "-"; usageCard.removeAttribute("title"); return; }
-  const tokens = `${formatTokens(usage.inputTokens)} / ${formatTokens(usage.outputTokens)}`;
+  // 部分服务流式输出时不返回用量，这时只显示请求次数，不显示误导的 0 / 0。
+  const tokens = usage.inputTokens + usage.outputTokens > 0
+    ? `${formatTokens(usage.inputTokens)} / ${formatTokens(usage.outputTokens)}`
+    : `${usage.requests} 次请求`;
   usageState.textContent = tokens;
   usageCard.title = `${usageDescription(usage)}\n格式：输入 / 输出 tokens。`;
   // 填写过价格时附上估算费用；读取设置失败不影响用量显示。
@@ -496,6 +602,24 @@ async function loadResult(): Promise<void> {
   }
 }
 
+function sessionEntries(payload: Record<string, unknown>, gatewayUrl: string): TaskHistoryEntry[] {
+  const loaded: TaskHistoryEntry[] = [];
+  for (const raw of Array.isArray(payload.sessions) ? payload.sessions : []) {
+    const session = object(raw);
+    const task = object(session?.latest_task);
+    if (typeof session?.session_id !== "string" || typeof task?.task_id !== "string") continue;
+    loaded.push({
+      taskId: task.task_id, sessionId: session.session_id,
+      objective: String(session.title ?? task.objective ?? "对话"),
+      workspaceRoot: String(session.workspace_root ?? ""), gatewayUrl,
+      status: String(task.status ?? "UNKNOWN"), createdAt: String(session.updated_at ?? ""),
+      multiAgentMode: session.multi_agent_mode === "on" || session.multi_agent_mode === "off"
+        ? session.multi_agent_mode : "auto",
+    });
+  }
+  return loaded;
+}
+
 async function refreshSessions(append = false): Promise<void> {
   const gatewayUrl = gatewayInput.value.trim();
   const offset = append ? nextSessionOffset : 0;
@@ -503,23 +627,9 @@ async function refreshSessions(append = false): Promise<void> {
   const payload = await window.bitAgent.listSessions(gatewayUrl, offset);
   if (gatewayUrl !== gatewayInput.value.trim()) return;
   nextSessionOffset = typeof payload.next_offset === "number" ? payload.next_offset : null;
-  element<HTMLButtonElement>("#more-sessions").hidden = nextSessionOffset === null;
+  element<HTMLButtonElement>("#more-sessions").hidden = nextSessionOffset === null || searchResults !== null;
   if (!Array.isArray(payload.sessions)) return;
-  const loaded: TaskHistoryEntry[] = [];
-  for (const raw of payload.sessions) {
-    const session = object(raw);
-    const task = object(session?.latest_task);
-    if (typeof session?.session_id !== "string" || typeof task?.task_id !== "string") continue;
-    const value: TaskHistoryEntry = {
-      taskId: task.task_id, sessionId: session.session_id,
-      objective: String(session.title ?? task.objective ?? "对话"),
-      workspaceRoot: String(session.workspace_root ?? ""), gatewayUrl,
-      status: String(task.status ?? "UNKNOWN"), createdAt: String(session.updated_at ?? ""),
-      multiAgentMode: session.multi_agent_mode === "on" || session.multi_agent_mode === "off"
-        ? session.multi_agent_mode : "auto",
-    };
-    loaded.push(value);
-  }
+  const loaded = sessionEntries(payload, gatewayUrl);
   const identifiers = new Set(loaded.map((entry) => entry.sessionId));
   const remaining = history.filter((entry) => entry.gatewayUrl !== gatewayUrl || !identifiers.has(entry.sessionId));
   history = append ? [...remaining, ...loaded] : [...loaded, ...remaining];
@@ -801,6 +911,13 @@ onAgentModeChange((mode) => {
   }).catch((error: unknown) => {
     connection.textContent = `模式尚未保存：${error instanceof Error ? error.message : String(error)}`;
   });
+});
+
+sessionSearch.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  const query = sessionSearch.value.trim();
+  element<HTMLButtonElement>("#more-sessions").hidden = query !== "" || nextSessionOffset === null;
+  searchTimer = setTimeout(() => void searchSessions(query), query ? 250 : 0);
 });
 
 element<HTMLButtonElement>("#more-sessions").addEventListener("click", () => {

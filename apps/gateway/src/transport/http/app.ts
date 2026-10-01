@@ -82,10 +82,12 @@ export function createHttpApp(
         if (request.headers.origin) return reply.code(403).send({ error: "BROWSER_ORIGIN_NOT_ALLOWED" });
     });
 
-    app.get<{ Querystring: { offset?: string } }>("/v1/sessions", async (request, reply) => {
+    app.get<{ Querystring: { offset?: string; query?: string } }>("/v1/sessions", async (request, reply) => {
         const offset = Number(request.query.offset ?? 0);
         if (!Number.isSafeInteger(offset) || offset < 0) return reply.code(400).send({ error: "INVALID_OFFSET" });
-        return taskStore.listSessions(offset);
+        const query = request.query.query ?? "";
+        if (typeof query !== "string" || query.length > 200) return reply.code(400).send({ error: "INVALID_QUERY" });
+        return taskStore.listSessions(offset, query.trim());
     });
 
     app.get<{ Params: { sessionId: string } }>("/v1/sessions/:sessionId", async (request, reply) => {
@@ -93,14 +95,22 @@ export function createHttpApp(
         return session ?? reply.code(404).send({ error: "SESSION_NOT_FOUND" });
     });
 
-    app.patch<{ Params: { sessionId: string }; Body: { multi_agent_mode?: string } }>(
+    app.patch<{ Params: { sessionId: string }; Body: { multi_agent_mode?: string; title?: unknown } }>(
         "/v1/sessions/:sessionId", async (request, reply) => {
-            const mode = request.body?.multi_agent_mode;
+            const { multi_agent_mode: mode, title } = request.body ?? {};
+            if (title !== undefined) {
+                if (typeof title !== "string" || mode !== undefined) return reply.code(400).send({ error: "INVALID_TITLE" });
+                return taskStore.renameSession(request.params.sessionId, title);
+            }
             if (!mode || !["off", "on", "auto"].includes(mode)) return reply.code(400).send({ error: "INVALID_MODE" });
             const session = await taskStore.setSessionMode(request.params.sessionId, mode);
             return session ?? reply.code(404).send({ error: "SESSION_NOT_FOUND" });
         },
     );
+
+    app.delete<{ Params: { sessionId: string } }>("/v1/sessions/:sessionId", async (request) => {
+        return taskStore.deleteSession(request.params.sessionId);
+    });
 
     app.get<{ Querystring: { workspace_root?: string } }>("/v1/memories", async (request, reply) => {
         const workspaceRoot = request.query.workspace_root;
