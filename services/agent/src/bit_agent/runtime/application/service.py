@@ -23,7 +23,11 @@ from bit_agent.observability.diagnostics import (
 )
 from bit_agent.observability.usage import UsageMeter, current_meter
 from bit_agent.runtime.application.capacity import ExecutionSlot, WorkspaceReservations
-from bit_agent.runtime.application.delegation import MODE_INSTRUCTIONS, DelegatingToolProvider
+from bit_agent.runtime.application.delegation import (
+    MODE_INSTRUCTIONS,
+    DelegatingToolProvider,
+    auxiliary_model,
+)
 from bit_agent.runtime.application.interaction import (
     INTERACTION_INSTRUCTIONS,
     InteractionError,
@@ -644,7 +648,8 @@ class AgentRuntime:
             from bit_agent.llm.client import get_configuration
             from bit_agent.llm.text import create_text
 
-            client, model = get_configuration()
+            client, main_model = get_configuration()
+            model = auxiliary_model() or main_model
             text = await asyncio.to_thread(
                 create_text,
                 client,
@@ -708,8 +713,23 @@ class AgentRuntime:
 
     async def configure_model(self, input: dict[str, Any]) -> dict[str, Any]:
         url, model, key, api = self._model_input(input, allow_auto=False)
-        os.environ.update(API_KEY=key, BASE_URL=url, MODEL_NAME=model, MODEL_API=api)
-        return {"configured": True, "model": model, "base_url": url, "api": api}
+        auxiliary = input.get("aux_model") or ""
+        if not isinstance(auxiliary, str) or len(auxiliary.strip()) > 200:
+            raise ValueError("辅助模型名称最多 200 个字符")
+        os.environ.update(
+            API_KEY=key,
+            BASE_URL=url,
+            MODEL_NAME=model,
+            MODEL_API=api,
+            AUX_MODEL_NAME=auxiliary.strip(),
+        )
+        return {
+            "configured": True,
+            "model": model,
+            "base_url": url,
+            "api": api,
+            "aux_model": auxiliary.strip() or None,
+        }
 
     async def test_model(self, input: dict[str, Any]) -> dict[str, Any]:
         """真实请求一次模型；不修改当前生效的配置。"""

@@ -77,6 +77,18 @@ DELEGATION_SCHEMA: dict[str, Any] = {
 }
 
 
+def auxiliary_model() -> str | None:
+    """配置了辅助模型时返回它的名字；没有配置（或测试替换了模型配置）时返回 None，沿用主模型。"""
+    try:
+        from bit_agent.llm.client import auxiliary_model_name
+    except ImportError:
+        return None
+    try:
+        return auxiliary_model_name()
+    except RuntimeError:
+        return None
+
+
 class DelegatingToolProvider(LocalToolProvider):
     """主 Agent 可以叫帮手；帮手不能再叫帮手，也不能同时写同一份代码。"""
 
@@ -367,6 +379,8 @@ class DelegatingToolProvider(LocalToolProvider):
                     result = await run_agent(
                         task["objective"],
                         workspace_root=self.root,
+                        # 只读调查用辅助模型；主 Agent 会检查它的结论。
+                        model_name=auxiliary_model(),
                         tool_provider=provider,
                         agent_id=identifier,
                         event_sink=self.sink,
