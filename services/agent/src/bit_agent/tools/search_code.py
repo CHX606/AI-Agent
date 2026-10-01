@@ -96,8 +96,13 @@ async def search_code(
         args.extend(["--iglob", f"!{pattern}"])
     args.extend(["--", query, str(target)])
     try:
+        # 不继承标准输入：运行服务的标准输入是正在读取的 RPC 管道，在 Windows 上
+        # 子进程继承它会一直卡到下一条请求到来。
         process = await asyncio.create_subprocess_exec(
-            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            *args,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await asyncio.wait_for(
             process.communicate(), timeout=context.timeout_seconds

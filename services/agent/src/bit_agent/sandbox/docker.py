@@ -78,6 +78,7 @@ async def docker_status(docker_executable: str = "docker", timeout: float = 10.0
             "version",
             "--format",
             "{{.Server.Version}}",
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -230,6 +231,7 @@ class DockerSandbox:
             process = await asyncio.create_subprocess_exec(
                 self.docker_executable,
                 *arguments,
+                stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -361,8 +363,10 @@ class DockerSandbox:
                 arguments[arguments.index("512m")] = "2g"
                 arguments[arguments.index("512m")] = "2g"
             try:
+                # 不继承运行服务正在读取的 RPC 管道（Windows 上会卡住进程创建）。
                 process = await asyncio.create_subprocess_exec(
                     *arguments,
+                    stdin=asyncio.subprocess.DEVNULL,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
