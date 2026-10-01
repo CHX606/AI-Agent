@@ -110,7 +110,10 @@ def dependency_spec(root: Path) -> tuple[list[str], list[str]]:
 
 async def _command(*args: str, timeout: float = 300) -> tuple[int, str]:
     process = await asyncio.create_subprocess_exec(
-        *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+        *args,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
     )
     output = bytearray()
 
