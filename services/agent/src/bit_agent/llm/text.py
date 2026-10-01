@@ -3,6 +3,7 @@
 from typing import Any
 
 from bit_agent.llm.client import model_api
+from bit_agent.observability.usage import record_usage
 
 
 def create_text(
@@ -14,7 +15,7 @@ def create_text(
     timeout: float,
     api: str | None = None,
 ) -> str:
-    """同步调用（调用方放进线程）；返回模型输出的纯文本。"""
+    """同步调用（调用方放进线程）；返回模型输出的纯文本。用量记为辅助请求。"""
     if (api or model_api()) == "chat_completions" and hasattr(client, "chat"):
         response = client.chat.completions.create(
             model=model,
@@ -24,6 +25,7 @@ def create_text(
             ],
             timeout=timeout,
         )
+        record_usage("auxiliary", getattr(response, "usage", None))
         return response.choices[0].message.content or ""
     response = client.responses.create(
         model=model,
@@ -33,4 +35,5 @@ def create_text(
         ],
         timeout=timeout,
     )
+    record_usage("auxiliary", getattr(response, "usage", None))
     return response.output_text

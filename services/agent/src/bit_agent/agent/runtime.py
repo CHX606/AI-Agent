@@ -79,6 +79,7 @@ from bit_agent.observability.diagnostics import (
 )
 from bit_agent.observability.diagnostics import record as log_record
 from bit_agent.observability.model import DiagnosticHttpClient, DiagnosticModel
+from bit_agent.observability.usage import UsageMeter, record_usage
 from bit_agent.tool_provider import LocalToolProvider, ToolProvider
 from bit_agent.tools.models import ToolResult
 
@@ -234,6 +235,8 @@ class _AgentRun:
         self.event_warnings: list[str] = []
         self.recalled_memory_ids: list[str] = []
         self.memory_context_tokens = 0
+        # 只统计这一次运行自己的请求；整个任务的合计由 ContextVar 里的计量器负责。
+        self.usage = UsageMeter()
 
         self._provider_source = provider
         self.provider: ToolProvider | None = None
@@ -422,6 +425,8 @@ class _AgentRun:
         return ModelInputData(input=to_json_value(prepared.items), instructions=None)
 
     async def on_model_response(self, response) -> None:
+        self.usage.add("main", response.usage)
+        record_usage(self.agent_id, response.usage)
         calls = [item for item in response.output if item.type == "function_call"]
         text = ItemHelpers.text_message_outputs(response.output)
         await self.emit(
@@ -695,6 +700,7 @@ class _AgentRun:
             acceptance_status=verification.acceptance_status,
             verification_status=verification.status,
             verification_notes=verification.notes[:20],
+            usage={key: value for key, value in self.usage.snapshot().items() if key != "by_agent"},
             working_memory=self.memory_tracker.snapshot(),
             memory_warnings=self.memory_warnings,
             recalled_memory_ids=self.recalled_memory_ids,

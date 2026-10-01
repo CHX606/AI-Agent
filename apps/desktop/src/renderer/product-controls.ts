@@ -390,6 +390,13 @@ export function mountProductControls(current: () => TaskRequestInput,
         <div class="model-field"><label for="model-api-key">API Key <span class="model-key-state"></span></label>
           <input id="model-api-key" name="apiKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="留空保留现有密钥">
           <p>密钥由 Windows 加密保存，不会回传到这个页面。</p></div>
+        <div class="model-field"><label for="model-input-price">价格（可选）</label>
+          <div class="model-price-row">
+            <input id="model-input-price" name="inputPrice" type="number" min="0" step="any" inputmode="decimal" placeholder="输入" aria-label="每百万输入 tokens 价格">
+            <input id="model-output-price" name="outputPrice" type="number" min="0" step="any" inputmode="decimal" placeholder="输出" aria-label="每百万输出 tokens 价格">
+            <select name="currency" aria-label="货币"><option value="¥">¥</option><option value="$">$</option></select>
+          </div>
+          <p>每百万 tokens 的价格，只用来在任务详情里估算费用；留空则只显示 tokens 数。</p></div>
         <div class="model-test-result" role="status" hidden></div>
         <div class="model-settings-footer"><span>保存不会发起模型请求，可以先测试连接。</span>
           <button type="button" class="button-secondary" data-test>测试连接</button>
@@ -397,6 +404,9 @@ export function mountProductControls(current: () => TaskRequestInput,
           <button type="submit" class="button-primary">保存设置</button></div>`;
       (form.elements.namedItem("baseUrl") as HTMLInputElement).value = String(settings.baseUrl ?? "");
       (form.elements.namedItem("model") as HTMLInputElement).value = String(settings.model ?? "");
+      (form.elements.namedItem("inputPrice") as HTMLInputElement).value = String(settings.inputPrice ?? "");
+      (form.elements.namedItem("outputPrice") as HTMLInputElement).value = String(settings.outputPrice ?? "");
+      (form.elements.namedItem("currency") as HTMLSelectElement).value = settings.currency === "$" ? "$" : "¥";
       const apiSelect = form.elements.namedItem("api") as HTMLSelectElement;
       apiSelect.value = settings.api === "chat_completions" ? "chat_completions" : "responses";
       form.querySelector(".model-key-state")!.textContent = settings.configured ? "已配置" : "未配置";

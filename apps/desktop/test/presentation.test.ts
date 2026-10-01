@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { eventPresentation, eventTitle, isMainAgentText, summarizeResult } from "../src/renderer/presentation.js";
+import {
+  estimateCost, eventPresentation, eventTitle, formatTokens, isMainAgentText, summarizeResult, usageDescription,
+} from "../src/renderer/presentation.js";
 
 describe("desktop result presentation", () => {
   it("reads the final agent result from a multi-agent envelope", () => {
@@ -25,6 +27,7 @@ describe("desktop result presentation", () => {
       verificationStatus: "NOT_RUN",
       verificationNotes: [],
       rounds: 6,
+      usage: null,
     });
   });
 
@@ -77,6 +80,7 @@ describe("desktop result presentation", () => {
       verificationStatus: "NOT_RUN",
       verificationNotes: [],
       rounds: 0,
+      usage: null,
     });
   });
 
@@ -133,6 +137,27 @@ it("shows an unavailable verification as neutral, not as a failure", () => {
   expect(eventPresentation({ id: "1-0", event_type: "TOOL_COMPLETED", data: { payload: {
     tool_name: "verify_project", tool_call_id: "v1", status: "ERROR", error_code: "VERIFICATION_FAILED",
   } } })).toMatchObject({ title: "基础检查未通过", tone: "error" });
+});
+
+it("summarizes task usage including sub agents and estimates cost", () => {
+  const summary = summarizeResult({ task_id: "t", status: "COMPLETED", result: {
+    final_answer: "完成",
+    task_usage: { requests: 3, input_tokens: 12_345, output_tokens: 2_100, by_agent: {
+      main: { requests: 2, input_tokens: 12_000, output_tokens: 2_000 },
+      research: { requests: 1, input_tokens: 345, output_tokens: 100 },
+    } },
+  } });
+  expect(summary.usage).toEqual({ requests: 3, inputTokens: 12_345, outputTokens: 2_100, byAgent: {
+    main: { requests: 2, inputTokens: 12_000, outputTokens: 2_000 },
+    research: { requests: 1, inputTokens: 345, outputTokens: 100 },
+  } });
+  expect(usageDescription(summary.usage!)).toContain("调查子 Agent：1 次，输入 345，输出 100");
+  expect([formatTokens(950), formatTokens(1_234), formatTokens(12_345), formatTokens(1_234_567)])
+    .toEqual(["950", "1.23k", "12.3k", "1.23M"]);
+  expect(estimateCost(summary.usage!, { input: 2, output: 8, currency: "¥" })).toBe("¥0.04");
+  expect(estimateCost(summary.usage!, null)).toBeNull();
+  expect(estimateCost(summary.usage!, { input: 0, output: 0, currency: "$" })).toBeNull();
+  expect(summarizeResult({ result: { task_usage: { requests: 0 } } }).usage).toBeNull();
 });
 
 it("names the project instruction files that were read", () => {

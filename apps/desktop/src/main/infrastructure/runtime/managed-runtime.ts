@@ -30,6 +30,20 @@ function modelApi(value: unknown): string {
   return typeof value === "string" && modelApis.has(value) ? value : "responses";
 }
 
+/** 每百万 tokens 的价格，只用来在界面上估算费用；留空表示不估算。 */
+function price(value: unknown): string {
+  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!text) return "";
+  const number = Number(text);
+  if (!Number.isFinite(number) || number < 0 || number > 1_000_000) throw new Error("价格必须是 0 到 1000000 之间的数字");
+  return String(number);
+}
+
+/** 已保存的价格被手工改坏时当作没填，不影响读取其他设置。 */
+function storedPrice(value: unknown): string {
+  try { return price(value); } catch { return ""; }
+}
+
 export function modelSettings(includeSecret = false): Record<string, string | boolean> {
   const empty = { baseUrl: "", model: "", api: "responses", configured: false };
   if (!existsSync(settingsPath())) return empty;
@@ -40,6 +54,8 @@ export function modelSettings(includeSecret = false): Record<string, string | bo
   if (!value || typeof value !== "object" || Array.isArray(value)) return empty;
   const result: Record<string, string | boolean> = {
     baseUrl: value.baseUrl ?? "", model: value.model ?? "", api: modelApi(value.api),
+    inputPrice: storedPrice(value.inputPrice), outputPrice: storedPrice(value.outputPrice),
+    currency: value.currency === "$" ? "$" : "¥",
     configured: Boolean(value.encryptedKey),
   };
   if (includeSecret && value.encryptedKey) {
@@ -66,6 +82,9 @@ function modelInput(input: unknown): { baseUrl: string; model: string; apiKey: s
 export async function saveModelSettings(input: unknown): Promise<Record<string, string | boolean>> {
   const { baseUrl, model, apiKey, api } = modelInput(input);
   if (api === "auto") throw new Error("请先测试连接，确定接口类型后再保存");
+  const values = input as Record<string, unknown>;
+  const prices = { inputPrice: price(values.inputPrice), outputPrice: price(values.outputPrice),
+    currency: values.currency === "$" ? "$" : "¥" };
   if (!safeStorage.isEncryptionAvailable()) throw new Error("系统加密不可用，拒绝明文保存密钥");
   const response = await fetch(`${address}/v1/model`, {
     method: "POST", headers: { ...managedHeaders(address), "content-type": "application/json" },
@@ -75,7 +94,7 @@ export async function saveModelSettings(input: unknown): Promise<Record<string, 
   if (!response.ok) throw new Error(`模型配置被拒绝（HTTP ${response.status}），请检查地址和字段`);
   const path = settingsPath();
   const temporary = `${path}.tmp`;
-  writeFileSync(temporary, JSON.stringify({ baseUrl, model, api,
+  writeFileSync(temporary, JSON.stringify({ baseUrl, model, api, ...prices,
     encryptedKey: safeStorage.encryptString(apiKey).toString("base64") }), "utf8");
   renameSync(temporary, path);
   return modelSettings();

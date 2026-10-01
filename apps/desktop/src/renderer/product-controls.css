@@ -141,6 +141,7 @@
 .model-field input::placeholder { color: var(--text-faint); }
 .model-field input:focus,
 .model-field select:focus { outline: none; border-color: var(--field-focus-border); box-shadow: var(--field-focus-ring); }
+.model-price-row { display: grid; grid-template-columns: 1fr 1fr 64px; gap: 8px; }
 .model-test-result { padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-panel); font-size: 12px; line-height: 1.65; }
 .model-test-result[data-ok="true"] { border-color: color-mix(in srgb, var(--green) 40%, var(--border)); background: var(--green-soft); }
 .model-test-result[data-ok="false"] { border-color: color-mix(in srgb, var(--red) 40%, var(--border)); background: var(--red-soft); }

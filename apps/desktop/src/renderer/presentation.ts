@@ -16,6 +16,10 @@ interface AgentResultLike {
 export type VerificationStatus = "NOT_RUN" | "PASSED" | "FAILED" | "UNVERIFIED" | "NOT_APPLICABLE";
 const verificationStatuses: VerificationStatus[] = ["NOT_RUN", "PASSED", "FAILED", "UNVERIFIED", "NOT_APPLICABLE"];
 
+export interface UsageCounts { requests: number; inputTokens: number; outputTokens: number }
+/** 整个任务的模型用量；byAgent 的键是 main、research、acceptance、auxiliary。 */
+export interface UsageSummary extends UsageCounts { byAgent: Record<string, UsageCounts> }
+
 export interface ResultSummary {
   answer: string;
   changedFiles: string[];
@@ -25,6 +29,52 @@ export interface ResultSummary {
   verificationStatus: VerificationStatus;
   verificationNotes: string[];
   rounds: number | null;
+  usage: UsageSummary | null;
+}
+
+function counts(value: unknown): UsageCounts | null {
+  const record = object(value);
+  const number = (key: string) => typeof record?.[key] === "number" && Number.isFinite(record[key]) ? record[key] as number : 0;
+  return record ? { requests: number("requests"), inputTokens: number("input_tokens"), outputTokens: number("output_tokens") } : null;
+}
+
+function usageSummary(value: unknown): UsageSummary | null {
+  const total = counts(value);
+  if (!total || total.requests === 0) return null;
+  const byAgent: Record<string, UsageCounts> = {};
+  for (const [key, item] of Object.entries(object(object(value)?.by_agent) ?? {})) {
+    const parsed = counts(item);
+    if (parsed) byAgent[key] = parsed;
+  }
+  return { ...total, byAgent };
+}
+
+/** 950 → "950"，12345 → "12.3k"，1234567 → "1.23M"。 */
+export function formatTokens(value: number): string {
+  if (value < 1000) return String(value);
+  if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 2 : 1)}k`;
+  return `${(value / 1_000_000).toFixed(2)}M`;
+}
+
+export interface TokenPrices { input: number; output: number; currency: string }
+
+/** 按每百万 tokens 的价格估算费用；没有填写价格时返回 null。 */
+export function estimateCost(usage: UsageCounts, prices: TokenPrices | null): string | null {
+  if (!prices || (prices.input <= 0 && prices.output <= 0)) return null;
+  const cost = (usage.inputTokens * prices.input + usage.outputTokens * prices.output) / 1_000_000;
+  return `${prices.currency}${cost < 0.01 ? cost.toFixed(4) : cost.toFixed(2)}`;
+}
+
+const agentLabels: Record<string, string> = {
+  main: "主 Agent", research: "调查子 Agent", acceptance: "独立验收", auxiliary: "摘要等辅助请求",
+};
+
+export function usageDescription(usage: UsageSummary): string {
+  const parts = Object.entries(usage.byAgent).map(([key, item]) =>
+    `${agentLabels[key] ?? key}：${item.requests} 次，输入 ${item.inputTokens}，输出 ${item.outputTokens}`);
+  return [`共 ${usage.requests} 次模型请求，输入 ${usage.inputTokens} tokens，输出 ${usage.outputTokens} tokens。`, ...parts]
+    .join("\n") + (usage.requests > 0 && usage.inputTokens + usage.outputTokens === 0
+    ? "\n模型服务没有返回 token 用量。" : "");
 }
 
 function object(value: unknown): Record<string, unknown> | null {
@@ -62,6 +112,7 @@ export function summarizeResult(payload: unknown): ResultSummary {
     verificationNotes: Array.isArray(final.verification_notes)
       ? final.verification_notes.filter((item): item is string => typeof item === "string") : [],
     rounds: typeof final.rounds === "number" ? final.rounds : null,
+    usage: usageSummary(result?.task_usage),
   };
 }
 
