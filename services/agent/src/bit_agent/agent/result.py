@@ -88,6 +88,8 @@ class AgentRunResult(BaseModel):
     acceptance_status: Literal["NOT_RUN", "PASSED", "FAILED", "NOT_VERIFIED"] = "NOT_RUN"
     verification_status: VerificationStatus = "NOT_RUN"
     verification_notes: list[str] = Field(default_factory=list)
+    # 这一次运行自己的模型用量：requests、input_tokens、output_tokens。
+    usage: dict[str, int] = Field(default_factory=dict)
     error: str | None = None
     working_memory: WorkingMemory | None = None
     memory_warnings: list[str] = Field(default_factory=list)

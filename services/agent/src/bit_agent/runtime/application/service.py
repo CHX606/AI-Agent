@@ -21,6 +21,7 @@ from bit_agent.observability.diagnostics import (
     public_error,
     record,
 )
+from bit_agent.observability.usage import UsageMeter, current_meter
 from bit_agent.runtime.application.capacity import ExecutionSlot, WorkspaceReservations
 from bit_agent.runtime.application.delegation import MODE_INSTRUCTIONS, DelegatingToolProvider
 from bit_agent.runtime.application.interaction import (
@@ -229,8 +230,13 @@ class AgentRuntime:
             return task
 
     async def _execute(self, task: dict[str, Any]) -> None:
-        with diagnostic_context(task_id=task["task_id"], session_id=task["session_id"]):
-            await self._execute_task(task)
+        # 本任务所有模型请求（含子 Agent、验收和摘要）都记到这个计量器，结束时写进结果。
+        token = current_meter.set(UsageMeter())
+        try:
+            with diagnostic_context(task_id=task["task_id"], session_id=task["session_id"]):
+                await self._execute_task(task)
+        finally:
+            current_meter.reset(token)
 
     async def _execute_task(self, task: dict[str, Any]) -> None:
         task_id, session_id = task["task_id"], task["session_id"]
@@ -409,6 +415,10 @@ class AgentRuntime:
         control = self._interactions.get(task_id)
         if control is not None:
             control.close()
+        meter = current_meter.get()
+        if meter is not None and meter.by_agent:
+            # 失败或取消的任务同样花了 tokens，也要让用户看到。
+            fields["result"] = {**(fields.get("result") or {}), "task_usage": meter.snapshot()}
         result = fields.get("result") or {}
         await self.storage.call(
             "update_task",

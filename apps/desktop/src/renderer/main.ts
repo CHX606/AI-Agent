@@ -6,7 +6,10 @@ import type { ColorTheme, TaskEvent } from "../shared/contracts";
 import { createActivityCard } from "./activity-card";
 import { element, formatHistoryTime, object, projectName } from "./dom";
 import { renderMarkdown } from "./markdown";
-import { eventPresentation, isMainAgentText, summarizeResult } from "./presentation";
+import {
+  estimateCost, eventPresentation, formatTokens, isMainAgentText, summarizeResult,
+  usageDescription, type TokenPrices, type UsageSummary,
+} from "./presentation";
 import {
   clearPreviousTurns, getAgentMode, onAgentModeChange,
   renderPreviousTurns, setAgentMode, setModeDisabled,
@@ -75,6 +78,8 @@ const lint = element<HTMLElement>("#lint-state");
 const acceptance = element<HTMLElement>("#acceptance-state");
 const verificationNotes = element<HTMLUListElement>("#verification-notes");
 const rounds = element<HTMLElement>("#rounds");
+const usageState = element<HTMLElement>("#usage-state");
+const usageCard = element<HTMLElement>("#usage-card");
 const rawResult = element<HTMLElement>("#raw-result");
 const connection = element<HTMLElement>("#connection");
 const connectionDot = element<HTMLElement>("#connection-dot");
@@ -273,6 +278,8 @@ function resetMetrics(): void {
   delete acceptance.dataset.passed;
   verificationNotes.replaceChildren();
   verificationNotes.hidden = true;
+  usageState.textContent = "-";
+  usageCard.removeAttribute("title");
   files.textContent = "无文件修改";
   files.classList.add("empty-copy");
   rawResult.textContent = "等待任务完成…";
@@ -439,9 +446,33 @@ function renderResult(payload: Record<string, unknown>): void {
   verificationNotes.dataset.kind = summary.verificationStatus === "UNVERIFIED" ? "unverified" : "info";
   verificationNotes.hidden = summary.verificationNotes.length === 0;
   rounds.textContent = summary.rounds === null ? "-" : String(summary.rounds);
+  void renderUsage(summary.usage);
   rawResult.textContent = JSON.stringify(payload, null, 2);
   errorActions.hidden = true;
   updateActiveHistory({ finalAnswer: summary.answer });
+}
+
+async function renderUsage(usage: UsageSummary | null): Promise<void> {
+  if (!usage) { usageState.textContent = "-"; usageCard.removeAttribute("title"); return; }
+  const tokens = `${formatTokens(usage.inputTokens)} / ${formatTokens(usage.outputTokens)}`;
+  usageState.textContent = tokens;
+  usageCard.title = `${usageDescription(usage)}\n格式：输入 / 输出 tokens。`;
+  // 填写过价格时附上估算费用；读取设置失败不影响用量显示。
+  try {
+    const settings = await window.bitAgent.getModelSettings();
+    const cost = estimateCost(usage, tokenPrices(settings));
+    if (cost && usageState.textContent === tokens) {
+      usageState.textContent = `${tokens} · ≈${cost}`;
+      usageCard.title += `\n估算费用 ${cost}，按模型设置里填写的价格计算，仅供参考。`;
+    }
+  } catch { /* 开发模式没有模型设置 */ }
+}
+
+function tokenPrices(settings: Record<string, unknown>): TokenPrices | null {
+  const input = Number(settings.inputPrice);
+  const output = Number(settings.outputPrice);
+  if (!Number.isFinite(input) || !Number.isFinite(output)) return null;
+  return { input, output, currency: settings.currency === "$" ? "$" : "¥" };
 }
 
 async function loadResult(): Promise<void> {
