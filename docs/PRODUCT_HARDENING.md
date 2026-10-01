@@ -16,7 +16,7 @@
   -> SQLite 保存对话，artifacts 保存大结果和改动记录
 ```
 
-Redis、PostgreSQL、系统 Node 和系统 Python 都不是便携版的启动前提。模型可以使用你配置的远程接口或本地接口；执行隔离测试仍需要 Docker。
+Redis、PostgreSQL、系统 Node 和系统 Python 都不是便携版的启动前提。模型可以使用你配置的远程接口或本地接口；执行隔离测试仍需要 Docker。Docker 没有运行时，输入框上方会提示：修改后的代码会显示为“无法验证”。
 
 ## 1. 暂停、改目标、补要求
 
@@ -92,7 +92,16 @@ Redis、PostgreSQL、系统 Node 和系统 Python 都不是便携版的启动前
 
 目录包含 Electron、Gateway、Python、Python 依赖、Git 补丁工具和 ripgrep。用户数据另存于应用数据目录，不放在发布目录里。
 
-“模型设置”填写接口地址、模型名和 API Key。密钥经 Windows 的系统加密能力保存，页面读不到原密钥。填写新密钥才替换，留空则保留已有密钥；保存设置不等于已经实际调用模型验证连通性。
+“模型设置”填写接口地址、模型名、接口类型和 API Key。密钥经 Windows 的系统加密能力保存，页面读不到原密钥。填写新密钥才替换，留空则保留已有密钥。
+
+| 接口类型 | 适用服务 |
+| --- | --- |
+| Responses API | 支持 `/v1/responses` 的服务，例如 OpenAI 官方 |
+| Chat Completions | 只提供 `/v1/chat/completions` 的兼容服务，多数国内服务商和 Ollama 等本地推理服务 |
+
+“测试连接”用表单当前的值真实请求一次模型（带一个占位工具定义，因为任务离不开工具调用），依次尝试两种接口并选中能用的那一种；失败时分别列出每种接口的 HTTP 状态和原因。测试不会保存设置，也不改变正在使用的配置。只点“保存设置”不会发起模型请求。
+
+Chat Completions 模式下主循环、上下文摘要和长期记忆提炼都走 `/v1/chat/completions`，并且不发送 `store`、`parallel_tool_calls` 这两个兼容服务常常不认识的参数。
 
 桌面管理的 Gateway 只监听本机地址，并使用每次启动生成的令牌。旧的未认证开发网关不能接收模型设置接口。
 

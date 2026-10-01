@@ -375,16 +375,64 @@ export function mountProductControls(current: () => TaskRequestInput,
           <p>填写模型服务提供的 API 地址，而不是聊天网页地址。</p></div>
         <div class="model-field"><label for="model-name">模型名称</label>
           <input id="model-name" name="model" required spellcheck="false" placeholder="填写服务商提供的模型名称"></div>
+        <div class="model-field"><label for="model-api">接口类型</label>
+          <select id="model-api" name="api">
+            <option value="responses">Responses API（OpenAI 官方等）</option>
+            <option value="chat_completions">Chat Completions（多数兼容服务、本地模型）</option>
+          </select>
+          <p>不确定时点“测试连接”，会自动检测并选中能用的那一种。</p></div>
         <div class="model-field"><label for="model-api-key">API Key <span class="model-key-state"></span></label>
           <input id="model-api-key" name="apiKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="留空保留现有密钥">
           <p>密钥由 Windows 加密保存，不会回传到这个页面。</p></div>
-        <div class="model-settings-footer"><span>只保存设置，不会发起模型请求。</span>
+        <div class="model-test-result" role="status" hidden></div>
+        <div class="model-settings-footer"><span>保存不会发起模型请求，可以先测试连接。</span>
+          <button type="button" class="button-secondary" data-test>测试连接</button>
           <button type="button" class="button-secondary" data-close>取消</button>
           <button type="submit" class="button-primary">保存设置</button></div>`;
       (form.elements.namedItem("baseUrl") as HTMLInputElement).value = String(settings.baseUrl ?? "");
       (form.elements.namedItem("model") as HTMLInputElement).value = String(settings.model ?? "");
+      const apiSelect = form.elements.namedItem("api") as HTMLSelectElement;
+      apiSelect.value = settings.api === "chat_completions" ? "chat_completions" : "responses";
       form.querySelector(".model-key-state")!.textContent = settings.configured ? "已配置" : "未配置";
       form.querySelector("[data-close]")!.addEventListener("click", () => modal.close());
+      const testButton = form.querySelector<HTMLButtonElement>("[data-test]")!;
+      const testResult = form.querySelector<HTMLElement>(".model-test-result")!;
+      const apiLabels: Record<string, string> = { responses: "Responses API", chat_completions: "Chat Completions" };
+      // 测试之后又改了表单，旧的测试结论就不再适用。
+      form.addEventListener("input", () => { delete testResult.dataset.ok; testResult.hidden = true; });
+      testButton.addEventListener("click", async () => {
+        if (!form.reportValidity()) return;
+        testButton.disabled = true;
+        testButton.textContent = "正在测试…";
+        testResult.hidden = true;
+        try {
+          const values = { ...Object.fromEntries(new FormData(form).entries()), api: "auto" };
+          const result = await window.bitAgent.testModelSettings(values);
+          if (!active(body)) return;
+          testResult.dataset.ok = String(result.ok);
+          testResult.replaceChildren();
+          const summary = document.createElement("strong");
+          if (result.ok && result.api) {
+            apiSelect.value = result.api;
+            summary.textContent = `连接成功：${apiLabels[result.api]}，用时 ${result.latency_ms ?? "-"} ms。已选中这种接口类型，保存后生效。`;
+          } else {
+            summary.textContent = `连接失败：${result.message}`;
+          }
+          testResult.append(summary);
+          const tried = (result.attempts ?? []).filter((item) => !result.ok || item.api !== result.api);
+          if (tried.length) {
+            const list = document.createElement("ul");
+            for (const attempt of tried) {
+              const item = document.createElement("li");
+              item.textContent = `${apiLabels[attempt.api] ?? attempt.api}：${attempt.status_code ? `HTTP ${attempt.status_code}，` : ""}${attempt.message}`;
+              list.append(item);
+            }
+            testResult.append(list);
+          }
+          testResult.hidden = false;
+        } catch (error) { feedback(body, error); }
+        finally { testButton.disabled = false; testButton.textContent = "测试连接"; }
+      });
       form.onsubmit = async (event) => {
         event.preventDefault();
         const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
@@ -395,7 +443,9 @@ export function mountProductControls(current: () => TaskRequestInput,
           await window.bitAgent.saveModelSettings(values);
           (form.elements.namedItem("apiKey") as HTMLInputElement).value = "";
           form.querySelector(".model-key-state")!.textContent = "已配置";
-          feedback(body, "设置已保存，将用于下一次任务。模型连接尚未验证。", true);
+          feedback(body, testResult.dataset.ok === "true"
+            ? "设置已保存，将用于下一次任务。"
+            : "设置已保存，将用于下一次任务。模型连接尚未验证，建议先测试连接。", true);
         } catch (error) { feedback(body, error); }
         finally { submit.disabled = false; submit.textContent = "保存设置"; }
       };
@@ -405,4 +455,27 @@ export function mountProductControls(current: () => TaskRequestInput,
   settingsButton.addEventListener("click", () => { void showModelSettings(); });
   compactSettings.addEventListener("click", () => { void showModelSettings(); });
   mountExecutionSettings();
+  mountDockerNotice();
+}
+
+/** Docker 不可用时，在输入框上方提前说明：修改后的代码会显示“无法验证”。 */
+function mountDockerNotice(): void {
+  const notice = document.createElement("p");
+  notice.className = "docker-notice";
+  notice.setAttribute("role", "status");
+  notice.hidden = true;
+  document.querySelector(".composer-container")?.prepend(notice);
+  let checkedAt = 0;
+  const refresh = async (): Promise<void> => {
+    if (Date.now() - checkedAt < 15_000) return;
+    checkedAt = Date.now();
+    try {
+      const status = await window.bitAgent.dockerStatus();
+      notice.hidden = status === "ready";
+      notice.textContent = `${status === "not_installed" ? "没有找到 Docker" : "Docker 没有运行"}：`
+        + "修改后的代码无法在隔离环境中运行测试，结果会显示为“无法验证”。启动 Docker Desktop 后会自动恢复。";
+    } catch { notice.hidden = true; }
+  };
+  void refresh();
+  window.addEventListener("focus", () => { void refresh(); });
 }

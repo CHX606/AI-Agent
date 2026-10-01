@@ -82,6 +82,14 @@ export interface MemoryListResult {
   memories: LongTermMemory[];
 }
 
+export interface ModelTestResult {
+  ok: boolean;
+  api: "responses" | "chat_completions" | null;
+  message: string;
+  latency_ms?: number;
+  attempts?: { api: string; status_code?: number; message: string }[];
+}
+
 export interface TaskEvent {
   taskId?: string;
   id: string | null;
@@ -101,6 +109,9 @@ export interface DesktopApi {
   reviewChange(input: TaskRequestInput & { changeId: string; action: "accept" | "undo" }): Promise<Record<string, unknown>>;
   getModelSettings(): Promise<Record<string, unknown>>;
   saveModelSettings(input: Record<string, unknown>): Promise<Record<string, unknown>>;
+  /** 真实请求一次模型；api 为 auto 时自动检测可用的接口类型。 */
+  testModelSettings(input: Record<string, unknown>): Promise<ModelTestResult>;
+  dockerStatus(): Promise<"ready" | "not_installed" | "not_running">;
   getExecutionSettings(): Promise<ExecutionSettings>;
   saveExecutionSettings(input: ExecutionSettings): Promise<ExecutionSettings>;
   setTheme(theme: ColorTheme): void;

@@ -6,6 +6,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from bit_agent.context.models import ContextSummary
 from bit_agent.context.serialization import serialize_items
+from bit_agent.llm.text import create_text
 from bit_agent.memory import WorkingMemory
 from bit_agent.memory.budget import (
     estimate_tokens,
@@ -98,20 +99,16 @@ class LLMContextSummarizer:
             "working_memory": working_memory.model_dump(mode="json"),  # 序列化工作内存
             "history_to_compact": source,
         }
-        response = await asyncio.to_thread(  # 在单独的线程中执行
-            self.response_client.responses.create,
+        text = await asyncio.to_thread(  # 在单独的线程中执行
+            create_text,
+            self.response_client,
             model=self.model_name,
-            input=[
-                {"role": "developer", "content": CONTEXT_SUMMARIZATION_INSTRUCTIONS},
-                {
-                    "role": "user",
-                    "content": json.dumps(payload, ensure_ascii=False, default=str),
-                },
-            ],
+            instructions=CONTEXT_SUMMARIZATION_INSTRUCTIONS,
+            content=json.dumps(payload, ensure_ascii=False, default=str),
             timeout=self.request_timeout_seconds,
         )
         # 从响应中提取 JSON 对象并验证为 ContextSummary
-        return ContextSummary.model_validate(_extract_json_object(response.output_text))
+        return ContextSummary.model_validate(_extract_json_object(text))
 
 
 class DeterministicContextSummarizer:

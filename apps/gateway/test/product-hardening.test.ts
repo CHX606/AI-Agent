@@ -42,5 +42,20 @@ test("unmanaged gateway cannot receive model credentials", async () => {
   const app = buildApp({ logger: false });
   try {
     expect((await app.inject({ method: "POST", url: "/v1/model", payload: {} })).statusCode).toBe(403);
+    expect((await app.inject({ method: "POST", url: "/v1/model/test", payload: {} })).statusCode).toBe(403);
+  } finally { await app.close(); }
+});
+
+test("managed gateway forwards model connection tests", async () => {
+  vi.stubEnv("BIT_AGENT_GATEWAY_TOKEN", "test-token");
+  const store = new MemoryTaskStore();
+  const probe = vi.fn(async () => ({ ok: true, api: "chat_completions" }));
+  Object.assign(store, { testModel: probe });
+  const app = buildApp({ logger: false, taskStore: store });
+  try {
+    const response = await app.inject({ method: "POST", url: "/v1/model/test",
+      headers: { authorization: "Bearer test-token" }, payload: { model: "m", api: "auto" } });
+    expect(response.json()).toEqual({ ok: true, api: "chat_completions" });
+    expect(probe).toHaveBeenCalledExactlyOnceWith({ model: "m", api: "auto" });
   } finally { await app.close(); }
 });

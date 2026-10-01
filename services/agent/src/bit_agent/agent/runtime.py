@@ -18,6 +18,7 @@ from agents import (
     FunctionTool,
     ItemHelpers,
     ModelSettings,
+    OpenAIChatCompletionsModel,
     OpenAIResponsesModel,
     RunConfig,
     RunHooks,
@@ -168,6 +169,7 @@ class _AgentRun:
         max_tool_rounds: int,
         response_client: Any,
         model_name: str,
+        model_api: str,
         provider: ToolProvider,
         thread_id: str,
         restore_thread: bool,
@@ -195,6 +197,7 @@ class _AgentRun:
         self.max_tool_rounds = max_tool_rounds
         self.response_client = response_client
         self.model_name = model_name
+        self.model_api = model_api
         self.thread_id = thread_id
         self.restore_thread = restore_thread
         self.working_memory_objective = working_memory_objective
@@ -585,10 +588,18 @@ class _AgentRun:
                     http_client=DiagnosticHttpClient(),
                 )
             )
+        max_tokens = self.context.policy.reserved_output_tokens
+        if self.model_api == "chat_completions":
+            model = OpenAIChatCompletionsModel(model=self.model_name, openai_client=sdk_client)
+            # 兼容服务常常不认识 store、parallel_tool_calls；工具本来就逐个执行，省略即可。
+            settings = ModelSettings(max_tokens=max_tokens)
+        else:
+            model = OpenAIResponsesModel(model=self.model_name, openai_client=sdk_client)
+            settings = ModelSettings(parallel_tool_calls=False, store=False, max_tokens=max_tokens)
         return Agent(
             name=self.agent_id,
             model=DiagnosticModel(
-                OpenAIResponsesModel(model=self.model_name, openai_client=sdk_client),
+                model,
                 task_id=self.task_id,
                 session_id=self.thread_id,
                 run_id=self.run_id,
@@ -604,11 +615,7 @@ class _AgentRun:
                 )
                 for schema in self.model_tools
             ],
-            model_settings=ModelSettings(
-                parallel_tool_calls=False,
-                store=False,
-                max_tokens=self.context.policy.reserved_output_tokens,
-            ),
+            model_settings=settings,
         )
 
     async def run_until_finished(self, agent: Agent) -> AgentRunResult:
@@ -749,6 +756,7 @@ async def run_agent(
     max_tool_rounds: int = MAX_TOOL_ROUNDS,
     response_client: Any | None = None,
     model_name: str | None = None,
+    model_api: str | None = None,
     tool_provider: ToolProvider | None = None,
     thread_id: str | None = None,
     working_memory_objective: str | None = None,
@@ -795,6 +803,15 @@ async def run_agent(
             model_name = configured_model_name
     if model_name is None:
         raise RuntimeError("缺少环境变量：MODEL_NAME")
+    if model_api is None:
+        # 测试替身只实现 Responses 形状；真实客户端按模型设置选择接口。
+        model_api = "responses"
+        if isinstance(response_client, (OpenAI, AsyncOpenAI)):
+            from bit_agent.llm.client import model_api as configured_model_api
+
+            model_api = configured_model_api()
+    if model_api not in {"responses", "chat_completions"}:
+        raise ValueError("model_api 只能是 responses 或 chat_completions")
 
     root = (workspace_root or Path.cwd()).resolve()
     run_id = uuid4().hex
@@ -829,6 +846,7 @@ async def run_agent(
         max_tool_rounds=max_tool_rounds,
         response_client=response_client,
         model_name=model_name,
+        model_api=model_api,
         # 按调用时的全局名取 execute_tool，测试可以替换它。
         provider=tool_provider or LocalToolProvider(root, execute_tool),
         thread_id=thread_id or uuid4().hex,
