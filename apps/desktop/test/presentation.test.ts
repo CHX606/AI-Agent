@@ -135,6 +135,14 @@ it("shows an unavailable verification as neutral, not as a failure", () => {
   } } })).toMatchObject({ title: "基础检查未通过", tone: "error" });
 });
 
+it("names the project instruction files that were read", () => {
+  expect(eventTitle({ id: "3-0", event_type: "PROJECT_INSTRUCTIONS_LOADED",
+    data: { paths: ["AGENTS.md", ".bit-agent/instructions.md"], truncated: false } }))
+    .toBe("已读取项目说明 AGENTS.md、.bit-agent/instructions.md");
+  expect(eventTitle({ id: "3-1", event_type: "PROJECT_INSTRUCTIONS_LOADED",
+    data: { paths: ["AGENTS.md"], truncated: true } })).toBe("已读取项目说明 AGENTS.md（内容较长，已截断）");
+});
+
 it("attempted failed tests stay failed while absent lint stays unrun", () => {
   expect(summarizeResult({ result: {
     tests_passed: false, quality_checks_passed: false,

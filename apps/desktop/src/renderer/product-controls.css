@@ -145,6 +145,22 @@
 .model-test-result[data-ok="true"] { border-color: color-mix(in srgb, var(--green) 40%, var(--border)); background: var(--green-soft); }
 .model-test-result[data-ok="false"] { border-color: color-mix(in srgb, var(--red) 40%, var(--border)); background: var(--red-soft); }
 .model-test-result ul { margin: 4px 0 0 16px; color: var(--text-soft); }
+.git-commit { display: grid; gap: 10px; margin-bottom: 18px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-panel); min-width: 0; }
+.git-commit header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.git-commit header strong { font-size: 13px; }
+.git-commit header span, .git-empty { color: var(--text-muted); font-size: 12px; }
+.git-files { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.git-files li { display: flex; gap: 8px; min-width: 0; }
+.git-files span { flex: none; width: 3em; color: var(--text-muted); }
+.git-files code { overflow-wrap: anywhere; }
+.git-message { display: grid; gap: 6px; font-size: 12px; font-weight: 600; }
+.git-message textarea, .git-branch { width: 100%; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--bg-main); color: var(--text); font: 12px/1.6 var(--font-mono); resize: vertical; }
+.git-message textarea:focus, .git-branch:focus { outline: none; border-color: var(--field-focus-border); box-shadow: var(--field-focus-ring); }
+.git-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.git-actions > button { min-height: 31px; }
+.git-actions .button-primary { margin-left: auto; }
+.git-branch-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--text-soft); font-size: 12px; }
+.git-branch { width: auto; min-width: 200px; flex: 1; padding: 6px 10px; }
 .docker-notice { margin: 0 0 8px; padding: 8px 12px; border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border)); border-radius: 8px; background: var(--amber-soft); color: var(--text-soft); font-size: 12px; line-height: 1.6; }
 .model-field p { margin-top: 6px; color: var(--text-muted); font-size: 12px; line-height: 1.65; }
 .model-key-state { padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-size: 10px; font-weight: 400; }

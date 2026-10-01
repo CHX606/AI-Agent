@@ -164,6 +164,18 @@ export class LocalTaskStore implements TaskStore {
     return this.call("test_model", { input });
   }
 
+  gitStatus(taskId: string): Promise<Record<string, unknown>> {
+    return this.call("git_status", { task_id: taskId });
+  }
+
+  suggestCommitMessage(taskId: string): Promise<Record<string, unknown>> {
+    return this.call("suggest_commit_message", { task_id: taskId });
+  }
+
+  commitChanges(taskId: string, input: { message: string; branch?: string }): Promise<Record<string, unknown>> {
+    return this.call("commit_changes", { task_id: taskId, input });
+  }
+
   createTask(input: CreateTaskBody): Promise<TaskRecord> {
     return this.call("create_task", { input });
   }

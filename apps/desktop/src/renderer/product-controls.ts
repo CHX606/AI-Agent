@@ -2,6 +2,7 @@ import type { TaskRequestInput } from "../shared/contracts.js";
 import "@awesome.me/webawesome/dist/components/select/select.js";
 import "./product-controls.css";
 import { mountExecutionSettings } from "./execution-settings.js";
+import { createGitCommitPanel } from "./git-commit-panel.js";
 import { createMemoryEntry } from "./memory-panel.js";
 
 const settingsIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>`;
@@ -277,6 +278,9 @@ export function mountProductControls(current: () => TaskRequestInput,
       list.textContent = "选择一段会话后，就能查看该任务的文件改动。";
       return;
     }
+    const git = createGitCommitPanel(input, (value, success) => feedback(body, value, success));
+    list.before(git.element);
+    void git.refresh();
     async function draw(): Promise<void> {
       try {
         const payload = await window.bitAgent.getChanges(input);
@@ -301,7 +305,7 @@ export function mountProductControls(current: () => TaskRequestInput,
           const status = document.createElement("span");
           status.className = "change-status";
           status.dataset.status = change.status;
-          status.textContent = ({ undone: "已撤销", pending: "处理中", accepted: "已保留", applied: "待审阅" } as Record<string, string>)[change.status] ?? change.status;
+          status.textContent = ({ undone: "已撤销", pending: "处理中", accepted: "已保留", applied: "待审阅", unreviewed: "待审阅" } as Record<string, string>)[change.status] ?? change.status;
           const actions = document.createElement("div");
           actions.className = "change-actions";
           for (const [action, label] of [["accept", "保留改动"], ["undo", "撤销这次改动"]] as const) {
@@ -318,6 +322,8 @@ export function mountProductControls(current: () => TaskRequestInput,
               try {
                 await window.bitAgent.reviewChange({ ...input, changeId: change.id, action });
                 await draw();
+                // 撤销后要提交的文件可能变了。
+                if (action === "undo") await git.refresh();
               } catch (error) { feedback(body, error); }
               finally { buttons.forEach((item, position) => { item.disabled = disabled[position] ?? false; }); }
             };

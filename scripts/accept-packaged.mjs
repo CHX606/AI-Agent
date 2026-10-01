@@ -12,6 +12,19 @@ const root = resolve(import.meta.dirname, "..");
 const directory = mkdtempSync(join(root, "tmp", "packaged-acceptance-"));
 console.log("PACKAGED_ACCEPTANCE_DIRECTORY", directory);
 const workspace = join(directory, "workspace"); mkdirSync(workspace);
+// 验收工作区是一个 Git 仓库，用来检查“提交到 Git”。本地配置避免依赖用户的全局 Git 设置。
+const gitSetup = (...args) => {
+  const result = spawnSync("git", ["-C", workspace, ...args], { encoding: "utf8" });
+  assert.equal(result.status, 0, `git ${args.join(" ")}: ${result.stderr}`);
+  return result.stdout;
+};
+gitSetup("init", "-q", "-b", "main");
+gitSetup("config", "user.name", "Package Acceptance");
+gitSetup("config", "user.email", "package@example.com");
+gitSetup("config", "commit.gpgsign", "false");
+writeFileSync(join(workspace, "README.md"), "acceptance\n");
+gitSetup("add", "README.md");
+gitSetup("commit", "-q", "-m", "initial");
 const requests = [];
 const probes = [];
 const model = createServer(async (request, response) => {
@@ -319,7 +332,13 @@ try {
   await check(() => evaluate("document.querySelector('#status').dataset.status==='CANCELLED' && document.body.dataset.busy==='false'"), "等待回答时不能取消");
   await evaluate("document.querySelector('#review-changes').click()");
   await check(() => evaluate("Boolean(document.querySelector('.change-entry pre')?.textContent.includes('package fixture'))"), "审阅界面没有显示真实差异");
+  await check(() => evaluate("Boolean(document.querySelector('.git-commit .git-files')?.textContent.includes('package-demo.py'))"), "提交面板没有列出任务改过的文件")
+    .catch(async (error) => { throw new Error(`${await evaluate("document.querySelector('.product-dialog')?.innerText ?? ''")}\n${error.message}`); });
   await captureLayouts(command, evaluate, "review");
+  // 用随包附带的 Git 提交：验收进程的 PATH 里没有系统 Git。
+  await evaluate("const t=document.querySelector('.git-message textarea');t.value='PACKAGE-COMMIT';t.dispatchEvent(new Event('input'));document.querySelector('.git-actions .button-primary').click()");
+  await check(() => evaluate("Boolean(document.querySelector('.product-feedback[data-kind=success]')?.textContent.includes('已提交'))"), "界面提交到 Git 没有成功");
+  assert.deepEqual(gitSetup("log", "-1", "--name-only", "--format=%s").split(/\r?\n/u).filter(Boolean), ["PACKAGE-COMMIT", "package-demo.py"]);
   await evaluate("Array.from(document.querySelectorAll('.change-entry button')).find(button=>button.textContent==='撤销这次改动').click()");
   await check(async () => !existsSync(join(workspace, "package-demo.py")), "界面撤销没有恢复原文件状态");
   await evaluate("document.querySelector('.product-dialog-header button').click()");
@@ -337,7 +356,7 @@ try {
   await close();
   writeFileSync(join(directory, "result.json"), JSON.stringify({ passed: true, executable,
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,
-    unauthorizedGatewayRejected: true, restartAndContinue: true, pauseAndSteer: true, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
+    unauthorizedGatewayRejected: true, restartAndContinue: true, pauseAndSteer: true, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, gitCommit: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
   }, null, 2));
   console.log(`PACKAGED_ACCEPTANCE_PASSED ${directory}`);
 } finally {

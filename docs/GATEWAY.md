@@ -63,6 +63,9 @@ pnpm --dir apps/gateway dev
 | `GET /v1/memories?workspace_root=...` | 本项目（省略参数时为全部项目）的长期记忆，见 [记忆说明](MEMORY.md)。 |
 | `DELETE /v1/memories/{memory_id}` | 删除一条长期记忆，之后不再参与召回。 |
 | `POST /v1/model` | 桌面主进程写入模型配置（含接口类型 `api`）；需要设置 `BIT_AGENT_GATEWAY_TOKEN`。 |
+| `GET /v1/tasks/:taskId/git` | 这次任务改过的文件在 Git 里的状态和当前分支。 |
+| `POST /v1/tasks/:taskId/git/message` | 用当前模型根据目标和差异起草提交信息，模型不可用时返回按目标生成的草稿。 |
+| `POST /v1/tasks/:taskId/git/commit` | 只提交这次任务的文件；`branch` 可选，填写时先新建分支。 |
 | `POST /v1/model/test` | 桌面主进程用一次真实请求测试模型配置，`api` 为 `auto` 时自动检测接口类型；不改变当前配置；同样需要令牌。 |
 | `GET /v1/diagnostics` | 诊断快照，见 [桌面诊断](DESKTOP_DIAGNOSTICS.md)。 |
 

@@ -34,6 +34,19 @@ class JournalFactory(Protocol):
     def __call__(self, root: Path, directory: Path) -> ChangeJournalPort: ...
 
 
+class GitPort(Protocol):
+    async def status(self, root: Path, paths: list[str]) -> dict[str, Any]: ...
+    async def commit(
+        self, root: Path, paths: list[str], message: str, branch: str | None = None
+    ) -> dict[str, Any]: ...
+
+
+class ProjectInstructionsReader(Protocol):
+    """返回 {"paths", "text", "truncated"}；项目没有说明文件时返回 None。"""
+
+    def __call__(self, root: Path) -> dict[str, Any] | None: ...
+
+
 class ProjectVerifier(Protocol):
     async def __call__(
         self,

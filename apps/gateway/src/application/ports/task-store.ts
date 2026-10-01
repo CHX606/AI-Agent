@@ -19,6 +19,10 @@ export interface TaskStore {
   setSessionMode(sessionId: string, mode: string): Promise<Record<string, unknown> | null>;
   getChanges(taskId: string): Promise<Record<string, unknown>>;
   reviewChange(taskId: string, changeId: string, action: string): Promise<Record<string, unknown>>;
+  /** 任务改过的文件在 Git 里的状态；只提交这些文件。 */
+  gitStatus(taskId: string): Promise<Record<string, unknown>>;
+  suggestCommitMessage(taskId: string): Promise<Record<string, unknown>>;
+  commitChanges(taskId: string, input: { message: string; branch?: string }): Promise<Record<string, unknown>>;
   configureModel(input: Record<string, unknown>): Promise<Record<string, unknown>>;
   /** 用一次真实请求测试模型配置，不改变当前生效的配置。 */
   testModel(input: Record<string, unknown>): Promise<Record<string, unknown>>;

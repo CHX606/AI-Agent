@@ -37,6 +37,21 @@ test("review passes only supported actions to local storage", async () => {
   } finally { await app.close(); }
 });
 
+test("commit requests are validated before reaching local storage", async () => {
+  const store = new MemoryTaskStore();
+  const commit = vi.fn(async () => ({ commit: "abc", branch: "main", files: ["a.py"] }));
+  Object.assign(store, { commitChanges: commit });
+  const app = buildApp({ logger: false, taskStore: store });
+  try {
+    expect((await app.inject({ method: "POST", url: "/v1/tasks/t/git/commit", payload: { message: 1 } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/v1/tasks/t/git/commit", payload: { message: "m", branch: 2 } })).statusCode).toBe(400);
+    expect(commit).not.toHaveBeenCalled();
+    const response = await app.inject({ method: "POST", url: "/v1/tasks/t/git/commit", payload: { message: "m", branch: "" } });
+    expect(response.statusCode).toBe(200);
+    expect(commit).toHaveBeenCalledExactlyOnceWith("t", { message: "m" });
+  } finally { await app.close(); }
+});
+
 test("unmanaged gateway cannot receive model credentials", async () => {
   vi.stubEnv("BIT_AGENT_GATEWAY_TOKEN", "");
   const app = buildApp({ logger: false });

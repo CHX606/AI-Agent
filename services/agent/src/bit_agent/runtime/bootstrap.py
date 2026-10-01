@@ -9,6 +9,8 @@ from bit_agent.runtime.application.long_term_memory import ProjectMemory
 from bit_agent.runtime.application.service import AgentRuntime
 from bit_agent.runtime.infrastructure.acceptance import AcceptanceWorkspace
 from bit_agent.runtime.infrastructure.changes import ChangeJournal
+from bit_agent.runtime.infrastructure.git import GitRepository
+from bit_agent.runtime.infrastructure.project_instructions import read_project_instructions
 from bit_agent.runtime.infrastructure.storage import (
     LocalStorage,
     SQLiteWorkingMemoryStore,
@@ -42,6 +44,8 @@ def create_runtime(directory: Path | None = None, *, concurrency: int = 2) -> Ag
             verifier=verify_project,
             acceptance_workspace=partial(AcceptanceWorkspace, excluded_roots=(storage.directory,)),
             long_term_memory=long_term_memory,
+            project_instructions=read_project_instructions,
+            git=GitRepository(),
         )
     except Exception:
         if long_term_memory is not None:
