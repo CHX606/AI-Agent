@@ -87,6 +87,12 @@ async def probe_model(
                     "message": f"{reason}，请检查地址、网络或代理设置",
                     "attempts": attempts,
                 }
+            except Exception as exc:
+                # 返回了 200 但内容不是这种接口的格式，通常说明服务并不支持它。
+                attempts.append(
+                    {"api": candidate, "message": f"返回内容无法识别（{type(exc).__name__}）"}
+                )
+                continue
             return {
                 "ok": True,
                 "api": candidate,
