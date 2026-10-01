@@ -128,6 +128,11 @@ export function eventPresentation(event: TaskEvent): ActivityPresentation | null
     return { key: `model:${agent}:${round}`, title: "", tone: "neutral", remove: true };
   }
 
+  if (event.event_type === "PROJECT_INSTRUCTIONS_LOADED") {
+    const paths = Array.isArray(payload.paths) ? payload.paths.filter(item => typeof item === "string") : [];
+    return { key: `project-instructions:${event.id ?? ""}`, tone: "neutral",
+      title: `已读取项目说明${paths.length ? ` ${paths.join("、")}` : ""}${payload.truncated ? "（内容较长，已截断）" : ""}` };
+  }
   if (agent.startsWith("acceptance-") && ["AGENT_COMPLETED", "AGENT_FAILED"].includes(event.event_type)) {
     return {
       key: `tester:${agent}`, title: event.event_type === "AGENT_COMPLETED"

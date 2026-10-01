@@ -140,6 +140,23 @@ export function createHttpApp(
         },
     );
 
+    app.get<{ Params: { taskId: string } }>("/v1/tasks/:taskId/git", async (request) => {
+        return taskStore.gitStatus(request.params.taskId);
+    });
+    app.post<{ Params: { taskId: string } }>("/v1/tasks/:taskId/git/message", async (request) => {
+        return taskStore.suggestCommitMessage(request.params.taskId);
+    });
+    app.post<{ Params: { taskId: string }; Body: { message?: unknown; branch?: unknown } }>(
+        "/v1/tasks/:taskId/git/commit", async (request, reply) => {
+            const { message, branch } = request.body ?? {};
+            if (typeof message !== "string" || (branch !== undefined && branch !== null && typeof branch !== "string")) {
+                return reply.code(400).send({ error: "INVALID_COMMIT" });
+            }
+            return taskStore.commitChanges(request.params.taskId,
+                { message, ...(typeof branch === "string" && branch ? { branch } : {}) });
+        },
+    );
+
     app.post("/v1/tasks", async (request, reply) => {
         const parsed = createTaskBodySchema.safeParse(request.body);
         if (!parsed.success) {

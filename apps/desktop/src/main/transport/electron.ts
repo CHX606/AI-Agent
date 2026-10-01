@@ -1,19 +1,22 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, Notification } from "electron";
 
 import { join } from "node:path";
 import { diagnosticId, errorFields, publicError, installProcessDiagnostics } from "@bit-agent/diagnostics";
 
 import { watchTaskStream } from "./task-event-stream.js";
 
+import { attentionNotice } from "../application/notifications.js";
 import { taskRequestBody } from "../application/task-input.js";
 
 import type {
   ColorTheme,
   CreateTaskInput,
+  GitCommitInput,
   MemoryDeleteInput,
   MemoryListInput,
   MultiAgentMode,
   SessionRequestInput,
+  TaskEvent,
   TaskRequestInput,
   TaskInteractionInput,
 } from "../../shared/contracts.js";
@@ -41,10 +44,32 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
   process.on("uncaughtException", handleFatal);
   process.on("unhandledRejection", handleFatal);
   if (!app.requestSingleInstanceLock()) app.quit();
+  // Windows 系统通知按应用编号归类；不设置时通知显示为 Electron。
+  if (process.platform === "win32") app.setAppUserModelId("BitAgent.Desktop");
 
   const streamControllers = new Map<string, AbortController>();
   const repositoryRoots = new Map<number, string>();
+  const announced = new Set<string>();
   let activeTheme: ColorTheme = "light";
+
+  /** 窗口不在前台时，任务结束或等待回答要让用户知道：系统通知加任务栏闪烁。 */
+  function announce(sender: Electron.WebContents, event: TaskEvent): void {
+    const window = BrowserWindow.fromWebContents(sender);
+    if (!window || window.isDestroyed() || window.isFocused()) return;
+    const notice = attentionNotice(event);
+    if (!notice || announced.has(notice.key)) return;
+    announced.add(notice.key);
+    window.flashFrame(true);
+    if (!Notification.isSupported()) return;
+    const notification = new Notification({ title: notice.title, body: notice.body });
+    notification.on("click", () => {
+      if (window.isDestroyed()) return;
+      if (window.isMinimized()) window.restore();
+      window.show();
+      window.focus();
+    });
+    notification.show();
+  }
 
   function themeBackground(theme: ColorTheme): string {
     return theme === "dark" ? "#181817" : "#f2f2ef";
@@ -68,6 +93,7 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
       },
     });
     window.once("ready-to-show", () => { if (process.env.BIT_AGENT_ACCEPTANCE_HIDDEN !== "1") window.show(); });
+    window.on("focus", () => window.flashFrame(false));
     window.webContents.on("render-process-gone", (_event, details) => {
       const id = diagnostics.failure("renderer_gone", new Error(), { reason: details.reason, exit_code: details.exitCode });
       dialog.showErrorBox("界面已停止运行", publicError(id, "请重新启动应用，已保存的记录会保留"));
@@ -111,7 +137,11 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
     try {
       await watchTaskStream(request, {
         signal: controller.signal, diagnostics, managedHeaders, requestJson,
-        emit: (event) => { if (!sender.isDestroyed()) sender.send("task:event", event); },
+        emit: (event) => {
+          if (sender.isDestroyed()) return;
+          sender.send("task:event", event);
+          announce(sender, event);
+        },
         isActive: () => !sender.isDestroyed(),
         managedStopped: () => {
           const runtime = runtimeConfiguration();
@@ -170,6 +200,24 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
       const input = validateTaskRequest(raw);
       return requestJson(input.gatewayUrl, `/v1/tasks/${encodeURIComponent(input.taskId)}/changes`, {
         method: "POST", body: JSON.stringify({ change_id: raw.changeId, action: raw.action }),
+      });
+    });
+    handle("git:status", (_event, raw: TaskRequestInput) => {
+      const input = validateTaskRequest(raw);
+      return requestJson(input.gatewayUrl, `/v1/tasks/${encodeURIComponent(input.taskId)}/git`);
+    });
+    handle("git:message", (_event, raw: TaskRequestInput) => {
+      const input = validateTaskRequest(raw);
+      return requestJson(input.gatewayUrl, `/v1/tasks/${encodeURIComponent(input.taskId)}/git/message`,
+        { method: "POST", body: "{}" });
+    });
+    handle("git:commit", (_event, raw: GitCommitInput) => {
+      const input = validateTaskRequest(raw);
+      if (typeof raw.message !== "string" || (raw.branch !== undefined && typeof raw.branch !== "string")) {
+        throw new Error("提交信息格式错误");
+      }
+      return requestJson(input.gatewayUrl, `/v1/tasks/${encodeURIComponent(input.taskId)}/git/commit`, {
+        method: "POST", body: JSON.stringify({ message: raw.message, ...(raw.branch ? { branch: raw.branch } : {}) }),
       });
     });
     activeTheme = loadTheme();

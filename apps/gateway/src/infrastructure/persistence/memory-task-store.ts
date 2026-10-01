@@ -50,6 +50,22 @@ export class MemoryTaskStore implements TaskStore {
     throw notFound("改动不存在");
   }
 
+  async gitStatus(taskId: string): Promise<Record<string, unknown>> {
+    if (!this.tasks.has(taskId)) throw notFound("任务不存在");
+    return { repository: false, branch: null, files: [], task_files: [] };
+  }
+
+  async suggestCommitMessage(taskId: string): Promise<Record<string, unknown>> {
+    const task = this.tasks.get(taskId);
+    if (!task) throw notFound("任务不存在");
+    return { message: task.objective, generated: false };
+  }
+
+  async commitChanges(taskId: string, _input: { message: string; branch?: string }): Promise<Record<string, unknown>> {
+    if (!this.tasks.has(taskId)) throw notFound("任务不存在");
+    throw Object.assign(new Error("工作区不在 Git 仓库里"), { statusCode: 409 });
+  }
+
   async configureModel(input: Record<string, unknown>): Promise<Record<string, unknown>> {
     return { configured: true, model: input.model, base_url: input.base_url, api: input.api ?? "responses" };
   }

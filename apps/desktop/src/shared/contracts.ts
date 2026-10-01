@@ -21,6 +21,20 @@ export interface TaskRequestInput {
   taskId: string;
 }
 
+export interface GitCommitInput extends TaskRequestInput {
+  message: string;
+  /** 填写时先新建并切换到这个分支再提交。 */
+  branch?: string;
+}
+
+export interface GitStatusResult {
+  repository: boolean;
+  branch: string | null;
+  /** 本次任务的文件里，相对当前提交有改动的那些。 */
+  files: { path: string; status: string }[];
+  task_files: string[];
+}
+
 export interface TaskInteractionInput extends TaskRequestInput {
   action: "pause" | "resume" | "supplement" | "replace" | "answer";
   text?: string;
@@ -107,6 +121,9 @@ export interface DesktopApi {
   readonly runtimeConfig: { managed: boolean; gatewayUrl: string; startupError: string };
   getChanges(input: TaskRequestInput): Promise<Record<string, unknown>>;
   reviewChange(input: TaskRequestInput & { changeId: string; action: "accept" | "undo" }): Promise<Record<string, unknown>>;
+  gitStatus(input: TaskRequestInput): Promise<GitStatusResult>;
+  suggestCommitMessage(input: TaskRequestInput): Promise<{ message: string; generated: boolean }>;
+  commitChanges(input: GitCommitInput): Promise<{ commit: string; branch: string | null; files: string[] }>;
   getModelSettings(): Promise<Record<string, unknown>>;
   saveModelSettings(input: Record<string, unknown>): Promise<Record<string, unknown>>;
   /** 真实请求一次模型；api 为 auto 时自动检测可用的接口类型。 */
