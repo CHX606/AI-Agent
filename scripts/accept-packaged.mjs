@@ -13,9 +13,20 @@ const directory = mkdtempSync(join(root, "tmp", "packaged-acceptance-"));
 console.log("PACKAGED_ACCEPTANCE_DIRECTORY", directory);
 const workspace = join(directory, "workspace"); mkdirSync(workspace);
 const requests = [];
+const probes = [];
 const model = createServer(async (request, response) => {
   let raw = ""; for await (const chunk of request) raw += String(chunk);
-  const body = JSON.parse(raw); requests.push(body);
+  const body = JSON.parse(raw);
+  if (body.input === "ping") {
+    // “测试连接”：不流式的极小请求，带一个占位工具定义。
+    probes.push({ path: request.url, tools: body.tools?.map((tool) => tool.name) });
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ id: "probe", object: "response", created_at: 1, status: "completed", model: body.model,
+      output: [{ type: "message", id: "probe-msg", status: "completed", role: "assistant",
+        content: [{ type: "output_text", text: "pong", annotations: [] }] }] }));
+    return;
+  }
+  requests.push(body);
   const users = body.input.filter((item) => item.role === "user").map((item) => String(item.content));
   const text = `PACKAGED_STREAM_START ${users.join(" | ")} PACKAGED_STREAM_END`;
   const id = `resp-${requests.length}`;
@@ -262,6 +273,11 @@ try {
   assert.equal(publicSettings.apiKey, undefined);
   const diskSettings = readFileSync(join(directory, "profile", "model-settings.json"), "utf8");
   assert(!diskSettings.includes("LOCAL-PACKAGE-SECRET-ONLY"));
+  // 密钥留空时用已保存的密钥；自动检测选中第一种可用的接口。
+  const probe = await evaluate(`window.bitAgent.testModelSettings(${JSON.stringify({ baseUrl: modelUrl, model: "local-fixture", apiKey: "", api: "auto" })})`);
+  assert.equal(probe.ok, true, JSON.stringify(probe));
+  assert.equal(probe.api, "responses");
+  assert.deepEqual(probes, [{ path: "/v1/responses", tools: ["noop"] }]);
   await evaluate(`document.querySelector('#workspace').value=${JSON.stringify(workspace)}; document.querySelector('#workspace').dispatchEvent(new Event('change')); document.querySelector('#objective').value='PACKAGE-CANARY-73'; document.querySelector('#run').click();`);
   await check(() => evaluate("document.body.dataset.busy==='true' && document.querySelector('#answer').textContent.includes('PACKAGED_STREAM_START')"), "最终完成之前没有收到流式文字");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && !document.querySelector('#run').disabled"), "独立包未完成第一轮");
@@ -321,7 +337,7 @@ try {
   await close();
   writeFileSync(join(directory, "result.json"), JSON.stringify({ passed: true, executable,
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,
-    unauthorizedGatewayRejected: true, restartAndContinue: true, pauseAndSteer: true, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
+    unauthorizedGatewayRejected: true, restartAndContinue: true, pauseAndSteer: true, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
   }, null, 2));
   console.log(`PACKAGED_ACCEPTANCE_PASSED ${directory}`);
 } finally {

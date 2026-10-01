@@ -257,6 +257,17 @@ async def test_probe_stops_on_rejected_key(monkeypatch):
     assert tried == ["responses"], "密钥错误时换接口也没有用"
 
 
+async def test_probe_treats_unrecognised_reply_as_unsupported(monkeypatch):
+    def ping(client, model, api):
+        if api == "responses":
+            raise ValueError("not a response object")
+
+    monkeypatch.setattr(probe, "_ping", ping)
+    result = await probe.probe_model("https://example.test/v1", "m", "key")
+    assert result["ok"] and result["api"] == "chat_completions"
+    assert "无法识别" in result["attempts"][0]["message"]
+
+
 async def test_probe_reports_unreachable_address(monkeypatch):
     def ping(client, model, api):
         raise APIConnectionError(request=httpx.Request("POST", "https://example.test/v1"))
