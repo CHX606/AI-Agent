@@ -100,6 +100,50 @@ def test_rejects_unapproved_system_packages(tmp_path: Path) -> None:
         env.dependency_spec(tmp_path)
 
 
+async def test_default_base_image_is_built_from_bundled_context(monkeypatch) -> None:
+    monkeypatch.setattr(env, "_ready_images", set())
+    commands = []
+    built = False
+
+    async def command(*args, **kwargs):
+        nonlocal built
+        commands.append(args)
+        if args[1] == "build":
+            built = True
+            return 0, ""
+        return (0, "sha256:x") if built else (1, "No such image")
+
+    monkeypatch.setattr(env, "_command", command)
+    await env.ensure_base_image(env.DEFAULT_IMAGE, "docker")
+    build = next(item for item in commands if item[1] == "build")
+    assert build[-1] == str(env.BASE_IMAGE_CONTEXT)
+    assert {path.name for path in env.BASE_IMAGE_CONTEXT.iterdir()} >= {
+        "Dockerfile",
+        "run_python_build.py",
+    }
+    commands.clear()
+    await env.ensure_base_image(env.DEFAULT_IMAGE, "docker")
+    assert commands == [], "同一进程内确认过的镜像不再重复检查"
+
+
+async def test_missing_custom_base_image_is_not_built(monkeypatch) -> None:
+    monkeypatch.setattr(env, "_ready_images", set())
+
+    async def command(*args, **kwargs):
+        assert args[1] != "build"
+        return 1, "No such image"
+
+    monkeypatch.setattr(env, "_command", command)
+    with pytest.raises(env.EnvironmentPreparationError, match="不存在"):
+        await env.ensure_base_image("my-prepared-image:1", "docker")
+
+
+async def test_missing_docker_cli_is_preparation_error(monkeypatch) -> None:
+    monkeypatch.setattr(env, "_ready_images", set())
+    with pytest.raises(env.EnvironmentPreparationError):
+        await env.ensure_base_image(env.DEFAULT_IMAGE, "definitely-not-a-real-docker-command")
+
+
 async def test_build_failure_is_returned(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "requirements.txt").write_text("httpx")
 

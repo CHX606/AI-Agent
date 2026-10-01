@@ -22,6 +22,8 @@ describe("desktop result presentation", () => {
       testsPassed: true,
       qualityPassed: true,
       acceptanceStatus: "NOT_RUN",
+      verificationStatus: "NOT_RUN",
+      verificationNotes: [],
       rounds: 6,
     });
   });
@@ -72,6 +74,8 @@ describe("desktop result presentation", () => {
       testsPassed: null,
       qualityPassed: null,
       acceptanceStatus: "NOT_RUN",
+      verificationStatus: "NOT_RUN",
+      verificationNotes: [],
       rounds: 0,
     });
   });
@@ -106,6 +110,29 @@ it("does not mix independent tester text into the author's reply", () => {
   expect(isMainAgentText(null)).toBe(true);
   expect(eventTitle({ id: "tester", event_type: "AGENT_COMPLETED", data: { agent_id: "acceptance-123" } }))
     .toBe("测试 Agent 已返回，正在核对验收报告");
+});
+
+it("unverifiable changes are neither passed nor failed", () => {
+  const summary = summarizeResult({ result: {
+    tests_passed: false, quality_checks_passed: false,
+    tool_calls: [{ tool_name: "verify_project", status: "ERROR" }],
+    verification_status: "UNVERIFIED",
+    verification_notes: ["找不到所属项目的测试配置（main.go）"],
+  } });
+  expect(summary).toMatchObject({
+    testsPassed: null, qualityPassed: null, verificationStatus: "UNVERIFIED",
+    verificationNotes: ["找不到所属项目的测试配置（main.go）"],
+  });
+  expect(summarizeResult({ verification_status: "bogus" }).verificationStatus).toBe("NOT_RUN");
+});
+
+it("shows an unavailable verification as neutral, not as a failure", () => {
+  expect(eventPresentation({ id: "1-0", event_type: "TOOL_COMPLETED", data: { payload: {
+    tool_name: "verify_project", tool_call_id: "v1", status: "ERROR", error_code: "VERIFICATION_UNAVAILABLE",
+  } } })).toMatchObject({ title: "无法自动验证", tone: "neutral", status: "未验证" });
+  expect(eventPresentation({ id: "1-0", event_type: "TOOL_COMPLETED", data: { payload: {
+    tool_name: "verify_project", tool_call_id: "v1", status: "ERROR", error_code: "VERIFICATION_FAILED",
+  } } })).toMatchObject({ title: "基础检查未通过", tone: "error" });
 });
 
 it("attempted failed tests stay failed while absent lint stays unrun", () => {

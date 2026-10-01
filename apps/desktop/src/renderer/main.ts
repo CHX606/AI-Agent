@@ -73,6 +73,7 @@ const files = element<HTMLElement>("#changed-files");
 const tests = element<HTMLElement>("#tests-state");
 const lint = element<HTMLElement>("#lint-state");
 const acceptance = element<HTMLElement>("#acceptance-state");
+const verificationNotes = element<HTMLUListElement>("#verification-notes");
 const rounds = element<HTMLElement>("#rounds");
 const rawResult = element<HTMLElement>("#raw-result");
 const connection = element<HTMLElement>("#connection");
@@ -270,6 +271,8 @@ function resetMetrics(): void {
   delete tests.dataset.passed;
   delete lint.dataset.passed;
   delete acceptance.dataset.passed;
+  verificationNotes.replaceChildren();
+  verificationNotes.hidden = true;
   files.textContent = "无文件修改";
   files.classList.add("empty-copy");
   rawResult.textContent = "等待任务完成…";
@@ -421,6 +424,20 @@ function renderResult(payload: Record<string, unknown>): void {
   renderVerificationState(acceptance, summary.acceptanceStatus === "NOT_RUN" || summary.acceptanceStatus === "NOT_VERIFIED"
     ? null : summary.acceptanceStatus === "PASSED");
   if (summary.acceptanceStatus === "NOT_VERIFIED") acceptance.textContent = "未完成验证";
+  if (summary.verificationStatus === "UNVERIFIED" || summary.verificationStatus === "NOT_APPLICABLE") {
+    const unverified = summary.verificationStatus === "UNVERIFIED";
+    for (const target of [tests, lint]) {
+      target.textContent = unverified ? "无法验证" : "无需检查";
+      if (unverified) target.dataset.passed = "unverified";
+    }
+  }
+  verificationNotes.replaceChildren(...summary.verificationNotes.map((note) => {
+    const item = document.createElement("li");
+    item.textContent = note;
+    return item;
+  }));
+  verificationNotes.dataset.kind = summary.verificationStatus === "UNVERIFIED" ? "unverified" : "info";
+  verificationNotes.hidden = summary.verificationNotes.length === 0;
   rounds.textContent = summary.rounds === null ? "-" : String(summary.rounds);
   rawResult.textContent = JSON.stringify(payload, null, 2);
   errorActions.hidden = true;

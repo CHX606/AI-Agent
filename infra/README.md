@@ -11,7 +11,7 @@
 | --- | --- |
 | `docker` | Windows 下 Docker Desktop 的辅助启动和残留文件处理脚本。 |
 | `memory` | 记忆模块真实 PostgreSQL/pgvector 测试环境。 |
-| `sandbox/python` | 给目标 Python 项目运行测试和检查的 Docker 环境。 |
+| `sandbox/python-web` | 在默认 Python 沙箱基础上加装 Web 相关依赖的可选镜像。 |
 
 ## 记忆集成测试
 
@@ -20,11 +20,11 @@
 `memory/run-integration-tests.ps1` 启动这套服务并运行相应 Python 集成测试。它会启用真实 LLM 测试条件，因此还需要相关模型配置。
 `-StopAfter` 表示结束后关闭测试服务；`-FullSuite` 会改为运行默认 Python 测试集合，不会顺带运行 Node.js 测试。
 
-## sandbox/python 里有什么
+## 默认 Python 沙箱在哪里
 
-`Dockerfile` 以 Python 3.12 为基础，安装 pytest、Ruff、mypy、build 等检查依赖，并设置普通用户。
+默认沙箱的 `Dockerfile` 和 `run_python_build.py` 已移到 `services/agent/src/bit_agent/sandbox/images/python/`，随程序一起分发；本机没有 `bit-agent-python-sandbox:0.1.0` 时，第一次验证会自动构建。
 
-`run_python_build.py` 是受控构建入口。Agent 不能把任意 Shell 命令塞进构建工具。
+`Dockerfile` 以 Python 3.12 为基础，安装 pytest、Ruff、mypy、build 等检查依赖，并设置普通用户。`run_python_build.py` 是受控构建入口，Agent 不能把任意 Shell 命令塞进构建工具。
 
 Docker 环境与根目录 `.venv` 相互独立。本机 Python 可以导入某个包，不代表目标测试沙箱中也已安装它。
 

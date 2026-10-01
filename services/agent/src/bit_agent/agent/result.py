@@ -17,6 +17,11 @@ class AgentRunStatus(StrEnum):
     FAILED = "FAILED"
 
 
+# 修改后的基础检查结论：NOT_RUN 没有运行；UNVERIFIED 没有能运行的检查；
+# NOT_APPLICABLE 只改了文档等不需要检查的文件。
+VerificationStatus = Literal["NOT_RUN", "PASSED", "FAILED", "UNVERIFIED", "NOT_APPLICABLE"]
+
+
 class ToolCallRecord(BaseModel):
     """模型申请并由 Python 执行的一次工具调用记录。"""
 
@@ -81,6 +86,8 @@ class AgentRunResult(BaseModel):
     tests_passed: bool = False
     quality_checks_passed: bool = False
     acceptance_status: Literal["NOT_RUN", "PASSED", "FAILED", "NOT_VERIFIED"] = "NOT_RUN"
+    verification_status: VerificationStatus = "NOT_RUN"
+    verification_notes: list[str] = Field(default_factory=list)
     error: str | None = None
     working_memory: WorkingMemory | None = None
     memory_warnings: list[str] = Field(default_factory=list)

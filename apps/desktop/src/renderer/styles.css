@@ -24,6 +24,8 @@
   --green-soft: #ecf7eb;
   --red: #c84b45;
   --red-soft: #fff0ee;
+  --amber: #a86a12;
+  --amber-soft: #fdf4e3;
   --blue: #3973b8;
   --blue-soft: #edf4fb;
   --selection: #f2d5c4;
@@ -89,6 +91,8 @@
   --green-soft: #203625;
   --red: #df7b74;
   --red-soft: #3d2523;
+  --amber: #e0b05c;
+  --amber-soft: #3a2f1c;
   --blue: #7eabd5;
   --blue-soft: #1e3040;
   --selection: #65422f;
@@ -1610,6 +1614,29 @@ body[data-resizing="true"] .inspector-resize::after {
 
 .metric-value[data-passed="false"] {
   color: var(--red);
+}
+
+.metric-value[data-passed="unverified"] {
+  color: var(--amber);
+}
+
+.verification-notes {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 6px 10px 8px 35px;
+  border-top: 1px solid var(--border);
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.verification-notes[data-kind="unverified"] {
+  background: var(--amber-soft);
+}
+
+.verification-notes li {
+  overflow-wrap: anywhere;
 }
 
 .changed-files {

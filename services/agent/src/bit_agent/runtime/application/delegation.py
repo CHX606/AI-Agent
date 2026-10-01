@@ -30,6 +30,8 @@ from bit_agent.tools.models import ToolMetadata, ToolResult, ToolStatus
 
 MAX_DELEGATION_TASKS = 3
 MAX_CONCURRENT_INVESTIGATIONS = 3
+# 项目自己的验证配置决定“怎样算通过”，改动它必须让用户明确看到并批准。
+VERIFICATION_CONFIG_DIRECTORY = ".bit-agent/"
 
 MODE_INSTRUCTIONS = {
     "off": "本轮关闭并行开发分工，由你直接完成实现；独立验收工具 verify_task 仍可使用。",
@@ -110,10 +112,26 @@ class DelegatingToolProvider(LocalToolProvider):
         self.acceptance_context = acceptance_context
         self.baseline: ToolResult | None = None
         self.max_tool_rounds = max_tool_rounds
+        # 用户选择“本任务内同类操作都批准”的类别；删除文件和改验证配置不在此列，每次都问。
+        self.approved_categories: set[str] = set()
 
-    async def _approve(self, title: str, detail: str) -> bool:
+    async def _approve(self, title: str, detail: str, category: str | None = None) -> bool:
+        if category is not None and category in self.approved_categories:
+            return True
         if self.interaction is None:
             return False
+        options = [
+            QuestionOption(id="reject", label="拒绝", description="不执行这次操作"),
+            QuestionOption(id="approve", label="批准本次", description="仅允许本次显示的操作"),
+        ]
+        if category is not None:
+            options.append(
+                QuestionOption(
+                    id="approve_task",
+                    label="本任务内都批准",
+                    description="本轮任务结束前，同类操作不再询问；删除文件仍会逐次确认",
+                )
+            )
         answer = await self.interaction.ask(
             UserQuestion(
                 question=(
@@ -122,18 +140,18 @@ class DelegatingToolProvider(LocalToolProvider):
                     + detail[:1600]
                     + ("\n补丁预览已截断，请展开下方完整操作详情。" if len(detail) > 1600 else "")
                 ),
-                options=[
-                    QuestionOption(id="reject", label="拒绝", description="不执行这次操作"),
-                    QuestionOption(
-                        id="approve", label="批准本次", description="仅允许本次显示的操作"
-                    ),
-                ],
+                options=options,
                 recommended_option_id="reject",
                 requires_confirmation=True,
             ),
             operation={"title": title, "detail": detail},
         )
-        return answer.get("source") == "user" and answer.get("option_id") == "approve"
+        if answer.get("source") != "user":
+            return False
+        if category is not None and answer.get("option_id") == "approve_task":
+            self.approved_categories.add(category)
+            return True
+        return answer.get("option_id") == "approve"
 
     async def model_tools(self) -> list[dict[str, object]]:
         tools = list(await super().model_tools())
@@ -159,7 +177,7 @@ class DelegatingToolProvider(LocalToolProvider):
                 tool_call_id, tool_name, "PERMISSION_DENIED", "本轮只读：不能修改文件或运行项目代码"
             )
         if tool_name in {"run_tests", "run_checks"} and self.permission_mode == "confirm":
-            if not await self._approve("运行项目代码", tool_name + "\n" + raw_arguments):
+            if not await self._approve("运行项目代码", tool_name + "\n" + raw_arguments, "run"):
                 return tool_error_result(tool_call_id, tool_name, "PERMISSION_DENIED", "未批准运行")
         if tool_name in {"run_tests", "run_checks"} and self.changed_paths:
             return tool_error_result(
@@ -172,8 +190,14 @@ class DelegatingToolProvider(LocalToolProvider):
             try:
                 payload = json.loads(raw_arguments)
                 entry = self.journal.prepare(tool_call_id, payload["patch"])
-                if self.permission_mode == "confirm" or patch_deletes_files(entry["patch"]):
-                    if not await self._approve("写入以下补丁", entry["patch"]):
+                sensitive = patch_deletes_files(entry["patch"]) or any(
+                    name.replace("\\", "/").casefold().startswith(VERIFICATION_CONFIG_DIRECTORY)
+                    for name in entry["files"]
+                )
+                if self.permission_mode == "confirm" or sensitive:
+                    title = "修改验证配置或删除文件" if sensitive else "写入以下补丁"
+                    category = None if sensitive else "patch"
+                    if not await self._approve(title, entry["patch"], category):
                         return tool_error_result(
                             tool_call_id, tool_name, "PERMISSION_DENIED", "本次修改未获明确批准"
                         )
@@ -201,21 +225,24 @@ class DelegatingToolProvider(LocalToolProvider):
                     raise ValueError("verify_project 不接受参数")
                 if self.permission_mode == "confirm" and not await self._approve(
                     "运行基础检查",
-                    "只在隔离容器内运行测试、检查和构建；不允许项目代码访问网络或改写原工作区。",
+                    "只在隔离容器内运行测试、检查和构建；不允许项目代码访问网络或改写原工作区。"
+                    "检查失败时会在另一份隔离副本中运行修改前的版本作对比。",
+                    "verify",
                 ):
                     return tool_error_result(
                         tool_call_id, tool_name, "PERMISSION_DENIED", "未批准运行项目代码"
                     )
+                originals = self.journal.originals()
                 if self.acceptance_workspace is None:
                     self.baseline = await self.verifier(
-                        self.root, sorted(self.changed_paths), tool_call_id
+                        self.root, sorted(self.changed_paths), tool_call_id, originals
                     )
                 else:
                     async with self.acceptance_workspace(
                         self.root, self.artifacts / ("baseline-" + uuid4().hex[:12])
                     ) as workspace:
                         self.baseline = await self.verifier(
-                            workspace.root, sorted(self.changed_paths), tool_call_id
+                            workspace.root, sorted(self.changed_paths), tool_call_id, originals
                         )
                         if not await workspace.unchanged():
                             self.baseline = None
@@ -244,12 +271,21 @@ class DelegatingToolProvider(LocalToolProvider):
                     raise ValueError("verify_task 只接受 focus 字符串，最多 4000 字符")
                 if self.acceptance_workspace is None or self.acceptance_context is None:
                     raise ValueError("独立验收尚未配置")
-                if self.baseline is None or self.baseline.status is not ToolStatus.SUCCESS:
-                    raise ValueError("请先运行并通过 verify_project 基础检查")
+                if (
+                    self.baseline is None
+                    or self.baseline.status is not ToolStatus.SUCCESS
+                    or not isinstance(self.baseline.output, dict)
+                    or self.baseline.output.get("outcome", "PASSED") != "PASSED"
+                ):
+                    raise ValueError(
+                        "请先运行并通过 verify_project 基础检查；"
+                        "基础检查无法运行或不需要运行时，不进行独立验收"
+                    )
                 if self.permission_mode == "confirm" and not await self._approve(
                     "启动独立测试 Agent",
                     "额外调用模型，依据原始需求检查改动，在隔离副本补写测试并运行。"
                     "不修改原项目；测试和报告保存为本次任务的验收记录。",
+                    "acceptance",
                 ):
                     return tool_error_result(
                         tool_call_id, tool_name, "PERMISSION_DENIED", "未批准独立验收"
