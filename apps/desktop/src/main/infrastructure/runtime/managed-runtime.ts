@@ -24,15 +24,23 @@ export function managedHeaders(url: string): Record<string, string> {
 
 function settingsPath(): string { return join(app.getPath("userData"), "model-settings.json"); }
 
+/** responses：支持 /v1/responses 的服务；chat_completions：只提供 /v1/chat/completions 的兼容服务。 */
+const modelApis = new Set(["responses", "chat_completions"]);
+function modelApi(value: unknown): string {
+  return typeof value === "string" && modelApis.has(value) ? value : "responses";
+}
+
 export function modelSettings(includeSecret = false): Record<string, string | boolean> {
-  if (!existsSync(settingsPath())) return { baseUrl: "", model: "", configured: false };
+  const empty = { baseUrl: "", model: "", api: "responses", configured: false };
+  if (!existsSync(settingsPath())) return empty;
   let value: Record<string, string>;
   try { value = JSON.parse(readFileSync(settingsPath(), "utf8")) as Record<string, string>; }
-  catch (error) { return { baseUrl: "", model: "", configured: false,
+  catch (error) { return { ...empty,
     error: publicError(desktopDiagnostics().failure("settings_recovery_failed", error), "设置文件无法读取，请重新填写") }; }
-  if (!value || typeof value !== "object" || Array.isArray(value)) return { baseUrl: "", model: "", configured: false };
+  if (!value || typeof value !== "object" || Array.isArray(value)) return empty;
   const result: Record<string, string | boolean> = {
-    baseUrl: value.baseUrl ?? "", model: value.model ?? "", configured: Boolean(value.encryptedKey),
+    baseUrl: value.baseUrl ?? "", model: value.model ?? "", api: modelApi(value.api),
+    configured: Boolean(value.encryptedKey),
   };
   if (includeSecret && value.encryptedKey) {
     if (!safeStorage.isEncryptionAvailable()) throw new Error("系统密钥保护暂不可用，不能读取模型密钥");
@@ -41,7 +49,8 @@ export function modelSettings(includeSecret = false): Record<string, string | bo
   return result;
 }
 
-export async function saveModelSettings(input: unknown): Promise<Record<string, string | boolean>> {
+/** 表单里的地址、模型名和密钥；密钥留空时使用已保存的那一个。 */
+function modelInput(input: unknown): { baseUrl: string; model: string; apiKey: string; api: string } {
   if (!address) throw new Error("模型设置需要独立桌面运行服务；开发模式请使用环境变量");
   if (!input || typeof input !== "object") throw new Error("设置格式错误");
   const values = input as Record<string, unknown>;
@@ -50,21 +59,38 @@ export async function saveModelSettings(input: unknown): Promise<Record<string, 
   const apiKey = typeof values.apiKey === "string" && values.apiKey.trim() ? values.apiKey.trim() : previous.apiKey;
   if (typeof apiKey !== "string" || !apiKey) throw new Error("请填写 API Key");
   registerSecret(apiKey);
+  return { baseUrl: values.baseUrl.trim(), model: values.model.trim(), apiKey,
+    api: values.api === "auto" ? "auto" : modelApi(values.api) };
+}
+
+export async function saveModelSettings(input: unknown): Promise<Record<string, string | boolean>> {
+  const { baseUrl, model, apiKey, api } = modelInput(input);
+  if (api === "auto") throw new Error("请先测试连接，确定接口类型后再保存");
   if (!safeStorage.isEncryptionAvailable()) throw new Error("系统加密不可用，拒绝明文保存密钥");
-  const baseUrl = values.baseUrl.trim();
-  const model = values.model.trim();
   const response = await fetch(`${address}/v1/model`, {
     method: "POST", headers: { ...managedHeaders(address), "content-type": "application/json" },
-    body: JSON.stringify({ base_url: baseUrl, model, api_key: apiKey }),
+    body: JSON.stringify({ base_url: baseUrl, model, api_key: apiKey, api }),
     signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) throw new Error(`模型配置被拒绝（HTTP ${response.status}），请检查地址和字段`);
   const path = settingsPath();
   const temporary = `${path}.tmp`;
-  writeFileSync(temporary, JSON.stringify({ baseUrl, model,
+  writeFileSync(temporary, JSON.stringify({ baseUrl, model, api,
     encryptedKey: safeStorage.encryptString(apiKey).toString("base64") }), "utf8");
   renameSync(temporary, path);
   return modelSettings();
+}
+
+/** 用表单当前的值真实请求一次模型；不保存、不改变正在使用的配置。 */
+export async function testModelSettings(input: unknown): Promise<Record<string, unknown>> {
+  const { baseUrl, model, apiKey, api } = modelInput(input);
+  const response = await fetch(`${address}/v1/model/test`, {
+    method: "POST", headers: { ...managedHeaders(address), "content-type": "application/json" },
+    body: JSON.stringify({ base_url: baseUrl, model, api_key: apiKey, api }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!response.ok) throw new Error(`测试请求被拒绝（HTTP ${response.status}），请检查地址格式`);
+  return await response.json() as Record<string, unknown>;
 }
 
 export async function startManagedRuntime(): Promise<void> {
@@ -83,7 +109,8 @@ export async function startManagedRuntime(): Promise<void> {
     BIT_AGENT_GATEWAY_TOKEN: token, BIT_AGENT_PROJECT_ROOT: join(resources, "backend"),
     BIT_AGENT_PYTHON: join(resources, "python", "python.exe"), BIT_AGENT_DATA_DIR: data,
     PATH: [join(resources, "tools"), process.env.PATH ?? ""].join(delimiter),
-    ...(settings.apiKey ? { API_KEY: String(settings.apiKey), BASE_URL: String(settings.baseUrl), MODEL_NAME: String(settings.model) } : {}),
+    ...(settings.apiKey ? { API_KEY: String(settings.apiKey), BASE_URL: String(settings.baseUrl),
+      MODEL_NAME: String(settings.model), MODEL_API: modelApi(settings.api) } : {}),
   };
   child = spawn(process.execPath, [join(resources, "gateway", "index.mjs")], {
     env, cwd: data, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],

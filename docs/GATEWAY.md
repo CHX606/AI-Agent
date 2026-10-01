@@ -62,7 +62,8 @@ pnpm --dir apps/gateway dev
 | `PATCH /v1/sessions/{session_id}` | 切换多 Agent 模式（`off`、`on`、`auto`）。 |
 | `GET /v1/memories?workspace_root=...` | 本项目（省略参数时为全部项目）的长期记忆，见 [记忆说明](MEMORY.md)。 |
 | `DELETE /v1/memories/{memory_id}` | 删除一条长期记忆，之后不再参与召回。 |
-| `POST /v1/model` | 桌面主进程写入模型配置；需要设置 `BIT_AGENT_GATEWAY_TOKEN`。 |
+| `POST /v1/model` | 桌面主进程写入模型配置（含接口类型 `api`）；需要设置 `BIT_AGENT_GATEWAY_TOKEN`。 |
+| `POST /v1/model/test` | 桌面主进程用一次真实请求测试模型配置，`api` 为 `auto` 时自动检测接口类型；不改变当前配置；同样需要令牌。 |
 | `GET /v1/diagnostics` | 诊断快照，见 [桌面诊断](DESKTOP_DIAGNOSTICS.md)。 |
 
 创建任务的 JSON 示例：

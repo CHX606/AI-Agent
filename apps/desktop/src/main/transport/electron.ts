@@ -25,7 +25,8 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
   const { diagnostics, gatewayClient, saveDiagnosticBundle, loadTheme, saveTheme,
     readExecutionSettings, writeExecutionSettings, listRepositoryDirectory,
     readRepositoryFile, validateRepositoryWorkspace, managedHeaders, modelSettings,
-    runtimeConfiguration, saveModelSettings, startManagedRuntime, stopManagedRuntime } = services;
+    runtimeConfiguration, saveModelSettings, testModelSettings, dockerStatus,
+    startManagedRuntime, stopManagedRuntime } = services;
   installProcessDiagnostics(diagnostics);
   diagnostics.record("info", "desktop_starting");
   let fatalHandled = false;
@@ -157,6 +158,8 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
     ipcMain.on("desktop:config", (event) => { event.returnValue = runtimeConfiguration(); });
     handle("model:get", () => modelSettings());
     handle("model:save", (_event, input: unknown) => saveModelSettings(input));
+    handle("model:test", (_event, input: unknown) => testModelSettings(input));
+    handle("environment:docker", () => dockerStatus());
     handle("execution:get", () => readExecutionSettings(app.getPath("userData")));
     handle("execution:save", (_event, input: unknown) => writeExecutionSettings(app.getPath("userData"), input));
     handle("changes:get", (_event, raw: TaskRequestInput) => {

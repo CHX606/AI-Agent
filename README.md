@@ -114,6 +114,9 @@ pnpm 的包仓库由 `pnpm-workspace.yaml` 的 `storeDir` 指定为项目目录�
 - `API_KEY`：访问模型服务使用的凭据。
 - `BASE_URL`：模型服务地址。
 - `MODEL_NAME`：模型名称。
+- `MODEL_API`：接口类型。服务支持 `/v1/responses` 时用 `responses`（默认）；只提供 `/v1/chat/completions` 的兼容服务（多数国内服务商、Ollama 等本地推理服务）用 `chat_completions`。
+
+便携版在界面“模型设置”中填写，点“测试连接”会用一次真实请求检查地址、密钥和模型，并自动选中可用的接口类型。
 
 如果需要长期记忆，再按 [记忆说明](docs/MEMORY.md) 配置独立的向量服务和数据库。Ollama 是一种向量服务配置选择，不是普通任务必须启动的组件。
 

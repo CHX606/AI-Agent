@@ -520,14 +520,19 @@ class AgentRuntime:
             )
             return result
 
-    async def configure_model(self, input: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _model_input(input: dict[str, Any], *, allow_auto: bool) -> tuple[str, str, str, str]:
         from urllib.parse import urlparse
 
         url = input.get("base_url", "")
         model = input.get("model", "")
         key = input.get("api_key", "")
+        api = input.get("api", "responses")
         if not all(isinstance(value, str) and value.strip() for value in (url, model, key)):
             raise ValueError("模型地址、模型名和密钥不能为空")
+        allowed = {"responses", "chat_completions", *({"auto"} if allow_auto else set())}
+        if api not in allowed:
+            raise ValueError("接口类型只能是 " + "、".join(sorted(allowed)))
         parsed = urlparse(url)
         if parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("模型地址不能夹带用户名、密钥或查询参数")
@@ -535,8 +540,19 @@ class AgentRuntime:
             parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
         ):
             raise ValueError("远程模型必须使用 HTTPS，本地模型允许 HTTP")
-        os.environ.update(API_KEY=key, BASE_URL=url, MODEL_NAME=model)
-        return {"configured": True, "model": model, "base_url": url}
+        return url, model, key, api
+
+    async def configure_model(self, input: dict[str, Any]) -> dict[str, Any]:
+        url, model, key, api = self._model_input(input, allow_auto=False)
+        os.environ.update(API_KEY=key, BASE_URL=url, MODEL_NAME=model, MODEL_API=api)
+        return {"configured": True, "model": model, "base_url": url, "api": api}
+
+    async def test_model(self, input: dict[str, Any]) -> dict[str, Any]:
+        """真实请求一次模型；不修改当前生效的配置。"""
+        from bit_agent.llm.probe import probe_model
+
+        url, model, key, api = self._model_input(input, allow_auto=True)
+        return await probe_model(url, model, key, api)
 
     async def close(self) -> None:
         self._closing = True

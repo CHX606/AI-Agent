@@ -160,6 +160,10 @@ export class LocalTaskStore implements TaskStore {
     return this.call("configure_model", { input });
   }
 
+  testModel(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.call("test_model", { input });
+  }
+
   createTask(input: CreateTaskBody): Promise<TaskRecord> {
     return this.call("create_task", { input });
   }

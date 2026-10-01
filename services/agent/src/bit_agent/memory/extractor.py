@@ -6,6 +6,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from bit_agent.llm.text import create_text
 from bit_agent.memory.budget import estimate_tokens
 from bit_agent.memory.compaction import (
     DeterministicEvidenceCompactor,
@@ -95,22 +96,15 @@ class LLMMemoryCandidateExtractor:
                     "请重新返回完整且合法的 JSON。"
                 )
             try:
-                response = await asyncio.to_thread(
-                    self.response_client.responses.create,
+                text = await asyncio.to_thread(
+                    create_text,
+                    self.response_client,
                     model=self.model_name,
-                    input=[
-                        {
-                            "role": "developer",
-                            "content": base_instructions + correction,
-                        },
-                        {
-                            "role": "user",
-                            "content": compacted.model_dump_json(indent=2),
-                        },
-                    ],
+                    instructions=base_instructions + correction,
+                    content=compacted.model_dump_json(indent=2),
                     timeout=self.request_timeout_seconds,
                 )
-                payload = _extract_json_object(response.output_text)
+                payload = _extract_json_object(text)
                 batch = MemoryCandidateBatch.model_validate(_normalize_candidate_schema(payload))
                 return _select_candidates(batch.candidates, self.policy)
             except Exception as exc:

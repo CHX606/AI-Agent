@@ -52,6 +52,7 @@ async def main() -> None:
         "get_changes": runtime.get_changes,
         "review_change": runtime.review_change,
         "configure_model": runtime.configure_model,
+        "test_model": runtime.test_model,
         "read_events": runtime.read_events,
         "list_sessions": runtime.list_sessions,
         "get_session": runtime.get_session,

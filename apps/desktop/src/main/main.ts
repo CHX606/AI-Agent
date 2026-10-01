@@ -8,13 +8,14 @@ import { desktopDiagnostics, saveDiagnosticBundle } from "./infrastructure/obser
 import * as repository from "./infrastructure/persistence/repository.js";
 import * as executionSettings from "./infrastructure/persistence/execution-settings.js";
 import { createThemePreferences } from "./infrastructure/persistence/theme-preferences.js";
+import { dockerStatus } from "./infrastructure/runtime/docker-status.js";
 import * as runtime from "./infrastructure/runtime/managed-runtime.js";
 import { startDesktop } from "./transport/electron.js";
 
 if (process.env.BIT_AGENT_DESKTOP_USER_DATA) app.setPath("userData", process.env.BIT_AGENT_DESKTOP_USER_DATA);
 const diagnostics = desktopDiagnostics();
 const services: DesktopServices = {
-  ...repository, ...executionSettings, ...runtime,
+  ...repository, ...executionSettings, ...runtime, dockerStatus,
   ...createThemePreferences(app.getPath("userData")),
   diagnostics, saveDiagnosticBundle,
   gatewayClient: new GatewayClient(diagnostics, runtime.managedHeaders),

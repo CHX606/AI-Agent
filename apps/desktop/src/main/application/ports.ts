@@ -22,6 +22,8 @@ export interface RuntimePort {
   runtimeConfiguration(): { managed: boolean; gatewayUrl: string; startupError: string };
   modelSettings(includeSecret?: boolean): Record<string, string | boolean>;
   saveModelSettings(input: unknown): Promise<Record<string, string | boolean>>;
+  testModelSettings(input: unknown): Promise<Record<string, unknown>>;
+  dockerStatus(): Promise<"ready" | "not_installed" | "not_running">;
   startManagedRuntime(): Promise<void>;
   stopManagedRuntime(): Promise<void>;
 }

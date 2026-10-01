@@ -51,7 +51,11 @@ export class MemoryTaskStore implements TaskStore {
   }
 
   async configureModel(input: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return { configured: true, model: input.model, base_url: input.base_url };
+    return { configured: true, model: input.model, base_url: input.base_url, api: input.api ?? "responses" };
+  }
+
+  async testModel(_input: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return { ok: false, api: null, message: "内存存储不连接真实模型", attempts: [] };
   }
 
   async listMemories(_workspaceRoot?: string): Promise<Record<string, unknown>> {

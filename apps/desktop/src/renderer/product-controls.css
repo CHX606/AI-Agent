@@ -127,7 +127,8 @@
 .product-feedback[data-kind="success"] { background: var(--green-soft); color: var(--green); }
 .model-settings-form { display: grid; gap: 20px; }
 .model-field label { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; font-size: 13px; font-weight: 600; }
-.model-field input {
+.model-field input,
+.model-field select {
   width: 100%;
   height: 38px;
   padding: 0 11px;
@@ -138,7 +139,13 @@
   font-size: 13px;
 }
 .model-field input::placeholder { color: var(--text-faint); }
-.model-field input:focus { outline: none; border-color: var(--field-focus-border); box-shadow: var(--field-focus-ring); }
+.model-field input:focus,
+.model-field select:focus { outline: none; border-color: var(--field-focus-border); box-shadow: var(--field-focus-ring); }
+.model-test-result { padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-panel); font-size: 12px; line-height: 1.65; }
+.model-test-result[data-ok="true"] { border-color: color-mix(in srgb, var(--green) 40%, var(--border)); background: var(--green-soft); }
+.model-test-result[data-ok="false"] { border-color: color-mix(in srgb, var(--red) 40%, var(--border)); background: var(--red-soft); }
+.model-test-result ul { margin: 4px 0 0 16px; color: var(--text-soft); }
+.docker-notice { margin: 0 0 8px; padding: 8px 12px; border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border)); border-radius: 8px; background: var(--amber-soft); color: var(--text-soft); font-size: 12px; line-height: 1.6; }
 .model-field p { margin-top: 6px; color: var(--text-muted); font-size: 12px; line-height: 1.65; }
 .model-key-state { padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-size: 10px; font-weight: 400; }
 .model-settings-footer { display: flex; align-items: center; gap: 8px; padding-top: 18px; border-top: 1px solid var(--border); }

@@ -121,6 +121,13 @@ export function createHttpApp(
         }
         return taskStore.configureModel(request.body);
     });
+    app.post<{ Body: Record<string, unknown> }>("/v1/model/test", async (request, reply) => {
+        // 同样携带密钥，只接受桌面主进程的认证请求。
+        if (!process.env.BIT_AGENT_GATEWAY_TOKEN) {
+            return reply.code(403).send({ error: "MANAGED_DESKTOP_REQUIRED" });
+        }
+        return taskStore.testModel(request.body);
+    });
     app.get<{ Params: { taskId: string } }>("/v1/tasks/:taskId/changes", async (request) => {
         return taskStore.getChanges(request.params.taskId);
     });
