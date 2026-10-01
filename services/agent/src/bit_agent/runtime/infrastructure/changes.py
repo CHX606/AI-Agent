@@ -100,6 +100,14 @@ class ChangeJournal:
         entry["status"] = "unreviewed"
         write_json(self.path, self.entries)
 
+    def originals(self) -> dict[str, str | None]:
+        """本轮任务修改前各文件的内容（base64），None 表示原来不存在。供验证做前后对比。"""
+        result: dict[str, str | None] = {}
+        for entry in self.entries:
+            for name, record in entry["files"].items():
+                result.setdefault(name, record["before"]["content"])
+        return result
+
     def public(self) -> dict:
         result = []
         for entry in self.entries:

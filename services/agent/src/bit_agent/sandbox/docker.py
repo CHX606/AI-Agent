@@ -11,11 +11,15 @@ from time import perf_counter
 from uuid import uuid4
 
 from bit_agent.sandbox.base import SandboxResult
-from bit_agent.sandbox.environment import EnvironmentPreparationError, prepare_environment
+from bit_agent.sandbox.environment import (
+    DEFAULT_IMAGE,
+    EnvironmentPreparationError,
+    ensure_base_image,
+    prepare_environment,
+)
 from bit_agent.sandbox.node_environment import prepare_node_environment
 from bit_agent.security.paths import PathSecurityError, resolve_workspace_path
 
-DEFAULT_IMAGE = "bit-agent-python-sandbox:0.1.0"
 SANDBOX_IMAGE_ENV = "BIT_AGENT_SANDBOX_IMAGE"
 _TRUNCATION_MARKER = "\n... output truncated ...\n"
 _IGNORED_CACHE_DIRECTORIES = frozenset(
@@ -64,6 +68,28 @@ def _truncate_streams(stdout: str, stderr: str, limit: int) -> tuple[str, str, b
 def _safe_name_part(value: str) -> str:
     normalized = re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
     return normalized[:20] or "unknown"
+
+
+async def docker_status(docker_executable: str = "docker", timeout: float = 10.0) -> str:
+    """ready：Docker 可用；not_installed：找不到 docker 命令；not_running：服务没有响应。"""
+    try:
+        process = await asyncio.create_subprocess_exec(
+            docker_executable,
+            "version",
+            "--format",
+            "{{.Server.Version}}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except OSError:
+        return "not_installed"
+    try:
+        await asyncio.wait_for(process.communicate(), timeout)
+    except TimeoutError:
+        process.kill()
+        await process.communicate()
+        return "not_running"
+    return "ready" if process.returncode == 0 else "not_running"
 
 
 @dataclass(frozen=True, slots=True)
@@ -285,7 +311,19 @@ class DockerSandbox:
                     "sh",
                     *command,
                 ]
+            elif self.environment_kind == "custom":
+                # 项目在 .bit-agent/verify.json 中指定的镜像：不改装镜像，只在可写副本里执行。
+                prepared_image = self.image
+                command = [
+                    "sh",
+                    "-c",
+                    "mkdir -p /tmp/work && cp -R /workspace/. /tmp/work/ && "
+                    'cd /tmp/work && exec "$@"',
+                    "sh",
+                    *command,
+                ]
             else:
+                await ensure_base_image(self.image, self.docker_executable)
                 prepared_image = await prepare_environment(
                     trusted_root, self.image, self.docker_executable
                 )
@@ -315,7 +353,7 @@ class DockerSandbox:
                 cidfile,
             )
             arguments[arguments.index(self.image)] = prepared_image
-            if self.environment_kind == "node":
+            if self.environment_kind in {"node", "custom"}:
                 # 源码仍只读挂载。构建产物和依赖复制到容器临时目录，绝不落到用户目录。
                 arguments[arguments.index("/tmp:rw,noexec,nosuid,nodev,size=64m")] = (
                     "/tmp:rw,nosuid,nodev,size=1536m"

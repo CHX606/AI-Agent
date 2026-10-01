@@ -40,6 +40,10 @@ package-dir = {"" = "services/agent/src"}
 [tool.setuptools.packages.find]
 where = ["services/agent/src"]
 
+# 默认沙箱镜像的构建上下文随包分发，缺少镜像时自动构建。
+[tool.setuptools.package-data]
+bit_agent = ["sandbox/images/python/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["services/agent/tests"]
 pythonpath = ["services/agent/src"]

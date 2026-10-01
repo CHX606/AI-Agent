@@ -111,6 +111,8 @@ async def test_docker_cli_failure_before_container_creation_is_start_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # 这里只验证 docker run 本身；跳过基础镜像检查，避免它也走到伪造的子进程。
+    monkeypatch.setenv("BIT_AGENT_AUTO_ENVIRONMENT", "0")
     sandbox = DockerSandbox(task_id="task", tool_call_id="call")
 
     class FakeProcess:
@@ -138,6 +140,7 @@ async def test_timeout_triggers_stop_remove_and_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("BIT_AGENT_AUTO_ENVIRONMENT", "0")
     sandbox = DockerSandbox(task_id="task", tool_call_id="call")
     released = asyncio.Event()
     cleanup_names: list[str] = []
@@ -231,6 +234,7 @@ async def test_long_stdout_and_stderr_are_truncated(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("BIT_AGENT_AUTO_ENVIRONMENT", "0")
     sandbox = DockerSandbox(
         task_id="task",
         tool_call_id="call",

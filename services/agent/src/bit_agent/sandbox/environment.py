@@ -13,11 +13,45 @@ from packaging.requirements import InvalidRequirement, Requirement
 from bit_agent.security.paths import resolve_workspace_path
 
 SYSTEM_PACKAGES = frozenset({"tesseract-ocr", "tesseract-ocr-chi-sim", "tesseract-ocr-eng"})
+DEFAULT_IMAGE = "bit-agent-python-sandbox:0.1.0"
+# 默认沙箱的 Dockerfile 随源码分发，用户不必手动 docker build。
+BASE_IMAGE_CONTEXT = Path(__file__).parent / "images" / "python"
 _locks: dict[tuple[asyncio.AbstractEventLoop, str], asyncio.Lock] = {}
+_ready_images: set[str] = set()
 
 
 class EnvironmentPreparationError(RuntimeError):
     """Dependencies could not be validated or installed."""
+
+
+async def ensure_base_image(image: str, docker: str) -> None:
+    """默认沙箱镜像不存在时，用随程序附带的 Dockerfile 自动构建一次。"""
+    if image in _ready_images or os.getenv("BIT_AGENT_AUTO_ENVIRONMENT", "1") == "0":
+        return
+    try:
+        code, _ = await _command(
+            docker, "image", "inspect", "--format", "{{.Id}}", image, timeout=30
+        )
+        if code == 0:
+            _ready_images.add(image)
+            return
+        if image != DEFAULT_IMAGE:
+            raise EnvironmentPreparationError(f"沙箱镜像 {image} 不存在，请先构建或拉取该镜像")
+        lock = _locks.setdefault((asyncio.get_running_loop(), image), asyncio.Lock())
+        async with lock:
+            code, _ = await _command(docker, "image", "inspect", image, timeout=30)
+            if code != 0:
+                # 只用附带的固定构建上下文，不读取用户项目里的任何文件。
+                code, output = await _command(
+                    docker, "build", "-t", image, str(BASE_IMAGE_CONTEXT), timeout=900
+                )
+                if code:
+                    raise EnvironmentPreparationError(f"沙箱基础镜像构建失败：\n{output}")
+        _ready_images.add(image)
+    except (OSError, TimeoutError) as exc:
+        raise EnvironmentPreparationError(
+            f"无法检查沙箱镜像（{type(exc).__name__}）：{exc}"
+        ) from exc
 
 
 def dependency_spec(root: Path) -> tuple[list[str], list[str]]:

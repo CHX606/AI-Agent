@@ -41,7 +41,7 @@ AI Agent/
 |-- infra/
 |   |-- docker/               Docker Desktop 辅助启动脚本
 |   |-- memory/               记忆后端测试服务配置
-|   `-- sandbox/python/      Python 测试沙箱镜像配方
+|   `-- sandbox/python-web/  可选的 Web 依赖沙箱镜像配方
 |-- workspaces/               实际演示工作区
 |-- .test-runs/               运行副本和相应记录
 |-- artifacts/
@@ -184,7 +184,7 @@ Gateway 与 Python 之间的任务字段和状态没有单独的共享包，Type
 
 ## infra：帮项目准备运行环境
 
-`memory` 提供记忆后端测试环境；`sandbox/python` 定义运行目标 Python 测试的容器环境；`docker` 放 Windows 辅助启动脚本。
+`memory` 提供记忆后端测试环境；`sandbox/python-web` 是在默认沙箱上加装 Web 依赖的可选镜像（默认 Python 沙箱的配方在 `services/agent/src/bit_agent/sandbox/images/python/`，缺少时自动构建）；`docker` 放 Windows 辅助启动脚本。
 
 Dockerfile 像“环境配方”；镜像是按配方准备好的环境；容器是实际启动起来的一次运行。Dockerfile 文件本身不是一个正在运行的服务。
 

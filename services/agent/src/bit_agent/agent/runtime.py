@@ -458,6 +458,8 @@ class _AgentRun:
             raise _ContinueTask()
         if self.completed_rounds >= self.max_tool_rounds:
             raise RuntimeError(f"代码已经修改，但在最大轮数 {self.max_tool_rounds} 内未完成验证")
+        if self.verification.reminded():
+            raise RuntimeError("代码已经修改，但 Agent 多次被提醒后仍没有运行验证")
         self._start_round()
         await self.emit(AgentEventType.VERIFICATION_REQUIRED, {"round": self.completed_rounds})
         reminder = {"role": "user", "content": self.verification.reminder}
@@ -669,6 +671,7 @@ class _AgentRun:
                 "tests_passed": verification.tests_passed,
                 "quality_checks_passed": verification.quality_checks_passed,
                 "acceptance_status": verification.acceptance_status,
+                "verification_status": verification.status,
             },
         )
         return AgentRunResult(
@@ -683,6 +686,8 @@ class _AgentRun:
             tests_passed=verification.tests_passed,
             quality_checks_passed=verification.quality_checks_passed,
             acceptance_status=verification.acceptance_status,
+            verification_status=verification.status,
+            verification_notes=verification.notes[:20],
             working_memory=self.memory_tracker.snapshot(),
             memory_warnings=self.memory_warnings,
             recalled_memory_ids=self.recalled_memory_ids,

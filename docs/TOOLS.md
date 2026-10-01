@@ -21,11 +21,11 @@
 | `run_tests` | 在受控沙箱中运行 pytest。 | `target` |
 | `run_checks` | 运行预定义的静态检查、格式检查、类型检查或构建。 | `check`、`paths` |
 
-默认本地运行还提供 `verify_project`（按实际改动选择语言验证）、`ask_user`（向用户提问）和按模式开放的 `delegate_tasks`（委派只读调查）。子 Agent 仍只有阅读和搜索工具。
+默认本地运行还提供 `verify_project`（按实际改动选择语言验证，失败时与修改前对比，规则见 [VERIFICATION.md](VERIFICATION.md)）、`ask_user`（向用户提问）和按模式开放的 `delegate_tasks`（委派只读调查）。子 Agent 仍只有阅读和搜索工具。
 
 用户通过桌面的改动审阅查看真实差异并有条件撤销；没有向模型提供 `git_diff` 工具。评测器可以通过文件快照生成 Diff；这与模型能不能调用某个工具是两回事。
 
-测试沙盒默认使用 `bit-agent-python-sandbox:0.1.0`。Harness 会在测试或检查前自动读取项目依赖，构建并缓存依赖镜像；测试容器保持无网络、只读工作区和资源限制。支持范围和 OCR 系统包声明见 [自动环境准备](ENVIRONMENT.md)。也可通过 `BIT_AGENT_SANDBOX_IMAGE` 选择预置基础镜像，例如：
+测试沙盒默认使用 `bit-agent-python-sandbox:0.1.0`，本机没有时用随程序附带的 Dockerfile 自动构建一次。Harness 会在测试或检查前自动读取项目依赖，构建并缓存依赖镜像；测试容器保持无网络、只读工作区和资源限制。支持范围和 OCR 系统包声明见 [自动环境准备](ENVIRONMENT.md)。也可通过 `BIT_AGENT_SANDBOX_IMAGE` 选择预置基础镜像，例如：
 
 ```powershell
 docker build -t bit-agent-python-web-sandbox:0.1.0 infra/sandbox/python-web
@@ -94,7 +94,7 @@ docker build -t bit-agent-python-web-sandbox:0.1.0 infra/sandbox/python-web
 
 默认代码工具使用 Docker 沙箱。它为执行准备工作区快照，限制网络、用户权限、内存、CPU 和运行时间，避免把目标代码当作无限制的本机程序运行。
 
-容器中的 Python 环境由 `infra/sandbox/python/Dockerfile` 定义，与项目根目录的 `.venv` 是两个环境。本机安装了某个依赖，不代表沙箱里也已经有它。
+容器中的 Python 环境由 `services/agent/src/bit_agent/sandbox/images/python/Dockerfile` 定义，与项目根目录的 `.venv` 是两个环境。本机安装了某个依赖，不代表沙箱里也已经有它。
 
 ## 修改后什么时候允许结束
 

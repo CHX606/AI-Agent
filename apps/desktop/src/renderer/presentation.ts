@@ -6,9 +6,15 @@ interface AgentResultLike {
   tests_passed?: unknown;
   quality_checks_passed?: unknown;
   acceptance_status?: unknown;
+  verification_status?: unknown;
+  verification_notes?: unknown;
   rounds?: unknown;
   tool_calls?: unknown;
 }
+
+/** UNVERIFIED：没有能运行的检查；NOT_APPLICABLE：只改了文档等不需要检查的文件。 */
+export type VerificationStatus = "NOT_RUN" | "PASSED" | "FAILED" | "UNVERIFIED" | "NOT_APPLICABLE";
+const verificationStatuses: VerificationStatus[] = ["NOT_RUN", "PASSED", "FAILED", "UNVERIFIED", "NOT_APPLICABLE"];
 
 export interface ResultSummary {
   answer: string;
@@ -16,6 +22,8 @@ export interface ResultSummary {
   testsPassed: boolean | null;
   qualityPassed: boolean | null;
   acceptanceStatus: "NOT_RUN" | "PASSED" | "FAILED" | "NOT_VERIFIED";
+  verificationStatus: VerificationStatus;
+  verificationNotes: string[];
   rounds: number | null;
 }
 
@@ -35,6 +43,10 @@ export function summarizeResult(payload: unknown): ResultSummary {
   const calls = Array.isArray(final.tool_calls) ? final.tool_calls.map(object) : null;
   const noTests = calls !== null && !calls.some(call => ["run_tests", "verify_project"].includes(String(call?.tool_name)));
   const noQuality = calls !== null && !calls.some(call => ["run_checks", "verify_project"].includes(String(call?.tool_name)));
+  const verificationStatus = !directReply && verificationStatuses.includes(final.verification_status as VerificationStatus)
+    ? final.verification_status as VerificationStatus : "NOT_RUN";
+  // 没有能运行的检查时，测试和质量检查都不能显示成“未通过”或“通过”。
+  const skipped = verificationStatus === "UNVERIFIED" || verificationStatus === "NOT_APPLICABLE";
   return {
     answer: typeof final.final_answer === "string" ? final.final_answer
       : typeof result?.error === "string" ? result.error
@@ -42,10 +54,13 @@ export function summarizeResult(payload: unknown): ResultSummary {
     changedFiles: Array.isArray(final.changed_files)
       ? final.changed_files.filter((item): item is string => typeof item === "string")
       : [],
-    testsPassed: directReply || noTests ? null : booleanOrNull(final.tests_passed),
-    qualityPassed: directReply || noQuality ? null : booleanOrNull(final.quality_checks_passed),
+    testsPassed: directReply || noTests || skipped ? null : booleanOrNull(final.tests_passed),
+    qualityPassed: directReply || noQuality || skipped ? null : booleanOrNull(final.quality_checks_passed),
     acceptanceStatus: !directReply && ["PASSED", "FAILED", "NOT_VERIFIED"].includes(String(final.acceptance_status))
       ? final.acceptance_status as ResultSummary["acceptanceStatus"] : "NOT_RUN",
+    verificationStatus,
+    verificationNotes: Array.isArray(final.verification_notes)
+      ? final.verification_notes.filter((item): item is string => typeof item === "string") : [],
     rounds: typeof final.rounds === "number" ? final.rounds : null,
   };
 }
@@ -128,15 +143,17 @@ export function eventPresentation(event: TaskEvent): ActivityPresentation | null
     const finished = event.event_type === "TOOL_COMPLETED";
     const status = typeof payload.status === "string" ? payload.status.toUpperCase() : "";
     const succeeded = status === "SUCCESS";
+    // 没有能运行的检查不是失败，用中性提示，避免误以为代码出错。
+    const unverified = finished && payload.error_code === "VERIFICATION_UNAVAILABLE";
     const actions = toolActions[toolName] ?? ["正在执行", "操作已完成", "操作失败"];
-    const action = finished ? (succeeded ? actions[1] : actions[2]) : actions[0];
+    const action = unverified ? "无法自动验证" : finished ? (succeeded ? actions[1] : actions[2]) : actions[0];
     return {
       key: `tool:${callId}`,
       title: `${action}${target ? ` ${shortTarget(target)}` : ""}`,
-      tone: finished ? (succeeded ? "success" : "error") : "running",
+      tone: unverified ? "neutral" : finished ? (succeeded ? "success" : "error") : "running",
       toolName,
       target,
-      status: finished ? (succeeded ? "成功" : "失败") : "进行中",
+      status: unverified ? "未验证" : finished ? (succeeded ? "成功" : "失败") : "进行中",
       ...(typeof payload.duration_ms === "number" ? { durationMs: payload.duration_ms } : {}),
       ...(typeof payload.error_code === "string" ? { errorCode: `${payload.error_code}${
         typeof payload.diagnostic_id === "string" ? ` · 诊断编号：${payload.diagnostic_id}` : ""}` } : {}),

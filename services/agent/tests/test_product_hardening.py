@@ -184,7 +184,7 @@ def test_frontend_verification_is_not_pytest(tmp_path):
             {"scripts": {"test": "vitest run", "typecheck": "tsc --noEmit", "build": "vite build"}}
         )
     )
-    plan = verification_plan(tmp_path, ["src/main.ts"])
+    plan = verification_plan(tmp_path, ["src/main.ts"])["projects"]
     assert plan[0]["language"] == "node"
     assert plan[0]["commands"] == [["npm", "run", name] for name in ("test", "typecheck", "build")]
 
@@ -193,6 +193,8 @@ async def test_missing_tests_cannot_pass_verification(tmp_path):
     result = await verify_project(tmp_path, ["new.ts"], "call")
     assert result.status is not ToolStatus.SUCCESS
     assert result.output["verified"] is False
+    assert result.output["outcome"] == "UNVERIFIED"
+    assert result.error.code == "VERIFICATION_UNAVAILABLE"
 
 
 def test_pending_journal_cannot_be_automatically_undone(tmp_path):

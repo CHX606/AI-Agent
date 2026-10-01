@@ -25,6 +25,7 @@
 | Gateway 有哪些接口、任务怎样交给执行进程 | [GATEWAY.md](GATEWAY.md) |
 | COMPLETED、PARTIAL、FAILED 是什么意思 | [STATE_MACHINE.md](STATE_MACHINE.md) |
 | 模型怎么读文件、改文件和运行检查 | [TOOLS.md](TOOLS.md) |
+| 改完代码怎样验证、“无法验证”是什么意思、怎样给其他语言配置检查 | [VERIFICATION.md](VERIFICATION.md) |
 | 项目依赖怎样自动下载、环境怎样缓存 | [ENVIRONMENT.md](ENVIRONMENT.md) |
 | 多个 Agent 怎样分工 | [MULTI_AGENT.md](MULTI_AGENT.md) |
 | 当前任务记忆和长期记忆有什么区别 | [MEMORY.md](MEMORY.md) |

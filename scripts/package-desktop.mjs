@@ -85,7 +85,7 @@ writeFileSync(join(output, "README.txt"), [
   "Bit Agent Windows portable", "Run Bit Agent.exe. Keep the entire folder together.",
   "Node, Python, Gateway, Git apply and ripgrep are bundled. No system Python/Node required.",
   "Configure your model in the application. Keys are encrypted by Windows.",
-  "Docker Desktop and sandbox images are still required to execute isolated project verification.",
+  "Docker Desktop is required for isolated project verification; the default sandbox image is built automatically on first use.",
   "This is an unsigned development build, not a signed installer. Windows may show a warning.",
   "User data is stored outside this folder; replacing this release does not delete sessions.",
   "Dependency license files are retained with their installed packages. Git is GPLv2; Electron includes LICENSE and LICENSES.chromium.html.",
