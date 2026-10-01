@@ -285,8 +285,18 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
         body: JSON.stringify(body),
       });
     });
-    handle("sessions:list", (_event, gatewayUrl: string, offset = 0) =>
-      requestJson(gatewayUrl, `/v1/sessions?offset=${encodeURIComponent(String(offset))}`),
+    handle("sessions:list", (_event, gatewayUrl: string, offset = 0, query = "") => {
+      const search = typeof query === "string" && query.trim() ? `&query=${encodeURIComponent(query.trim().slice(0, 200))}` : "";
+      return requestJson(gatewayUrl, `/v1/sessions?offset=${encodeURIComponent(String(offset))}${search}`);
+    });
+    handle("sessions:rename", (_event, input: SessionRequestInput & { title: string }) => {
+      if (typeof input?.title !== "string") throw new Error("对话名称无效");
+      return requestJson(input.gatewayUrl, `/v1/sessions/${encodeURIComponent(input.sessionId)}`, {
+        method: "PATCH", body: JSON.stringify({ title: input.title }),
+      });
+    });
+    handle("sessions:delete", (_event, input: SessionRequestInput) =>
+      requestJson(input.gatewayUrl, `/v1/sessions/${encodeURIComponent(input.sessionId)}`, { method: "DELETE" }),
     );
     handle("sessions:get", (_event, input: SessionRequestInput) =>
       requestJson(input.gatewayUrl, `/v1/sessions/${encodeURIComponent(input.sessionId)}`),

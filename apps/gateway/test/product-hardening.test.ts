@@ -52,6 +52,25 @@ test("commit requests are validated before reaching local storage", async () => 
   } finally { await app.close(); }
 });
 
+test("session search, rename and delete reach local storage", async () => {
+  const store = new MemoryTaskStore();
+  const list = vi.fn(async () => ({ sessions: [] }));
+  const rename = vi.fn(async () => ({ session_id: "s", title: "新" }));
+  const remove = vi.fn(async () => ({ deleted: true }));
+  Object.assign(store, { listSessions: list, renameSession: rename, deleteSession: remove });
+  const app = buildApp({ logger: false, taskStore: store });
+  try {
+    await app.inject({ method: "GET", url: `/v1/sessions?query=${encodeURIComponent(" 登录 ")}` });
+    expect(list).toHaveBeenCalledWith(0, "登录");
+    expect((await app.inject({ method: "GET", url: `/v1/sessions?query=${"x".repeat(201)}` })).statusCode).toBe(400);
+    expect((await app.inject({ method: "PATCH", url: "/v1/sessions/s", payload: { title: 1 } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "PATCH", url: "/v1/sessions/s", payload: { title: "新" } })).json()).toEqual({ session_id: "s", title: "新" });
+    expect(rename).toHaveBeenCalledExactlyOnceWith("s", "新");
+    expect((await app.inject({ method: "DELETE", url: "/v1/sessions/s" })).json()).toEqual({ deleted: true });
+    expect(remove).toHaveBeenCalledExactlyOnceWith("s");
+  } finally { await app.close(); }
+});
+
 test("unmanaged gateway cannot receive model credentials", async () => {
   vi.stubEnv("BIT_AGENT_GATEWAY_TOKEN", "");
   const app = buildApp({ logger: false });

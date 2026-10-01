@@ -60,6 +60,8 @@ async def main() -> None:
         "list_sessions": runtime.list_sessions,
         "get_session": runtime.get_session,
         "set_mode": runtime.set_mode,
+        "rename_session": runtime.rename_session,
+        "delete_session": runtime.delete_session,
         "list_memories": runtime.list_memories,
         "delete_memory": runtime.delete_memory,
     }

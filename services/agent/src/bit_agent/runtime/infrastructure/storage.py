@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import shutil
 import sqlite3
 import threading
 from datetime import UTC, datetime
@@ -233,11 +234,22 @@ class LocalStorage:
             key=lambda update: update.get("accepted_at", task["created_at"]),
         )
 
-    def _list_sessions(self, limit: int = 200, offset: int = 0) -> dict[str, Any]:
-        rows = self._db.execute(
-            "SELECT id FROM sessions ORDER BY updated_at DESC, id LIMIT ? OFFSET ?",
-            (limit, offset),
-        ).fetchall()
+    def _list_sessions(self, limit: int = 200, offset: int = 0, query: str = "") -> dict[str, Any]:
+        if query:
+            # 标题，或者任何一轮的要求、回答里包含关键词（任务记录以原文 JSON 保存）。
+            pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern += "%"
+            rows = self._db.execute(
+                "SELECT id FROM sessions WHERE title LIKE ? ESCAPE '\\' OR id IN "
+                "(SELECT session_id FROM tasks WHERE data LIKE ? ESCAPE '\\') "
+                "ORDER BY updated_at DESC, id LIMIT ? OFFSET ?",
+                (pattern, pattern, limit, offset),
+            ).fetchall()
+        else:
+            rows = self._db.execute(
+                "SELECT id FROM sessions ORDER BY updated_at DESC, id LIMIT ? OFFSET ?",
+                (limit, offset),
+            ).fetchall()
         sessions = []
         for row in rows:
             session = self._session(row["id"])
@@ -287,6 +299,34 @@ class LocalStorage:
     def _set_mode(self, session_id: str, mode: str) -> dict[str, Any] | None:
         self._db.execute("UPDATE sessions SET mode=? WHERE id=?", (mode, session_id))
         return self._session(session_id)
+
+    def _rename_session(self, session_id: str, title: str) -> dict[str, Any] | None:
+        self._db.execute("UPDATE sessions SET title=? WHERE id=?", (title, session_id))
+        return self._session(session_id)
+
+    def _delete_session(self, session_id: str) -> list[str]:
+        """删除对话和它所有轮次的记录，返回任务编号，供随后删除对应的大文件目录。"""
+        task_ids = [
+            row["id"]
+            for row in self._db.execute("SELECT id FROM tasks WHERE session_id=?", (session_id,))
+        ]
+        for table in ("events", "transcript", "user_answers"):
+            self._db.executemany(
+                f"DELETE FROM {table} WHERE task_id=?", [(task_id,) for task_id in task_ids]
+            )
+        self._db.execute("DELETE FROM tasks WHERE session_id=?", (session_id,))
+        self._db.execute("DELETE FROM context_state WHERE session_id=?", (session_id,))
+        self._db.execute("DELETE FROM working_memory WHERE thread_id=?", (session_id,))
+        self._db.execute("DELETE FROM sessions WHERE id=?", (session_id,))
+        return task_ids
+
+    def _remove_artifacts(self, task_ids: list[str]) -> None:
+        """在数据库记录删除并提交之后调用；目录名只接受任务编号，不会越出 artifacts。"""
+        root = (self.directory / "artifacts").resolve()
+        for task_id in task_ids:
+            target = (root / task_id).resolve()
+            if target.parent == root and target.is_dir():
+                shutil.rmtree(target, ignore_errors=True)
 
     def _save_progress(
         self, session_id: str, context: dict[str, Any], memory: WorkingMemory

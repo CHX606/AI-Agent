@@ -14,9 +14,13 @@ export interface TaskStore {
   requestCancellation(taskId: string): Promise<CancellationResult>;
   interactTask(taskId: string, input: TaskInteractionBody): Promise<TaskRecord>;
   readEvents(taskId: string, afterId: string, blockMs: number): Promise<TaskEvent[]>;
-  listSessions(offset?: number): Promise<Record<string, unknown>>;
+  /** query 非空时只返回标题、要求或回答中包含它的对话。 */
+  listSessions(offset?: number, query?: string): Promise<Record<string, unknown>>;
   getSession(sessionId: string): Promise<Record<string, unknown> | null>;
   setSessionMode(sessionId: string, mode: string): Promise<Record<string, unknown> | null>;
+  renameSession(sessionId: string, title: string): Promise<Record<string, unknown>>;
+  /** 删除对话的全部记录和改动快照；正在执行的对话会被拒绝。 */
+  deleteSession(sessionId: string): Promise<Record<string, unknown>>;
   getChanges(taskId: string): Promise<Record<string, unknown>>;
   reviewChange(taskId: string, changeId: string, action: string): Promise<Record<string, unknown>>;
   /** 任务改过的文件在 Git 里的状态；只提交这些文件。 */

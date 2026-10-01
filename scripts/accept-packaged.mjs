@@ -353,10 +353,27 @@ try {
   // 重启后 Gateway 端口会变，用当前这次启动的地址。
   const remaining = await evaluate("window.bitAgent.listMemories({ gatewayUrl: window.bitAgent.runtimeConfig.gatewayUrl })");
   assert.deepEqual(remaining.memories.map((item) => item.title), ["PACKAGE-MEMORY-CANARY"]);
+  await evaluate("document.querySelector('.product-dialog-header button').click()");
+  // 对话搜索（后续轮次修改后的要求也能搜到）、重命名和删除。
+  const search = (text) => evaluate(`{const s=document.querySelector('#session-search');s.value=${JSON.stringify(text)};s.dispatchEvent(new Event('input'))}`);
+  await search("CHANGED-INTENT");
+  await check(() => evaluate("document.querySelectorAll('.history-item').length===1 && document.querySelector('.history-item').title==='PACKAGE-CANARY-73'"), "按后续轮次的要求搜索不到对话");
+  await search("NO-SUCH-CONVERSATION");
+  await check(() => evaluate("document.querySelectorAll('.history-item').length===0 && !document.querySelector('#history-empty').hidden"), "搜索不到时没有显示空结果");
+  await search("");
+  await check(() => evaluate("document.querySelectorAll('.history-item').length===1"), "清空搜索后没有恢复列表");
+  await evaluate("document.querySelector('.history-actions [data-action=rename]').click()");
+  await evaluate("{const i=document.querySelector('.history-rename');i.value='PACKAGE-RENAMED';i.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter'}))}");
+  await check(() => evaluate("document.querySelector('.history-item')?.title==='PACKAGE-RENAMED'"), "界面重命名没有生效");
+  const listSessions = "window.bitAgent.listSessions(window.bitAgent.runtimeConfig.gatewayUrl, 0)";
+  assert.equal((await evaluate(listSessions)).sessions[0].title, "PACKAGE-RENAMED");
+  await evaluate("document.querySelector('.history-actions [data-action=delete]').click()");
+  await check(() => evaluate("document.querySelectorAll('.history-item').length===0"), "界面删除对话没有生效");
+  assert.equal((await evaluate(listSessions)).sessions.length, 0);
   await close();
   writeFileSync(join(directory, "result.json"), JSON.stringify({ passed: true, executable,
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,
-    unauthorizedGatewayRejected: true, restartAndContinue: true, pauseAndSteer: true, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, gitCommit: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
+    unauthorizedGatewayRejected: true, restartAndContinue: true, pauseAndSteer: true, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, gitCommit: true, sessionSearchRenameDelete: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
   }, null, 2));
   console.log(`PACKAGED_ACCEPTANCE_PASSED ${directory}`);
 } finally {
