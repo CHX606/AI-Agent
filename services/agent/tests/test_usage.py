@@ -10,7 +10,6 @@ from bit_agent.observability import InMemoryEventSink
 from bit_agent.observability.usage import UsageMeter, current_meter
 from bit_agent.runtime.bootstrap import create_runtime
 from openai import OpenAI
-
 from test_model_api import ChatServer
 
 
