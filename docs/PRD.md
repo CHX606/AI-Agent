@@ -1,6 +1,6 @@
 # Bit Agent 产品说明与当前范围
 
-更新日期：2026-09-09。本文说明项目想解决什么问题，以及哪些部分已经有代码实现。早期“按 Day 1、Day 2 开发”的计划不再作为当前进度。
+更新日期：2026-10-01。本文说明项目想解决什么问题，以及哪些部分已经有代码实现。早期“按 Day 1、Day 2 开发”的计划不再作为当前进度。
 
 ## 这个项目要帮你做什么
 
@@ -30,6 +30,9 @@
 | Docker 沙箱 | 在隔离环境中执行测试和检查 | `sandbox`、`infra/sandbox` |
 | 独立评测与执行事件 | 保存证据，检查 Agent 是否真把题做对 | `evals`、`observability` |
 | 桌面与命令行入口 | 让用户不必直接写 Python 调用代码 | `apps/desktop`、`cli.py` |
+| 前后对比的验证 | 只追究本轮新问题，没法验证时如实说明 | `runtime/infrastructure/verification.py` |
+| 项目说明、Git 提交、外部工具 | 读取 AGENTS.md；只提交任务文件；接入用户配置的 MCP Server | `runtime/infrastructure/project_instructions.py`、`git.py`、`tool_provider/external.py` |
+| 用量统计与对话管理 | 任务 tokens 与估算费用；对话搜索、重命名、删除 | `observability/usage.py`、`runtime/infrastructure/storage.py` |
 
 长期记忆和向量数据库已经不属于“完全没做”的功能。它们有实现和接入接口，但默认本地 AgentRuntime 没有自动装配 PostgreSQL 召回和记忆巩固。
 
@@ -42,7 +45,9 @@
 - 任意 Shell 命令执行。
 - 每次任务都一定能成功，或已有实现一定没有 bug。
 
-默认本地工具按项目选择 Python 或 npm/pnpm 单包的验证方式。多包工作区、私有依赖和缺少测试的项目不能宣称自动验证通过，支持范围见 [功能说明](PRODUCT_HARDENING.md)。
+默认本地工具按项目选择 Python 或 npm/pnpm 单包的验证方式，其他语言和多包工作区可以在 `.bit-agent/verify.json` 配置命令。没有能运行的检查时结果显示“无法验证”，不能宣称自动验证通过，规则见 [修改后的验证](VERIFICATION.md)。
+
+同一仓库仍不能同时运行两个会修改文件的任务（没有为每个任务建立独立的 Git worktree）。
 
 ## 一次任务的正常过程
 
