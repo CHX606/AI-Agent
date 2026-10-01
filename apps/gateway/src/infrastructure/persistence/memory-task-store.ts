@@ -58,6 +58,14 @@ export class MemoryTaskStore implements TaskStore {
     throw notFound("改动不存在");
   }
 
+  async configureMcp(servers: unknown[]): Promise<Record<string, unknown>> {
+    return { configured: servers.length, enabled: servers.length };
+  }
+
+  async testMcp(_server: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return { ok: false, tools: [], message: "内存存储不连接外部工具" };
+  }
+
   async gitStatus(taskId: string): Promise<Record<string, unknown>> {
     if (!this.tasks.has(taskId)) throw notFound("任务不存在");
     return { repository: false, branch: null, files: [], task_files: [] };

@@ -36,15 +36,18 @@ export function createHttpApp(
     });
 
     app.setErrorHandler((error, request, reply) => {
-        const err = error as Error & { statusCode?: number };
+        const err = error as Error & { statusCode?: number; userMessage?: unknown };
         const id = diagnosticId(err);
         diagnostics.record((err.statusCode ?? 500) < 500 ? "warn" : "error", "http_failed", {
             diagnostic_id: id,
             request_id: request.id, route: request.routeOptions.url, method: request.method,
             status_code: err.statusCode ?? 500,
         });
+        // 只透传运行服务明确写给用户的说明；其他错误仍是通用提示加诊断编号。
+        const userMessage = typeof err.userMessage === "string" ? err.userMessage : undefined;
         return reply.code(err.statusCode ?? 500).send({ error: "REQUEST_FAILED", diagnostic_id: id,
-            message: publicError(id, "请求未完成，请检查输入和本地运行服务") });
+            message: publicError(id, userMessage ?? "请求未完成，请检查输入和本地运行服务"),
+            ...(userMessage ? { user_message: userMessage } : {}) });
     });
     app.addHook("onResponse", async (request, reply) => {
         const params = request.params as { taskId?: string; sessionId?: string } | undefined;
@@ -130,6 +133,19 @@ export function createHttpApp(
             return reply.code(403).send({ error: "MANAGED_DESKTOP_REQUIRED" });
         }
         return taskStore.configureModel(request.body);
+    });
+    // 外部工具配置可能带密钥（环境变量），和模型设置一样只接受桌面主进程的认证请求。
+    app.post<{ Body: { servers?: unknown } }>("/v1/mcp", async (request, reply) => {
+        if (!process.env.BIT_AGENT_GATEWAY_TOKEN) return reply.code(403).send({ error: "MANAGED_DESKTOP_REQUIRED" });
+        const servers = request.body?.servers;
+        if (!Array.isArray(servers)) return reply.code(400).send({ error: "INVALID_SERVERS" });
+        return taskStore.configureMcp(servers);
+    });
+    app.post<{ Body: { server?: unknown } }>("/v1/mcp/test", async (request, reply) => {
+        if (!process.env.BIT_AGENT_GATEWAY_TOKEN) return reply.code(403).send({ error: "MANAGED_DESKTOP_REQUIRED" });
+        const server = request.body?.server;
+        if (!server || typeof server !== "object" || Array.isArray(server)) return reply.code(400).send({ error: "INVALID_SERVER" });
+        return taskStore.testMcp(server as Record<string, unknown>);
     });
     app.post<{ Body: Record<string, unknown> }>("/v1/model/test", async (request, reply) => {
         // 同样携带密钥，只接受桌面主进程的认证请求。

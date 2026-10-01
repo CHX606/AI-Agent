@@ -5,6 +5,7 @@ import { diagnosticId, errorFields, publicError, installProcessDiagnostics } fro
 
 import { watchTaskStream } from "./task-event-stream.js";
 
+import { isUserFacing } from "../application/errors.js";
 import { attentionNotice } from "../application/notifications.js";
 import { taskRequestBody } from "../application/task-input.js";
 
@@ -29,6 +30,7 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
     readExecutionSettings, writeExecutionSettings, listRepositoryDirectory,
     readRepositoryFile, validateRepositoryWorkspace, managedHeaders, modelSettings,
     runtimeConfiguration, saveModelSettings, testModelSettings, dockerStatus,
+    mcpServers, saveMcpServers, testMcpServer,
     startManagedRuntime, stopManagedRuntime } = services;
   installProcessDiagnostics(diagnostics);
   diagnostics.record("info", "desktop_starting");
@@ -109,6 +111,8 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
     ipcMain.handle(channel, async (event, ...args) => {
       try { return await listener(event, ...args); }
       catch (error) {
+        // 运行服务明确写给用户的说明（已带诊断编号）原样交给页面，其余只给通用提示。
+        if (isUserFacing(error)) throw new Error(error.message);
         const id = diagnostics.failure("ipc_failed", error, { operation: channel });
         throw new Error(publicError(id));
       }
@@ -190,6 +194,9 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
     handle("model:save", (_event, input: unknown) => saveModelSettings(input));
     handle("model:test", (_event, input: unknown) => testModelSettings(input));
     handle("environment:docker", () => dockerStatus());
+    handle("mcp:list", () => mcpServers());
+    handle("mcp:save", (_event, input: unknown) => saveMcpServers(input));
+    handle("mcp:test", (_event, input: unknown) => testMcpServer(input));
     handle("execution:get", () => readExecutionSettings(app.getPath("userData")));
     handle("execution:save", (_event, input: unknown) => writeExecutionSettings(app.getPath("userData"), input));
     handle("changes:get", (_event, raw: TaskRequestInput) => {

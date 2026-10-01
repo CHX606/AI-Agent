@@ -96,6 +96,19 @@ export interface MemoryListResult {
   memories: LongTermMemory[];
 }
 
+/** 外部工具（MCP Server）。env 只在新填写时出现；已保存的只给出变量名 envKeys。 */
+export interface McpServer {
+  name: string;
+  type: "stdio" | "http";
+  command?: string;
+  args?: string[];
+  url?: string;
+  enabled: boolean;
+  auto_approve: boolean;
+  envKeys?: string[];
+  env?: Record<string, string>;
+}
+
 export interface ModelTestResult {
   ok: boolean;
   api: "responses" | "chat_completions" | null;
@@ -129,6 +142,10 @@ export interface DesktopApi {
   /** 真实请求一次模型；api 为 auto 时自动检测可用的接口类型。 */
   testModelSettings(input: Record<string, unknown>): Promise<ModelTestResult>;
   dockerStatus(): Promise<"ready" | "not_installed" | "not_running">;
+  listMcpServers(): Promise<McpServer[]>;
+  /** 保存整个列表；条目带 env 时替换环境变量，不带时沿用已保存的值。 */
+  saveMcpServers(input: McpServer[]): Promise<McpServer[]>;
+  testMcpServer(input: McpServer): Promise<{ ok: boolean; tools: string[]; message: string }>;
   getExecutionSettings(): Promise<ExecutionSettings>;
   saveExecutionSettings(input: ExecutionSettings): Promise<ExecutionSettings>;
   setTheme(theme: ColorTheme): void;

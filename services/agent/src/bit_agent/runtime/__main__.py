@@ -1,6 +1,7 @@
 """通过进程输入输出接收 Gateway 请求。标准输出只放协议消息，日志走标准错误。"""
 
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -42,6 +43,14 @@ async def main() -> None:
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
     runtime = create_runtime(directory)
     await runtime.start()
+    # 桌面启动时通过环境变量交来外部工具配置（可能含密钥）；读完就从环境里移除，
+    # 避免 Git、Docker 等子进程继承。
+    configured_mcp = os.environ.pop("BIT_AGENT_MCP_SERVERS", "")
+    if configured_mcp:
+        try:
+            await runtime.configure_mcp(json.loads(configured_mcp))
+        except ValueError as exc:
+            failure("mcp_config_invalid", exc, level="warn")
     diagnostics: DiagnosticSnapshotPort = runtime
     methods = {
         "diagnostic_snapshot": diagnostics.diagnostic_snapshot,
@@ -56,6 +65,8 @@ async def main() -> None:
         "commit_changes": runtime.commit_changes,
         "configure_model": runtime.configure_model,
         "test_model": runtime.test_model,
+        "configure_mcp": runtime.configure_mcp,
+        "test_mcp": runtime.test_mcp,
         "read_events": runtime.read_events,
         "list_sessions": runtime.list_sessions,
         "get_session": runtime.get_session,

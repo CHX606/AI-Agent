@@ -46,6 +46,13 @@ const model = createServer(async (request, response) => {
   const message = { type: "message", id: `msg-${requests.length}`, status: "completed", role: "assistant",
     content: [{ type: "output_text", text, annotations: [] }] };
     let output = [message];
+  if (users.at(-1) === "PACKAGE-MCP") {
+    const called = body.input.some(item => item.type === "function_call_output" && item.call_id === "package-mcp");
+    const offered = (body.tools ?? []).some((tool) => tool.name === "mcp__self__list_files");
+    output = called || !offered
+      ? [{ ...message, content: [{ type: "output_text", text: offered ? "PACKAGE-MCP-DONE" : "MCP-TOOL-MISSING", annotations: [] }] }]
+      : [{ type: "function_call", call_id: "package-mcp", name: "mcp__self__list_files", arguments: JSON.stringify({ path: "", max_depth: 0 }) }];
+  }
   if (users.at(-1) === "PACKAGE-EDIT") {
     const patched = body.input.some(item => item.type === "function_call_output" && item.call_id === "package-patch");
     output = patched
@@ -342,6 +349,30 @@ try {
   await evaluate("Array.from(document.querySelectorAll('.change-entry button')).find(button=>button.textContent==='撤销这次改动').click()");
   await check(async () => !existsSync(join(workspace, "package-demo.py")), "界面撤销没有恢复原文件状态");
   await evaluate("document.querySelector('.product-dialog-header button').click()");
+  // 外部工具：用便携包自带的 Python 启动本项目的 MCP Server（stdio）。环境变量值加密保存、不回到页面。
+  const bundledPython = join(executable, "..", "resources", "python", "python.exe");
+  const mcpServer = { name: "self", type: "stdio", command: bundledPython,
+    args: ["-m", "bit_agent.mcp_server", "--workspace", workspace], enabled: true, auto_approve: false,
+    env: { PROBE_TOKEN: "MCP-SECRET-CANARY" } };
+  const savedTools = await evaluate(`window.bitAgent.saveMcpServers(${JSON.stringify([mcpServer])})`);
+  assert.deepEqual(savedTools.map((item) => [item.name, item.envKeys, item.env]), [["self", ["PROBE_TOKEN"], undefined]]);
+  assert(!readFileSync(join(directory, "profile", "mcp-servers.json"), "utf8").includes("MCP-SECRET-CANARY"), "外部工具密钥被明文保存");
+  const probeTools = await evaluate(`window.bitAgent.testMcpServer(${JSON.stringify({ ...mcpServer, env: undefined })})`);
+  assert(probeTools.ok && probeTools.tools.includes("list_files"), JSON.stringify(probeTools));
+  await evaluate("document.querySelector('#mcp-settings').click()");
+  await check(() => evaluate("document.querySelectorAll('.mcp-entry').length===1 && document.querySelector('.mcp-env')?.textContent.includes('PROBE_TOKEN')"), "外部工具面板没有列出服务");
+  await captureLayouts(command, evaluate, "mcp");
+  await evaluate("document.querySelector('.product-dialog-header button').click()");
+  // 新开一段对话：上一段对话撤销过改动，下一轮会被要求重新验证，与外部工具无关。
+  await evaluate("document.querySelector('#new-task').click()");
+  await evaluate("document.querySelector('#objective').value='PACKAGE-MCP';document.querySelector('#run').click()");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='WAITING_FOR_INPUT' && document.querySelector('.question-title').textContent.includes('调用外部工具 self · list_files')"), "调用外部工具前没有要求确认");
+  await evaluate("document.querySelector('input[name=agent-question-option][value=approve]').click();document.querySelector('#submit-question-answer').click()");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false'"), "批准后外部工具任务没有完成");
+  const mcpTask = await evaluate("(async()=>{const h=JSON.parse(localStorage.getItem('bit-agent.task-history.v1'));const t=h[0];return window.bitAgent.getResult({gatewayUrl:t.gatewayUrl,taskId:t.taskId});})()");
+  assert.equal(mcpTask.result.final_answer, "PACKAGE-MCP-DONE", JSON.stringify(mcpTask.result.final_answer));
+  assert.equal(mcpTask.result.tool_calls[0].tool_name, "mcp__self__list_files");
+  assert(JSON.stringify(mcpTask.result.tool_calls[0].output).includes("README.md"), "外部工具没有返回工作区文件列表");
   await evaluate("document.querySelector('#memory-settings').click()");
   const memoryTitles = "Array.from(document.querySelectorAll('.memory-entry strong')).map(item=>item.textContent)";
   await check(async () => JSON.stringify(await evaluate(memoryTitles)) === JSON.stringify(["PACKAGE-MEMORY-CANARY"]), "记忆面板没有只显示本项目的记忆");
@@ -361,19 +392,20 @@ try {
   await search("NO-SUCH-CONVERSATION");
   await check(() => evaluate("document.querySelectorAll('.history-item').length===0 && !document.querySelector('#history-empty').hidden"), "搜索不到时没有显示空结果");
   await search("");
-  await check(() => evaluate("document.querySelectorAll('.history-item').length===1"), "清空搜索后没有恢复列表");
+  // 两段对话：最新的是外部工具那一段。
+  await check(() => evaluate("document.querySelectorAll('.history-item').length===2"), "清空搜索后没有恢复列表");
   await evaluate("document.querySelector('.history-actions [data-action=rename]').click()");
   await evaluate("{const i=document.querySelector('.history-rename');i.value='PACKAGE-RENAMED';i.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter'}))}");
   await check(() => evaluate("document.querySelector('.history-item')?.title==='PACKAGE-RENAMED'"), "界面重命名没有生效");
   const listSessions = "window.bitAgent.listSessions(window.bitAgent.runtimeConfig.gatewayUrl, 0)";
-  assert.equal((await evaluate(listSessions)).sessions[0].title, "PACKAGE-RENAMED");
+  assert((await evaluate(listSessions)).sessions.some((session) => session.title === "PACKAGE-RENAMED"));
   await evaluate("document.querySelector('.history-actions [data-action=delete]').click()");
-  await check(() => evaluate("document.querySelectorAll('.history-item').length===0"), "界面删除对话没有生效");
-  assert.equal((await evaluate(listSessions)).sessions.length, 0);
+  await check(() => evaluate("document.querySelectorAll('.history-item').length===1 && document.querySelector('.history-item').title==='PACKAGE-CANARY-73'"), "界面删除对话没有生效");
+  assert.deepEqual((await evaluate(listSessions)).sessions.map((session) => session.title), ["PACKAGE-CANARY-73"]);
   await close();
   writeFileSync(join(directory, "result.json"), JSON.stringify({ passed: true, executable,
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,
-    unauthorizedGatewayRejected: true, restartAndContinue: true, pauseAndSteer: true, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, gitCommit: true, sessionSearchRenameDelete: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
+    unauthorizedGatewayRejected: true, restartAndContinue: true, pauseAndSteer: true, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, gitCommit: true, sessionSearchRenameDelete: true, externalMcpTools: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
   }, null, 2));
   console.log(`PACKAGED_ACCEPTANCE_PASSED ${directory}`);
 } finally {

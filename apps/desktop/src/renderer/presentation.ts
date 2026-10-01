@@ -179,6 +179,14 @@ export function eventPresentation(event: TaskEvent): ActivityPresentation | null
     return { key: `model:${agent}:${round}`, title: "", tone: "neutral", remove: true };
   }
 
+  if (event.event_type === "EXTERNAL_TOOLS_LOADED") {
+    const list = (value: unknown) => Array.isArray(value) ? value.map(object).filter((item) => item !== null) : [];
+    const connected = list(payload.connected).map((item) => `${String(item.name)}（${Number(item.tools) || 0} 个工具）`);
+    const failed = list(payload.failed).map((item) => String(item.name));
+    const parts = [connected.length ? `已连接外部工具 ${connected.join("、")}` : "",
+      failed.length ? `外部工具连接失败：${failed.join("、")}` : ""].filter(Boolean);
+    return { key: `external-tools:${event.id ?? ""}`, title: parts.join("；"), tone: failed.length ? "error" : "neutral" };
+  }
   if (event.event_type === "PROJECT_INSTRUCTIONS_LOADED") {
     const paths = Array.isArray(payload.paths) ? payload.paths.filter(item => typeof item === "string") : [];
     return { key: `project-instructions:${event.id ?? ""}`, tone: "neutral",
@@ -195,13 +203,17 @@ export function eventPresentation(event: TaskEvent): ActivityPresentation | null
     const callId = String(payload.tool_call_id ?? event.id ?? `${agent}:${round}`);
     const toolName = String(payload.tool_name ?? "unknown");
     const operation = object(payload.operation);
-    const target = typeof operation?.target === "string" ? operation.target : "";
+    // 外部工具名形如 mcp__服务__工具，显示成“服务 · 工具”。
+    const external = /^mcp__([A-Za-z0-9_-]+?)__(.+)$/u.exec(toolName);
+    const target = external ? `${external[1]} · ${external[2]}`
+      : typeof operation?.target === "string" ? operation.target : "";
     const finished = event.event_type === "TOOL_COMPLETED";
     const status = typeof payload.status === "string" ? payload.status.toUpperCase() : "";
     const succeeded = status === "SUCCESS";
     // 没有能运行的检查不是失败，用中性提示，避免误以为代码出错。
     const unverified = finished && payload.error_code === "VERIFICATION_UNAVAILABLE";
-    const actions = toolActions[toolName] ?? ["正在执行", "操作已完成", "操作失败"];
+    const actions = toolActions[toolName]
+      ?? (external ? ["正在调用外部工具", "外部工具已返回", "外部工具调用失败"] : ["正在执行", "操作已完成", "操作失败"]);
     const action = unverified ? "无法自动验证" : finished ? (succeeded ? actions[1] : actions[2]) : actions[0];
     return {
       key: `tool:${callId}`,

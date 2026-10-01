@@ -1,4 +1,5 @@
 import type { TaskInteractionInput, TaskRequestInput } from "../shared/contracts";
+import { errorText } from "./dom";
 import "./interaction-view.css";
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -132,7 +133,7 @@ export function createInteractionView(callbacks: {
       return true;
     } catch (failure) {
       if (matches(input)) {
-        error.textContent = failure instanceof Error ? failure.message : String(failure);
+        error.textContent = errorText(failure);
         error.hidden = false;
         // 过期问题不能重发到下一题；先取回服务端的最新状态。
         try {

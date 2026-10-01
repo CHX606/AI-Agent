@@ -28,7 +28,10 @@ export class GatewayClient implements GatewayClientPort {
         const error = new Error("Gateway error");
         const id = payload && typeof payload === "object" && "diagnostic_id" in payload
           && /^D-[a-f0-9]{16}$/u.test(String(payload.diagnostic_id)) ? payload.diagnostic_id : diagnosticId(error);
-        throw Object.assign(error, { diagnostic_id: id, statusCode: response.status });
+        const userMessage = payload && typeof payload === "object" && "user_message" in payload
+          && typeof payload.user_message === "string" ? payload.user_message.slice(0, 2000) : undefined;
+        throw Object.assign(error, { diagnostic_id: id, statusCode: response.status,
+          ...(userMessage ? { userMessage } : {}) });
       }
       if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Invalid JSON object");
       return payload as Record<string, unknown>;
@@ -36,6 +39,10 @@ export class GatewayClient implements GatewayClientPort {
       if (init?.signal?.aborted) throw error;
       const id = this.diagnostics.failure("gateway_request_failed", error, { ...fields,
         duration_ms: performance.now() - started, timeout_ms: 30_000 });
+      const userMessage = (error as { userMessage?: unknown }).userMessage;
+      if (typeof userMessage === "string") {
+        throw Object.assign(new Error(publicError(id, userMessage)), { diagnostic_id: id, userFacing: true });
+      }
       throw Object.assign(new Error(publicError(id, "请求未完成，请检查本地运行服务")), { diagnostic_id: id });
     }
   }

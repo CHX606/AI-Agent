@@ -12,6 +12,12 @@ export function object(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+/** 展示错误原文；去掉 Electron 给 IPC 错误加的“Error invoking remote method …”前缀。 */
+export function errorText(error: unknown, fallback?: string): string {
+  if (!(error instanceof Error)) return fallback ?? String(error);
+  return error.message.replace(/^Error invoking remote method '[^']*': (?:Error: )?/u, "") || fallback || "操作失败";
+}
+
 export function projectName(path: string): string {
   return path.split(/[\\/]/u).filter(Boolean).at(-1) ?? "尚未选择项目";
 }

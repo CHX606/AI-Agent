@@ -5,7 +5,9 @@ import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from "
 import { delimiter, join } from "node:path";
 import { createInterface } from "node:readline";
 import { publicError, registerSecret } from "@bit-agent/diagnostics";
+import { UserFacingError } from "../../application/errors.js";
 import { desktopDiagnostics } from "../observability/diagnostics.js";
+import { decryptedMcpServers, mcpServerList, resolveMcpServers, writeMcpServers } from "./mcp-settings.js";
 
 let child: ChildProcessWithoutNullStreams | null = null;
 let address = "";
@@ -35,7 +37,7 @@ function price(value: unknown): string {
   const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
   if (!text) return "";
   const number = Number(text);
-  if (!Number.isFinite(number) || number < 0 || number > 1_000_000) throw new Error("价格必须是 0 到 1000000 之间的数字");
+  if (!Number.isFinite(number) || number < 0 || number > 1_000_000) throw new UserFacingError("价格必须是 0 到 1000000 之间的数字");
   return String(number);
 }
 
@@ -60,7 +62,7 @@ export function modelSettings(includeSecret = false): Record<string, string | bo
     configured: Boolean(value.encryptedKey),
   };
   if (includeSecret && value.encryptedKey) {
-    if (!safeStorage.isEncryptionAvailable()) throw new Error("系统密钥保护暂不可用，不能读取模型密钥");
+    if (!safeStorage.isEncryptionAvailable()) throw new UserFacingError("系统密钥保护暂不可用，不能读取模型密钥");
     result.apiKey = safeStorage.decryptString(Buffer.from(value.encryptedKey, "base64"));
   }
   return result;
@@ -68,13 +70,13 @@ export function modelSettings(includeSecret = false): Record<string, string | bo
 
 /** 表单里的地址、模型名和密钥；密钥留空时使用已保存的那一个。 */
 function modelInput(input: unknown): { baseUrl: string; model: string; apiKey: string; api: string } {
-  if (!address) throw new Error("模型设置需要独立桌面运行服务；开发模式请使用环境变量");
-  if (!input || typeof input !== "object") throw new Error("设置格式错误");
+  if (!address) throw new UserFacingError("模型设置需要独立桌面运行服务；开发模式请使用环境变量");
+  if (!input || typeof input !== "object") throw new UserFacingError("设置格式错误");
   const values = input as Record<string, unknown>;
-  if (typeof values.baseUrl !== "string" || typeof values.model !== "string") throw new Error("请填写模型地址和名称");
+  if (typeof values.baseUrl !== "string" || typeof values.model !== "string") throw new UserFacingError("请填写模型地址和名称");
   const previous = modelSettings(!(typeof values.apiKey === "string" && values.apiKey.trim()));
   const apiKey = typeof values.apiKey === "string" && values.apiKey.trim() ? values.apiKey.trim() : previous.apiKey;
-  if (typeof apiKey !== "string" || !apiKey) throw new Error("请填写 API Key");
+  if (typeof apiKey !== "string" || !apiKey) throw new UserFacingError("请填写 API Key");
   registerSecret(apiKey);
   return { baseUrl: values.baseUrl.trim(), model: values.model.trim(), apiKey,
     api: values.api === "auto" ? "auto" : modelApi(values.api) };
@@ -82,18 +84,18 @@ function modelInput(input: unknown): { baseUrl: string; model: string; apiKey: s
 
 export async function saveModelSettings(input: unknown): Promise<Record<string, string | boolean>> {
   const { baseUrl, model, apiKey, api } = modelInput(input);
-  if (api === "auto") throw new Error("请先测试连接，确定接口类型后再保存");
+  if (api === "auto") throw new UserFacingError("请先测试连接，确定接口类型后再保存");
   const values = input as Record<string, unknown>;
   const prices = { inputPrice: price(values.inputPrice), outputPrice: price(values.outputPrice),
     currency: values.currency === "$" ? "$" : "¥" };
   const auxModel = typeof values.auxModel === "string" ? values.auxModel.trim().slice(0, 200) : "";
-  if (!safeStorage.isEncryptionAvailable()) throw new Error("系统加密不可用，拒绝明文保存密钥");
+  if (!safeStorage.isEncryptionAvailable()) throw new UserFacingError("系统加密不可用，拒绝明文保存密钥");
   const response = await fetch(`${address}/v1/model`, {
     method: "POST", headers: { ...managedHeaders(address), "content-type": "application/json" },
     body: JSON.stringify({ base_url: baseUrl, model, api_key: apiKey, api, aux_model: auxModel }),
     signal: AbortSignal.timeout(15_000),
   });
-  if (!response.ok) throw new Error(`模型配置被拒绝（HTTP ${response.status}），请检查地址和字段`);
+  if (!response.ok) throw new UserFacingError(`模型配置被拒绝（HTTP ${response.status}），请检查地址和字段`);
   const path = settingsPath();
   const temporary = `${path}.tmp`;
   writeFileSync(temporary, JSON.stringify({ baseUrl, model, api, auxModel, ...prices,
@@ -110,8 +112,37 @@ export async function testModelSettings(input: unknown): Promise<Record<string, 
     body: JSON.stringify({ base_url: baseUrl, model, api_key: apiKey, api }),
     signal: AbortSignal.timeout(60_000),
   });
-  if (!response.ok) throw new Error(`测试请求被拒绝（HTTP ${response.status}），请检查地址格式`);
+  if (!response.ok) throw new UserFacingError(`测试请求被拒绝（HTTP ${response.status}），请检查地址格式`);
   return await response.json() as Record<string, unknown>;
+}
+
+async function postManaged(path: string, body: unknown, timeout: number): Promise<Record<string, unknown>> {
+  if (!address) throw new UserFacingError("外部工具需要独立桌面运行服务；开发模式请使用环境变量 BIT_AGENT_MCP_SERVERS");
+  const response = await fetch(`${address}${path}`, {
+    method: "POST", headers: { ...managedHeaders(address), "content-type": "application/json" },
+    body: JSON.stringify(body), signal: AbortSignal.timeout(timeout),
+  });
+  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new UserFacingError(typeof payload.message === "string" ? payload.message : `请求被拒绝（HTTP ${response.status}）`);
+  }
+  return payload;
+}
+
+export function mcpServers(): Record<string, unknown>[] { return mcpServerList(); }
+
+/** 先让运行服务校验并启用，成功后才写入本机（环境变量加密）。 */
+export async function saveMcpServers(input: unknown): Promise<Record<string, unknown>[]> {
+  const { plain, encrypted } = resolveMcpServers(input);
+  await postManaged("/v1/mcp", { servers: plain }, 15_000);
+  writeMcpServers(encrypted);
+  return mcpServerList();
+}
+
+/** 连接一个服务并列出工具；环境变量留空时用同名服务已保存的值。 */
+export async function testMcpServer(input: unknown): Promise<Record<string, unknown>> {
+  const { plain } = resolveMcpServers([input]);
+  return postManaged("/v1/mcp/test", { server: { ...plain[0], enabled: true } }, 60_000);
 }
 
 export async function startManagedRuntime(): Promise<void> {
@@ -126,7 +157,12 @@ export async function startManagedRuntime(): Promise<void> {
     startupError = publicError(diagnostics.failure("settings_decryption_failed", error), "已存密钥不能解密，请重新配置模型");
   }
   if (settings.apiKey) registerSecret(String(settings.apiKey));
+  let mcp: unknown[] = [];
+  try { mcp = decryptedMcpServers(); } catch (error) {
+    diagnostics.failure("mcp_settings_decryption_failed", error);
+  }
   const env = { ...process.env, ELECTRON_RUN_AS_NODE: "1",
+    ...(mcp.length ? { BIT_AGENT_MCP_SERVERS: JSON.stringify(mcp) } : {}),
     BIT_AGENT_GATEWAY_TOKEN: token, BIT_AGENT_PROJECT_ROOT: join(resources, "backend"),
     BIT_AGENT_PYTHON: join(resources, "python", "python.exe"), BIT_AGENT_DATA_DIR: data,
     PATH: [join(resources, "tools"), process.env.PATH ?? ""].join(delimiter),

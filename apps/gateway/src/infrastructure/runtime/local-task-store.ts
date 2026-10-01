@@ -60,7 +60,8 @@ export class LocalTaskStore implements TaskStore {
     const lines = createInterface({ input: this.child.stdout });
     lines.on("line", (line) => {
       try {
-        const response = JSON.parse(line) as { id: number; result?: unknown; error?: { message?: string; status_code?: number; diagnostic_id?: string } };
+        const response = JSON.parse(line) as { id: number; result?: unknown;
+          error?: { message?: string; status_code?: number; diagnostic_id?: string; user_message?: string } };
         const pending = this.pending.get(response.id);
         if (!pending) return;
         clearTimeout(pending.timer);
@@ -73,6 +74,8 @@ export class LocalTaskStore implements TaskStore {
           pending.reject(Object.assign(new Error(response.error.message ?? "本地执行服务返回错误"), {
           statusCode: response.error.status_code ?? 500,
           diagnostic_id: response.error.diagnostic_id,
+          // 运行服务明确标为“给用户看”的说明，例如提交钩子失败的原因。
+          ...(typeof response.error.user_message === "string" ? { userMessage: response.error.user_message } : {}),
         })); }
         else pending.resolve(response.result);
       } catch (error) {
@@ -162,6 +165,14 @@ export class LocalTaskStore implements TaskStore {
 
   testModel(input: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.call("test_model", { input });
+  }
+
+  configureMcp(servers: unknown[]): Promise<Record<string, unknown>> {
+    return this.call("configure_mcp", { servers });
+  }
+
+  testMcp(server: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.call("test_mcp", { server });
   }
 
   gitStatus(taskId: string): Promise<Record<string, unknown>> {

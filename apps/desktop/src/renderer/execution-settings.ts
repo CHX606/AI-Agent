@@ -3,6 +3,7 @@ import "@awesome.me/webawesome/dist/components/input/input.js";
 import "@awesome.me/webawesome/dist/components/button/button.js";
 import "@awesome.me/webawesome/dist/translations/zh-cn.js";
 import { DEFAULT_MAX_TOOL_ROUNDS, MAX_TOOL_ROUNDS_LIMIT, parseExecutionSettings } from "../shared/execution-settings.js";
+import { errorText } from "./dom.js";
 import "./execution-settings.css";
 
 export function mountExecutionSettings(): void {
@@ -84,7 +85,7 @@ export function mountExecutionSettings(): void {
       const settings = await window.bitAgent.getExecutionSettings();
       if (current === generation && dialog.open) input.value = String(settings.maxToolRounds);
     } catch (error) {
-      if (current === generation && dialog.open) message(error instanceof Error ? error.message : "执行设置读取失败，请重新保存");
+      if (current === generation && dialog.open) message(errorText(error, "执行设置读取失败，请重新保存"));
     } finally {
       if (current === generation) busy(false);
     }
@@ -111,7 +112,7 @@ export function mountExecutionSettings(): void {
       input.value = String(saved.maxToolRounds);
       message(`已保存：每次主任务最多 ${saved.maxToolRounds} 轮。下一次发送任务时生效。`, true);
     } catch (error) {
-      message(error instanceof Error ? error.message : "保存失败，请重试");
+      message(errorText(error, "保存失败，请重试"));
     } finally {
       saving = false;
       save.loading = false;

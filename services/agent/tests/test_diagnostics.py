@@ -134,6 +134,27 @@ async def test_storage_failure_rpc_and_log_failure_do_not_hide_original(tmp_path
     storage.close()
 
 
+async def test_only_interaction_errors_reach_the_user_verbatim():
+    import io
+
+    from bit_agent.runtime.domain.errors import InteractionError
+
+    async def busy():
+        raise InteractionError("这个对话还在执行，请先停止再删除")
+
+    async def internal():
+        raise ValueError("C:/secret/path leaked")
+
+    output = io.StringIO()
+    server = JsonLineRpcServer({"busy": busy, "internal": internal}, output)
+    await server.dispatch('{"id":1,"method":"busy"}')
+    await server.dispatch('{"id":2,"method":"internal"}')
+    first, second = (json.loads(line)["error"] for line in output.getvalue().splitlines())
+    assert first["user_message"] == "这个对话还在执行，请先停止再删除"
+    assert first["status_code"] == 409
+    assert "user_message" not in second and "secret" not in second["message"]
+
+
 async def test_existing_events_supply_phase_without_exporting_contents(tmp_path):
     runtime = create_runtime(tmp_path / "data")
     task = {
