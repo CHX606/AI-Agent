@@ -27,6 +27,17 @@ def get_configuration() -> tuple[OpenAI, str]:
     return _client(values[0], values[1]), values[2]
 
 
+AUX_MODEL_ENV = "AUX_MODEL_NAME"
+
+
+def auxiliary_model_name() -> str:
+    """调查子 Agent、上下文摘要、记忆提炼和提交信息用的模型。
+
+    同一个接口地址和密钥下的另一个（通常更便宜的）模型；没有设置时用主模型。
+    """
+    return getenv(AUX_MODEL_ENV, "").strip() or get_configuration()[1]
+
+
 def model_api() -> str:
     """当前配置使用的接口类型；未设置或无法识别时沿用 Responses。"""
     value = getenv("MODEL_API", "responses").strip().casefold()

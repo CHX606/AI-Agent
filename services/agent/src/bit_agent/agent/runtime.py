@@ -755,6 +755,17 @@ class _AgentRun:
             await self.stack.aclose()
 
 
+def _summary_model(response_client: Any, model_name: str) -> str:
+    """真实客户端的上下文摘要交给辅助模型（没设置时就是主模型）；测试替身沿用传入的模型名。"""
+    if not isinstance(response_client, (OpenAI, AsyncOpenAI)):
+        return model_name
+    try:
+        from bit_agent.llm.client import AUX_MODEL_ENV
+    except ImportError:
+        return model_name
+    return os.getenv(AUX_MODEL_ENV, "").strip() or model_name
+
+
 async def run_agent(
     prompt: str,
     *,
@@ -838,7 +849,7 @@ async def run_agent(
             policy=policy,
             summarizer=LLMContextSummarizer(
                 response_client,
-                model_name,
+                _summary_model(response_client, model_name),
                 max_source_tokens=policy.summarization_input_tokens,
             ),
             artifact_store=FileContextArtifactStore(

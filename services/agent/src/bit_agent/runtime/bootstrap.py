@@ -22,8 +22,10 @@ from bit_agent.runtime.infrastructure.verification import verify_project
 def _memory_extractor() -> LLMMemoryCandidateExtractor:
     # 每次提炼时读取当前模型配置，用户在界面里改了模型也能生效。
     from bit_agent.llm.client import client, model_name
+    from bit_agent.runtime.application.delegation import auxiliary_model
 
-    return LLMMemoryCandidateExtractor(client, model_name)
+    # 记忆提炼用辅助模型；没有配置辅助模型时就是主模型。
+    return LLMMemoryCandidateExtractor(client, auxiliary_model() or model_name)
 
 
 def create_runtime(directory: Path | None = None, *, concurrency: int = 2) -> AgentRuntime:

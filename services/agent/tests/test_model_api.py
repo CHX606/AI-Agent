@@ -304,7 +304,7 @@ async def test_model_input_is_validated(payload, message):
 
 async def test_configure_model_sets_api(monkeypatch):
     # configure_model 直接写 os.environ；先经 monkeypatch 登记，测试结束后才会还原。
-    for name in ("API_KEY", "BASE_URL", "MODEL_NAME", "MODEL_API"):
+    for name in ("API_KEY", "BASE_URL", "MODEL_NAME", "MODEL_API", "AUX_MODEL_NAME"):
         monkeypatch.setenv(name, "placeholder")
     runtime = SimpleNamespace(_model_input=AgentRuntime._model_input)
     result = await AgentRuntime.configure_model(

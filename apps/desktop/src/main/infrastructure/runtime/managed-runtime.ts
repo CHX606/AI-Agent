@@ -54,6 +54,7 @@ export function modelSettings(includeSecret = false): Record<string, string | bo
   if (!value || typeof value !== "object" || Array.isArray(value)) return empty;
   const result: Record<string, string | boolean> = {
     baseUrl: value.baseUrl ?? "", model: value.model ?? "", api: modelApi(value.api),
+    auxModel: typeof value.auxModel === "string" ? value.auxModel : "",
     inputPrice: storedPrice(value.inputPrice), outputPrice: storedPrice(value.outputPrice),
     currency: value.currency === "$" ? "$" : "¥",
     configured: Boolean(value.encryptedKey),
@@ -85,16 +86,17 @@ export async function saveModelSettings(input: unknown): Promise<Record<string, 
   const values = input as Record<string, unknown>;
   const prices = { inputPrice: price(values.inputPrice), outputPrice: price(values.outputPrice),
     currency: values.currency === "$" ? "$" : "¥" };
+  const auxModel = typeof values.auxModel === "string" ? values.auxModel.trim().slice(0, 200) : "";
   if (!safeStorage.isEncryptionAvailable()) throw new Error("系统加密不可用，拒绝明文保存密钥");
   const response = await fetch(`${address}/v1/model`, {
     method: "POST", headers: { ...managedHeaders(address), "content-type": "application/json" },
-    body: JSON.stringify({ base_url: baseUrl, model, api_key: apiKey, api }),
+    body: JSON.stringify({ base_url: baseUrl, model, api_key: apiKey, api, aux_model: auxModel }),
     signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) throw new Error(`模型配置被拒绝（HTTP ${response.status}），请检查地址和字段`);
   const path = settingsPath();
   const temporary = `${path}.tmp`;
-  writeFileSync(temporary, JSON.stringify({ baseUrl, model, api, ...prices,
+  writeFileSync(temporary, JSON.stringify({ baseUrl, model, api, auxModel, ...prices,
     encryptedKey: safeStorage.encryptString(apiKey).toString("base64") }), "utf8");
   renameSync(temporary, path);
   return modelSettings();
@@ -129,7 +131,8 @@ export async function startManagedRuntime(): Promise<void> {
     BIT_AGENT_PYTHON: join(resources, "python", "python.exe"), BIT_AGENT_DATA_DIR: data,
     PATH: [join(resources, "tools"), process.env.PATH ?? ""].join(delimiter),
     ...(settings.apiKey ? { API_KEY: String(settings.apiKey), BASE_URL: String(settings.baseUrl),
-      MODEL_NAME: String(settings.model), MODEL_API: modelApi(settings.api) } : {}),
+      MODEL_NAME: String(settings.model), MODEL_API: modelApi(settings.api),
+      AUX_MODEL_NAME: String(settings.auxModel ?? "") } : {}),
   };
   child = spawn(process.execPath, [join(resources, "gateway", "index.mjs")], {
     env, cwd: data, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],

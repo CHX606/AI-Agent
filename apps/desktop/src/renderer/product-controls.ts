@@ -381,6 +381,9 @@ export function mountProductControls(current: () => TaskRequestInput,
           <p>填写模型服务提供的 API 地址，而不是聊天网页地址。</p></div>
         <div class="model-field"><label for="model-name">模型名称</label>
           <input id="model-name" name="model" required spellcheck="false" placeholder="填写服务商提供的模型名称"></div>
+        <div class="model-field"><label for="model-aux">辅助模型（可选）</label>
+          <input id="model-aux" name="auxModel" spellcheck="false" maxlength="200" placeholder="留空则全部使用上面的模型">
+          <p>同一接口地址下更便宜的模型，用于只读调查、历史摘要、经验提炼和提交信息；主任务和独立验收仍用主模型。</p></div>
         <div class="model-field"><label for="model-api">接口类型</label>
           <select id="model-api" name="api">
             <option value="responses">Responses API（OpenAI 官方等）</option>
@@ -404,6 +407,7 @@ export function mountProductControls(current: () => TaskRequestInput,
           <button type="submit" class="button-primary">保存设置</button></div>`;
       (form.elements.namedItem("baseUrl") as HTMLInputElement).value = String(settings.baseUrl ?? "");
       (form.elements.namedItem("model") as HTMLInputElement).value = String(settings.model ?? "");
+      (form.elements.namedItem("auxModel") as HTMLInputElement).value = String(settings.auxModel ?? "");
       (form.elements.namedItem("inputPrice") as HTMLInputElement).value = String(settings.inputPrice ?? "");
       (form.elements.namedItem("outputPrice") as HTMLInputElement).value = String(settings.outputPrice ?? "");
       (form.elements.namedItem("currency") as HTMLSelectElement).value = settings.currency === "$" ? "$" : "¥";
