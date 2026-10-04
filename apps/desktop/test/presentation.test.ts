@@ -160,6 +160,15 @@ it("summarizes task usage including sub agents and estimates cost", () => {
   expect(summarizeResult({ result: { task_usage: { requests: 0 } } }).usage).toBeNull();
 });
 
+it("shows expected flow outcomes as neutral, not as failures", () => {
+  const completed = (tool: string, code: string) => eventPresentation({ id: "9-0", event_type: "TOOL_COMPLETED",
+    data: { payload: { tool_name: tool, tool_call_id: `${tool}-${code}`, status: "ERROR", error_code: code } } });
+  expect(completed("verify_task", "ACCEPTANCE_NOT_APPLICABLE")).toMatchObject({ title: "无需独立验收", tone: "neutral" });
+  expect(completed("run_tests", "USE_PROJECT_VERIFICATION")).toMatchObject({ title: "改用项目整体验证", tone: "neutral" });
+  expect(completed("apply_patch", "PERMISSION_DENIED")).toMatchObject({ title: "未获批准，已跳过", tone: "neutral" });
+  expect(completed("verify_task", "ACCEPTANCE_NOT_VERIFIED")).toMatchObject({ tone: "error" });
+});
+
 it("presents external MCP connections and calls", () => {
   expect(eventTitle({ id: "4-0", event_type: "EXTERNAL_TOOLS_LOADED", data: {
     connected: [{ name: "docs", tools: 3 }], failed: [{ name: "github", error: "x" }] } }))

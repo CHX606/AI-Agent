@@ -70,6 +70,7 @@ const statusText = element<HTMLElement>("#status");
 const taskIdText = element<HTMLElement>("#task-id");
 const timeline = element<HTMLOListElement>("#timeline");
 const activityCount = element<HTMLElement>("#activity-count");
+const activityToggle = element<HTMLButtonElement>("#activity-toggle");
 const activityEmpty = element<HTMLElement>("#activity-empty");
 const answer = element<HTMLElement>("#answer");
 const files = element<HTMLElement>("#changed-files");
@@ -495,6 +496,14 @@ function appendEvent(event: TaskEvent): void {
   item.scrollIntoView({ block: "nearest" });
 }
 
+/** collapsed 为 null 时隐藏切换按钮（任务进行中或操作很少）。 */
+function setTimelineCollapsed(collapsed: boolean | null): void {
+  activityMessage.dataset.collapsed = String(collapsed === true);
+  activityToggle.hidden = collapsed === null;
+  activityToggle.textContent = collapsed ? `展开 ${eventCount} 个操作` : "收起";
+  activityToggle.setAttribute("aria-expanded", String(collapsed !== true));
+}
+
 function renderChangedFiles(changedFiles: string[]): void {
   files.replaceChildren();
   files.classList.toggle("empty-copy", changedFiles.length === 0);
@@ -552,6 +561,7 @@ function renderResult(payload: Record<string, unknown>): void {
   void renderUsage(summary.usage);
   rawResult.textContent = JSON.stringify(payload, null, 2);
   errorActions.hidden = true;
+  setTimelineCollapsed(eventCount > 6 ? true : null);
   updateActiveHistory({ finalAnswer: summary.answer });
 }
 
@@ -639,6 +649,7 @@ async function refreshSessions(append = false): Promise<void> {
 
 function prepareRun(objective: string): void {
   interactionView?.reset();
+  setTimelineCollapsed(null);
   activeObjective = objective;
   taskIdText.textContent = objective;
   taskIdText.removeAttribute("title");
@@ -794,6 +805,7 @@ function resetTask(): void {
   clearPreviousTurns();
   activeObjective = "";
   eventCount = 0;
+  setTimelineCollapsed(null);
   taskIdText.textContent = "新任务";
   taskIdText.removeAttribute("title");
   setStatus("IDLE");
@@ -857,6 +869,9 @@ retryButton.addEventListener("click", () => {
   void runAgent();
 });
 newTaskButton.addEventListener("click", resetTask);
+activityToggle.addEventListener("click", () => {
+  setTimelineCollapsed(activityMessage.dataset.collapsed !== "true");
+});
 
 objectiveInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && event.ctrlKey) {

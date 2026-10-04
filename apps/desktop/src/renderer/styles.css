@@ -1204,8 +1204,30 @@ svg {
 }
 
 .activity-count {
+  margin-left: auto;
   color: var(--text-faint);
   font: 11px var(--font-mono);
+}
+
+.activity-toggle {
+  margin-left: 10px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.activity-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* 任务结束后执行记录折叠成一行，让最终回答直接可见。 */
+.activity-message[data-collapsed="true"] .timeline,
+.activity-message[data-collapsed="true"] .activity-empty {
+  display: none;
 }
 
 .timeline {

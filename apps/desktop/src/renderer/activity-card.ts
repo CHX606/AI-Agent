@@ -24,7 +24,7 @@ export function createActivityCard(presentation: ActivityPresentation, payload: 
   const details = document.createElement("wa-details");
   details.className = "operation-card";
   details.setAttribute("appearance", "plain");
-  if (presentation.tone === "error") details.setAttribute("open", "");
+  // 失败卡片也默认折叠：红点和标题已经说明问题，展开全部会把时间线撑得很长。
   const summary = document.createElement("div");
   summary.className = "operation-summary";
   summary.slot = "summary";
@@ -54,7 +54,6 @@ export function createActivityCard(presentation: ActivityPresentation, payload: 
     description.textContent = value;
     humanDetail.append(term, description);
   };
-  addMeta("操作", presentation.title);
   addMeta("目标", presentation.target);
   addMeta("状态", presentation.status);
   addMeta("耗时", presentation.durationMs === undefined ? undefined : `${presentation.durationMs} ms`);

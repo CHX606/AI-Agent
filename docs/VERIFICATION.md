@@ -15,7 +15,7 @@ Agent 改了文件以后必须调用 `verify_project`。它只追究**这一轮�
 | `UNVERIFIED` | 没有能运行的检查（见下表） | 能，最终回答必须说明哪些改动没验证 | 无法验证（琥珀色），检查器下方列出原因 |
 | `NOT_APPLICABLE` | 只改了文档、图片、`.gitignore` 这类文件 | 能 | 无需检查 |
 
-`UNVERIFIED` 和 `NOT_APPLICABLE` 都不会触发独立验收，也不会提炼长期记忆。
+`UNVERIFIED` 和 `NOT_APPLICABLE` 都不会触发独立验收，也不会提炼长期记忆。这时 Agent 如果仍调用 `verify_task`，会得到“无需独立验收”的提示（界面上是中性的灰色，不是失败），并且不会因此被要求重新验证。
 
 常见的 `UNVERIFIED` 原因：
 
@@ -50,9 +50,11 @@ Agent 改了文件以后必须调用 `verify_project`。它只追究**这一轮�
 
 | 改动文件所在的项目 | 识别依据 | 运行的命令 |
 | --- | --- | --- |
-| Python | 目录里有 `pyproject.toml`、`pytest.ini`、`setup.cfg`、`setup.py`、`tox.ini` 或 `requirements.txt` | `pytest -q -rfE`；Ruff **只检查本轮改到的 `.py` 文件** |
+| Python | 目录里有 `pyproject.toml`、`pytest.ini`、`setup.cfg`、`setup.py`、`tox.ini` 或任意 `requirements*.txt`；什么都没有的 `.py` 文件在工作区根目录验证 | `pytest -q -rfE`；Ruff **只检查本轮改到的 `.py` 文件** |
 | Node 单包 | 有 `package.json` 和 `test` 脚本，并至少有 `lint`、`typecheck`、`build` 之一 | `npm`/`pnpm run test` 及已有的质量脚本 |
 | 文档等 | `.md`、`.rst`、图片、`LICENSE`、`CHANGELOG`、`.gitignore` 等 | 不运行检查 |
+
+项目没有自己的 Ruff 配置（`ruff.toml`、`.ruff.toml` 或 `pyproject.toml` 里的 `[tool.ruff]`）时，只检查 `E9`、`F` 两类：语法错误和明显缺陷（未定义的名字、未使用的导入等），不把 Ruff 默认的风格规则强加给从没用过它的项目。有配置时完全按项目自己的规则。
 
 Ruff 固定忽略 `EXE001`、`EXE002`：Windows 文件挂进 Linux 容器后都显示为可执行（权限 777），这两条规则会对每个文件误报。
 

@@ -124,6 +124,10 @@ class VerificationState:
                 not success or self.require_independent_acceptance
             )
         elif name == "verify_task":
+            if self.status in {"UNVERIFIED", "NOT_APPLICABLE"}:
+                # 基础检查已经说明没有能运行的检查，独立验收不适用；
+                # 不能因为这次被拒绝的调用又把改动标回“未验证”，否则会在两者之间无限循环。
+                return
             verdict = record.output.get("verdict") if isinstance(record.output, dict) else None
             if success and verdict == "PASSED":
                 self.acceptance_status = "PASSED"

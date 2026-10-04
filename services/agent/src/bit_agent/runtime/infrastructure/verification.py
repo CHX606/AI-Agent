@@ -156,12 +156,28 @@ def _default_project(root: Path, name: str) -> list[dict]:
         # 同级存在两种项目时都检查，不能用 Python 测试代替前端验证。
         if (directory / "package.json").is_file():
             selected.append({"root": directory, "language": "node"})
-        if any((directory / marker).is_file() for marker in PYTHON_MARKERS):
+        if any((directory / marker).is_file() for marker in PYTHON_MARKERS) or any(
+            item.is_file() for item in directory.glob("requirements*.txt")
+        ):
             selected.append({"root": directory, "language": "python"})
         if selected or directory == root:
             break
         directory = directory.parent
+    # 没有任何项目配置的 Python 脚本（例如只有 todo.py 和 tests/），在工作区根目录运行 pytest；
+    # 没有测试时 pytest 收集不到用例，结论是“无法验证”而不是失败。
+    if not selected and path.suffix == ".py":
+        selected.append({"root": root, "language": "python"})
     return selected
+
+
+def _has_ruff_config(directory: Path) -> bool:
+    if (directory / "ruff.toml").is_file() or (directory / ".ruff.toml").is_file():
+        return True
+    pyproject = directory / "pyproject.toml"
+    try:
+        return pyproject.is_file() and "[tool.ruff" in pyproject.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
 
 
 def _default_commands(project: dict, paths: list[str]) -> list[list[str]]:
@@ -184,6 +200,9 @@ def _default_commands(project: dict, paths: list[str]) -> list[list[str]]:
                     "--no-cache",
                     "--force-exclude",
                     "--output-format=concise",
+                    # 项目没有自己的 Ruff 配置时，只查语法错误和明显缺陷（未定义名字、未使用导入），
+                    # 不把 Ruff 默认的风格规则强加给从没用过它的项目。
+                    *([] if _has_ruff_config(directory) else ["--select=E9,F"]),
                     # Windows 文件挂进 Linux 容器后都显示为可执行（777），可执行位规则会误报。
                     "--extend-ignore=EXE001,EXE002",
                     *sorted(files),

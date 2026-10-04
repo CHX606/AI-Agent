@@ -143,10 +143,19 @@ async def test_python_change_lints_only_changed_files(python_project, sandbox):
             "--no-cache",
             "--force-exclude",
             "--output-format=concise",
+            "--select=E9,F",
             "--extend-ignore=EXE001,EXE002",
             "app.py",
         ],
     ]
+
+
+def test_projects_with_their_own_ruff_config_keep_their_rules(python_project):
+    (python_project / "pyproject.toml").write_text(
+        '[project]\nname="demo"\nversion="0.1"\n[tool.ruff.lint]\nselect=["E","F","I"]\n'
+    )
+    ruff = verification_plan(python_project, ["app.py"])["projects"][0]["commands"][1]
+    assert "--select=E9,F" not in ruff
 
 
 async def test_unsupported_language_is_unverified_not_failed(python_project, sandbox):
@@ -338,6 +347,26 @@ async def test_invalid_config_is_unverified(tmp_path, sandbox, config):
     assert calls == []
 
 
+def test_plain_python_folder_is_recognised(tmp_path):
+    # 真实遇到的项目：没有 pyproject.toml，只有脚本、tests/ 和 requirements-dev.txt。
+    (tmp_path / "todo.py").write_text("x = 1\n")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_todo.py").write_text("def test_x():\n    pass\n")
+    (tmp_path / "requirements-dev.txt").write_text("pytest>=7\n")
+    plan = verification_plan(tmp_path, ["todo.py", "tests/test_todo.py", "README.md"])
+    assert plan["unverifiable"] == []
+    assert [(p["root"], p["language"]) for p in plan["projects"]] == [("", "python")]
+    assert plan["skipped"] == ["README.md"]
+
+
+def test_python_script_without_any_manifest_uses_workspace_root(tmp_path):
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "tool.py").write_text("x = 1\n")
+    plan = verification_plan(tmp_path, ["scripts/tool.py"])
+    assert [(p["root"], p["language"]) for p in plan["projects"]] == [("", "python")]
+    assert plan["projects"][0]["commands"][1][-1] == "scripts/tool.py"
+
+
 def test_monorepo_is_unverified_with_hint(tmp_path):
     (tmp_path / "package.json").write_text(json.dumps({"workspaces": ["packages/*"]}))
     plan = verification_plan(tmp_path, ["index.ts"])
@@ -506,5 +535,97 @@ async def test_acceptance_requires_passed_baseline(tmp_path):
     )
     tools.baseline = await unverified(tmp_path, [], "c")
     result = await tools.call_tool("verify_task", "c", json.dumps({"focus": ""}))
-    assert result.error.code == "ACCEPTANCE_NOT_VERIFIED"
-    assert "不进行独立验收" in result.error.message
+    assert result.error.code == "ACCEPTANCE_NOT_APPLICABLE"
+    assert "直接给出最终回答" in result.error.message
+
+
+def test_refused_acceptance_after_unverified_baseline_does_not_reopen_changes():
+    state = VerificationState(require_independent_acceptance=True)
+    state.observe("apply_patch", call("apply_patch", {}, True, ["todo.py"]))
+    state.observe("verify_project", call("verify_project", {"outcome": "UNVERIFIED"}, False))
+    assert not state.has_unverified_changes
+    state.observe("verify_task", call("verify_task", {}, False))
+    assert not state.has_unverified_changes
+    assert state.status == "UNVERIFIED" and state.acceptance_status == "NOT_RUN"
+
+
+async def test_agent_finishes_instead_of_looping_when_nothing_can_be_verified(tmp_path):
+    """真实遇到的循环：verify_project 无法验证 → verify_task 被拒绝 → 又被要求验证……"""
+    from types import SimpleNamespace
+
+    from bit_agent.agent.runtime import run_agent
+
+    class Provider:
+        calls: list[str] = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def model_tools(self):
+            return [
+                {
+                    "type": "function",
+                    "name": name,
+                    "description": name,
+                    "parameters": {"type": "object", "properties": {}},
+                }
+                for name in ("apply_patch", "verify_project", "verify_task")
+            ]
+
+        async def call_tool(self, name, identifier, arguments):
+            self.calls.append(name)
+            outputs = {
+                "apply_patch": (ToolStatus.SUCCESS, {}, None),
+                "verify_project": (
+                    ToolStatus.ERROR,
+                    {"outcome": "UNVERIFIED"},
+                    "VERIFICATION_UNAVAILABLE",
+                ),
+                "verify_task": (ToolStatus.ERROR, None, "ACCEPTANCE_NOT_APPLICABLE"),
+            }
+            status, output, code = outputs[name]
+            return ToolResult(
+                tool_call_id=identifier,
+                tool_name=name,
+                status=status,
+                output=output,
+                error={"code": code, "message": "x", "retryable": False} if code else None,
+                metadata=ToolMetadata(
+                    duration_ms=0, affected_paths=["todo.py"] if name == "apply_patch" else []
+                ),
+            )
+
+    class Model:
+        def __init__(self):
+            self.responses = self
+            self.index = 0
+
+        def create(self, **request):
+            self.index += 1
+            names = {1: "apply_patch", 2: "verify_project", 3: "verify_task"}
+            if self.index in names:
+                call_item = SimpleNamespace(
+                    type="function_call",
+                    call_id=str(self.index),
+                    name=names[self.index],
+                    arguments="{}",
+                )
+                return SimpleNamespace(output=[call_item], output_text="")
+            return SimpleNamespace(output=[], output_text="已完成，但没有能运行的测试")
+
+    provider = Provider()
+    result = await run_agent(
+        "做一个待办工具",
+        workspace_root=tmp_path,
+        response_client=Model(),
+        model_name="fixture",
+        tool_provider=provider,
+        event_sink=InMemoryEventSink(),
+        require_independent_acceptance=True,
+    )
+    assert result.status == "COMPLETED", result.error
+    assert result.verification_status == "UNVERIFIED"
+    assert provider.calls == ["apply_patch", "verify_project", "verify_task"]

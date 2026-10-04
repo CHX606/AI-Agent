@@ -150,6 +150,14 @@ const toolActions: Record<string, [string, string, string]> = {
   delegate_tasks: ["正在启动调查", "调查已完成", "调查失败"],
 };
 
+/** 预期内的工具结果：[标题, 状态]。 */
+const expectedOutcomes: Record<string, [string, string]> = {
+  VERIFICATION_UNAVAILABLE: ["无法自动验证", "未验证"],
+  ACCEPTANCE_NOT_APPLICABLE: ["无需独立验收", "不适用"],
+  USE_PROJECT_VERIFICATION: ["改用项目整体验证", "已转交"],
+  PERMISSION_DENIED: ["未获批准，已跳过", "已拒绝"],
+};
+
 function shortTarget(value: string): string {
   if (value.length <= 72 && !value.includes("/") && !value.includes("\\")) return value;
   const parts = value.split(/[\\/]/u);
@@ -210,18 +218,19 @@ export function eventPresentation(event: TaskEvent): ActivityPresentation | null
     const finished = event.event_type === "TOOL_COMPLETED";
     const status = typeof payload.status === "string" ? payload.status.toUpperCase() : "";
     const succeeded = status === "SUCCESS";
-    // 没有能运行的检查不是失败，用中性提示，避免误以为代码出错。
-    const unverified = finished && payload.error_code === "VERIFICATION_UNAVAILABLE";
+    // 这些“错误”是预期内的流程提示，不是代码或工具出错，用中性样式，避免满屏红色。
+    const expected = finished && typeof payload.error_code === "string"
+      ? expectedOutcomes[payload.error_code] : undefined;
     const actions = toolActions[toolName]
       ?? (external ? ["正在调用外部工具", "外部工具已返回", "外部工具调用失败"] : ["正在执行", "操作已完成", "操作失败"]);
-    const action = unverified ? "无法自动验证" : finished ? (succeeded ? actions[1] : actions[2]) : actions[0];
+    const action = expected ? expected[0] : finished ? (succeeded ? actions[1] : actions[2]) : actions[0];
     return {
       key: `tool:${callId}`,
       title: `${action}${target ? ` ${shortTarget(target)}` : ""}`,
-      tone: unverified ? "neutral" : finished ? (succeeded ? "success" : "error") : "running",
+      tone: expected ? "neutral" : finished ? (succeeded ? "success" : "error") : "running",
       toolName,
       target,
-      status: unverified ? "未验证" : finished ? (succeeded ? "成功" : "失败") : "进行中",
+      status: expected ? expected[1] : finished ? (succeeded ? "成功" : "失败") : "进行中",
       ...(typeof payload.duration_ms === "number" ? { durationMs: payload.duration_ms } : {}),
       ...(typeof payload.error_code === "string" ? { errorCode: `${payload.error_code}${
         typeof payload.diagnostic_id === "string" ? ` · 诊断编号：${payload.diagnostic_id}` : ""}` } : {}),

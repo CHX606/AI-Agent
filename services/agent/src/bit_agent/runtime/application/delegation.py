@@ -329,6 +329,20 @@ class DelegatingToolProvider(LocalToolProvider):
                     raise ValueError("verify_task 只接受 focus 字符串，最多 4000 字符")
                 if self.acceptance_workspace is None or self.acceptance_context is None:
                     raise ValueError("独立验收尚未配置")
+                outcome = (
+                    self.baseline.output.get("outcome")
+                    if self.baseline is not None and isinstance(self.baseline.output, dict)
+                    else None
+                )
+                if outcome in {"UNVERIFIED", "NOT_APPLICABLE"}:
+                    # 不是失败：没有能运行的检查时独立验收也跑不了，告诉模型直接收尾。
+                    return tool_error_result(
+                        tool_call_id,
+                        tool_name,
+                        "ACCEPTANCE_NOT_APPLICABLE",
+                        "不需要独立验收：基础检查没有能运行的检查。不要再调用 verify_task 或 "
+                        "verify_project，直接给出最终回答，并说明哪些改动没有经过验证。",
+                    )
                 if (
                     self.baseline is None
                     or self.baseline.status is not ToolStatus.SUCCESS

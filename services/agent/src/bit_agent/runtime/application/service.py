@@ -341,8 +341,9 @@ class AgentRuntime:
                             MODE_INSTRUCTIONS[task["multi_agent_mode"]]
                             + INTERACTION_INSTRUCTIONS
                             + "修改文件后必须调用 verify_project 完成基础检查。"
-                            + "它返回 VERIFICATION_UNAVAILABLE 表示没有能运行的检查："
-                            "不要为通过验证去改测试或验证配置，在最终回答中如实说明哪些改动未经验证。"
+                            + "它返回 VERIFICATION_UNAVAILABLE 或 NOT_APPLICABLE "
+                            "表示没有能运行的检查：不要为通过验证去改测试或验证配置，"
+                            "也不要再调用 verify_task，直接给出最终回答，如实说明哪些改动未经验证。"
                             + (
                                 "基础通过后调用 verify_task 独立验收；两者通过才可宣称完成。"
                                 if self.acceptance_workspace
