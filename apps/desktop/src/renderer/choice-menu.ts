@@ -146,7 +146,7 @@ export class ChoiceMenu extends HTMLElement {
     const items = this.items();
     const index = items.indexOf(document.activeElement as HTMLButtonElement);
     if (event.key === "Escape") {
-      // 只关菜单，不能冒泡到全局的“Esc 暂停”。
+      // 只关菜单，不让 Esc 冒泡到页面上的其他处理。
       event.preventDefault();
       event.stopPropagation();
       this.close(true);

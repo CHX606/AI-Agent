@@ -66,6 +66,40 @@
   --font-mono: "Cascadia Code", "SFMono-Regular", "Segoe UI Mono", Consolas,
     "Microsoft YaHei UI", monospace;
   --shadow-composer: 0 8px 30px rgb(35 35 32 / 8%), 0 1px 2px rgb(35 35 32 / 8%);
+  /* 自绘标题栏的高度；页面主体占剩下的高度。 */
+  --titlebar-height: 32px;
+  --app-height: calc(100vh - var(--titlebar-height));
+}
+
+.window-titlebar {
+  display: flex;
+  height: var(--titlebar-height);
+  align-items: center;
+  gap: 8px;
+  /* 右侧约 140px 是系统的最小化、最大化、关闭按钮。 */
+  padding: 0 150px 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-app);
+  color: var(--text-muted);
+  font-size: 12px;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.window-titlebar-mark {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--brand);
+  color: #fff;
+  font: 700 10px/1 var(--font-sans);
+}
+
+.window-titlebar-title {
+  color: var(--text-soft);
+  font-weight: 500;
 }
 
 :root[data-theme="dark"] {
@@ -203,7 +237,7 @@ svg {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(480px, 1fr) var(--inspector-width);
   width: 100vw;
-  height: 100vh;
+  height: var(--app-height);
   overflow: hidden;
   background: var(--bg-app);
 }
@@ -235,7 +269,7 @@ svg {
   display: grid;
   grid-template-columns: var(--rail-width) minmax(0, 1fr);
   min-width: 0;
-  height: 100vh;
+  height: var(--app-height);
   overflow: hidden;
   border-right: 1px solid var(--border);
   background: var(--bg-sidebar);
@@ -875,7 +909,7 @@ svg {
   position: relative;
   display: grid;
   min-width: 0;
-  height: 100vh;
+  height: var(--app-height);
   grid-template-rows: 52px minmax(0, 1fr) auto;
   overflow: hidden;
   background: var(--bg-main);
@@ -1216,7 +1250,7 @@ body[data-steering="WAITING_FOR_INPUT"] .composer-textarea {
   position: relative;
   display: flex;
   min-width: 0;
-  height: 100vh;
+  height: var(--app-height);
   flex-direction: column;
   overflow: hidden;
   border-left: 1px solid var(--border);

@@ -1,7 +1,7 @@
 /**
  * Claude Code 风格的对话流：Agent 的文字和工具调用按发生顺序排在一起。
  * 工具是一行“● 动作 目标”，下面一行“⎿ 结果”；点开看技术详情，修改文件直接显示差异。
- * 底部的状态行代替加载卡片：“✻ 思考中… 12s · Esc 暂停”。
+ * 底部的状态行代替加载卡片：“✻ 思考中… 12s”。
  */
 import type { TaskEvent } from "../shared/contracts";
 import { object } from "./dom";
@@ -246,7 +246,7 @@ export function createStreamView(options: StreamViewOptions) {
     glyph.textContent = GLYPHS[frame % GLYPHS.length]!;
     verb.textContent = status === "PAUSE_REQUESTED" ? "正在暂停…" : status === "CANCELLATION_REQUESTED" ? "正在停止…"
       : status === "QUEUED" || status === "SUBMITTING" ? "等待执行…" : `${phase.replace(/…$/u, "")}…`;
-    meta.textContent = `${formatElapsed(Date.now() - startedAt)}${status === "RUNNING" ? " · Esc 暂停" : ""}`;
+    meta.textContent = `${formatElapsed(Date.now() - startedAt)}${status === "RUNNING" ? " · 点右下角 ■ 可暂停" : ""}`;
   }
 
   const timer = options.statusLine ? window.setInterval(() => {
@@ -326,6 +326,8 @@ export function createStreamView(options: StreamViewOptions) {
           return;
         case "MODEL_REQUESTED":
           phase = nested ? (agent.startsWith("acceptance-") ? "独立验收中" : "子 Agent 调查中") : "思考中";
+          // 主 Agent 每次新的回答另起一段，不接在上一次回答的末尾。
+          if (!nested) text = null;
           return;
         case "MODEL_RESPONDED":
           return;

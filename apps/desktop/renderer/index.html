@@ -10,6 +10,11 @@
     <title>Bit Agent</title>
   </head>
   <body>
+    <!-- 自绘标题栏：颜色跟随主题，可以拖动窗口；右侧留给系统的最小化、最大化、关闭按钮。 -->
+    <header class="window-titlebar">
+      <span class="window-titlebar-mark" aria-hidden="true">B</span>
+      <span class="window-titlebar-title">Bit Agent</span>
+    </header>
     <main class="shell" data-inspector-collapsed="false">
       <aside class="sidebar-left">
         <nav class="app-rail" aria-label="Bit Agent 导航">
@@ -238,6 +243,8 @@
         </section>
 
         <div class="composer-container">
+          <!-- 排队中的消息：这一轮结束后按顺序自动发送，可以随时移除。 -->
+          <ol id="queued-messages" class="queued-messages" aria-label="排队中的消息" hidden></ol>
           <div class="composer-card">
             <label for="objective" class="sr-only">任务目标</label>
             <textarea
@@ -252,14 +259,18 @@
                 <div class="agent-mode-controls">
                   <choice-menu id="agent-mode" class="agent-mode-control"></choice-menu>
                 </div>
-                <span class="composer-tip" title="Shift+Tab 切换本轮工具权限；运行中按 Esc 暂停"><kbd>Enter</kbd><span>发送</span><kbd>Shift+Enter</kbd><span>换行</span></span>
+                <span class="composer-tip" title="Shift+Tab 切换本轮工具权限"><kbd>Enter</kbd><span>发送</span><kbd>Shift+Enter</kbd><span>换行</span></span>
+                <!-- 任务运行中输入了文字：选择“引导”（立即交给正在运行的 Agent）或“排队”（这一轮结束后再发）。 -->
+                <div id="steer-choice" class="steer-choice" role="group" aria-label="怎样发送这段文字" hidden>
+                  <button type="button" data-send="steer" title="立即交给正在运行的 Agent，它会在下一步读到">引导 <kbd>Enter</kbd></button>
+                  <button type="button" data-send="queue" title="这一轮结束后，作为下一条消息自动发送">排队 <kbd>Tab</kbd></button>
+                </div>
               </div>
               <div class="composer-actions">
-                <button id="cancel" class="button-danger danger" type="button" disabled>停止</button>
-                <button id="run" class="button-primary primary" type="button">
-                  发送
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 17 10-10M8 7h9v9" /></svg>
-                </button>
+                <!-- 取消任务的内部按钮，不显示；“立即停止”和“结束这一轮”都通过它取消。 -->
+                <button id="cancel" class="button-danger danger" type="button" disabled hidden>停止</button>
+                <!-- 唯一的主按钮（参照 Codex / Claude Code）：发送 ⏎ → 运行中（点击暂停）→ 已暂停 ▶（点击继续）。 -->
+                <button id="run" class="run-button" type="button" data-state="send" aria-label="发送"></button>
               </div>
             </div>
           </div>

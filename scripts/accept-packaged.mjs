@@ -374,20 +374,20 @@ try {
   assert.equal(chosen.model, "local-fixture-mini", `请求没有使用所选模型：${chosen.model}`);
   assert.equal(chosen.reasoning?.effort, "high", `请求没有带上思考程度：${JSON.stringify(chosen.reasoning)}`);
   await evaluate("document.querySelector('#objective').value='PAUSE-TEST';document.querySelector('#run').click()");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && !document.querySelector('#pause-task').disabled"), "没有显示可用的暂停按钮");
-  await evaluate("document.querySelector('#pause-task').click()");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && document.querySelector('#run').dataset.state==='running' && !document.querySelector('#run').disabled"), "主按钮没有变成运行中图标");
+  await evaluate("document.querySelector('#run').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='PAUSED'"), "暂停未在安全位置生效");
   await captureLayouts(command, evaluate, "paused");
   await evaluate("document.querySelector('#intent-input').value='CHANGED-INTENT';document.querySelector('#apply-intent').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && !document.querySelector('#run').disabled && document.querySelector('#current-turn').textContent.includes('CHANGED-INTENT')"), "修改意图后没有重新执行");
   // “暂停”和“停止”合成一个按钮：正在暂停时变成“立即停止”，点了直接结束这一轮。
   await evaluate("document.querySelector('#objective').value='STOP-NOW';document.querySelector('#run').click()");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && !document.querySelector('#pause-task').hidden"), "STOP-NOW 没有开始运行");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && document.querySelector('#run').dataset.state==='running'"), "STOP-NOW 没有开始运行");
   assert(await evaluate("document.querySelector('#cancel').hidden"), "仍然单独显示了“停止”按钮");
-  await evaluate("document.querySelector('#pause-task').click()");
-  await check(() => evaluate("document.querySelector('#pause-task').dataset.mode==='stop' || document.querySelector('#status').dataset.status==='PAUSED'"), "暂停请求没有生效");
-  const stopMode = await evaluate("document.querySelector('#pause-task').dataset.mode==='stop' && document.querySelector('#pause-task').textContent==='立即停止'");
-  await evaluate(stopMode ? "document.querySelector('#pause-task').click()" : "document.querySelector('#end-task').click()");
+  await evaluate("document.querySelector('#run').click()");
+  await check(() => evaluate("document.querySelector('#run').dataset.state==='pausing' || document.querySelector('#status').dataset.status==='PAUSED'"), "暂停请求没有生效");
+  const stopMode = await evaluate("document.querySelector('#run').dataset.state==='pausing'");
+  await evaluate(stopMode ? "document.querySelector('#run').click()" : "document.querySelector('#end-task').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='CANCELLED' && document.body.dataset.busy==='false'"), "“立即停止”没有结束这一轮");
   // 像 Claude Code 一样：暂停后直接在主输入框写补充要求，按 Enter 继续。
   // 运行中直接在输入框补充要求：先排队，Agent 下一步读取，最终回答里能看到。
@@ -396,10 +396,19 @@ try {
   await evaluate("const r=document.querySelector('#objective');r.value='RUNNING-NOTE';r.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && document.querySelector('#stream .stream-user')?.textContent.includes('RUNNING-NOTE') && [...document.querySelectorAll('#stream .stream-text')].some(e=>e.textContent.includes('RUNNING-NOTE'))"), "运行中补充的要求没有被 Agent 读到");
   assert(await evaluate("[...document.querySelectorAll('.saved-turn .stream-note')].some(e=>e.textContent.includes('暂停'))"), "继续对话后上一轮的执行过程不见了");
+  // 运行中写字：工具栏出现“引导 / 排队”；按 Tab 排队，这一轮结束后自动作为下一条消息发送。
+  await evaluate("document.querySelector('#objective').value='QUEUE-TEST';document.querySelector('#run').click()");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && document.querySelector('#run').dataset.state==='running'"), "QUEUE-TEST 没有开始运行");
+  await evaluate("const q=document.querySelector('#objective');q.value='QUEUED-NOTE';q.dispatchEvent(new Event('input'))");
+  await check(() => evaluate("!document.querySelector('#steer-choice').hidden && document.querySelector('#run').dataset.state==='send'"), "运行中写字后没有出现“引导 / 排队”");
+  writeFileSync(join(directory, "running-steer.png"), Buffer.from((await captureScreenshot()).data, "base64"));
+  await evaluate("document.querySelector('#objective').dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true}))");
+  assert(await evaluate("document.querySelector('#objective').value==='' && document.querySelector('#queued-messages .queued-text')?.textContent==='QUEUED-NOTE'"), "按 Tab 没有把消息排进队列");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.querySelector('#objective-display').textContent==='QUEUED-NOTE' && document.querySelector('#queued-messages').hidden"), "这一轮结束后排队的消息没有自动发送");
   await evaluate("document.querySelector('#objective').value='PAUSE-AGAIN';document.querySelector('#run').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING'"), "第二次暂停测试没有开始运行");
-  await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='PAUSED' && !document.querySelector('#objective').disabled && !document.querySelector('#run').disabled"), "Esc 暂停后输入框不能写补充要求");
+  await evaluate("document.querySelector('#run').click()");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='PAUSED' && !document.querySelector('#objective').disabled && !document.querySelector('#run').disabled"), "暂停后输入框不能写补充要求");
   await evaluate("const o=document.querySelector('#objective');o.value='COMPOSER-NOTE';o.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && document.querySelector('#stream .stream-user')?.textContent.includes('COMPOSER-NOTE') && document.querySelector('#objective').value===''"), "输入框补充要求没有提交并继续");
   await evaluate("document.querySelector('#objective').value='PACKAGE-EDIT';document.querySelector('#run').click()");
@@ -410,7 +419,7 @@ try {
   await evaluate("document.querySelector('input[name=agent-question-option][value=approve]').click();document.querySelector('#submit-question-answer').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='WAITING_FOR_INPUT' && document.querySelector('.question-title').textContent.includes('等待审阅')"), "批准后工具未执行或问题卡片未更新");
   assert(existsSync(join(workspace, "package-demo.py")));
-  assert(await evaluate("!document.querySelector('#end-task').hidden && document.querySelector('#pause-task').hidden"), "等待回答时卡片上没有“结束这一轮”");
+  assert(await evaluate("!document.querySelector('#end-task').hidden && document.querySelector('#run').dataset.state==='waiting'"), "等待回答时卡片上没有“结束这一轮”");
   await evaluate("document.querySelector('#end-task').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='CANCELLED' && document.body.dataset.busy==='false'"), "等待回答时不能取消");
   await evaluate("document.querySelector('#review-changes').click()");

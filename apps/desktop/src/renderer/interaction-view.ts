@@ -11,15 +11,9 @@ export function createInteractionView(callbacks: {
   current(): TaskRequestInput;
   apply(task: Record<string, unknown>): void;
 }) {
+  // 暂停 / 继续 / 停止都由输入框右下角的主按钮发起（见 main.ts），这里只提供动作和卡片。
   const cancel = document.querySelector<HTMLButtonElement>("#cancel")!;
   const composer = document.querySelector<HTMLTextAreaElement>("#objective")!;
-  const pause = document.createElement("button");
-  pause.id = "pause-task";
-  pause.type = "button";
-  pause.className = "interaction-pause";
-  pause.textContent = "暂停";
-  pause.hidden = true;
-  cancel.before(pause);
 
   const panel = document.createElement("section");
   panel.className = "task-interaction";
@@ -72,20 +66,9 @@ export function createInteractionView(callbacks: {
   let taskId = "";
   let question: Record<string, unknown> | null = null;
   let sending = false;
-  // “暂停”和“停止”合成一个按钮：运行中是暂停（Esc），正在暂停时变成“立即停止”；
-  // 已暂停或等你回答时，卡片上有“继续执行”和“结束这一轮”。
-  const interruptible = new Set(["QUEUED", "RUNNING", "PAUSE_REQUESTED", "CANCELLATION_REQUESTED"]);
-
+  // 已暂停或等你回答时，卡片上有“继续执行”和“结束这一轮”；运行中的暂停 / 立即停止在主按钮上。
   function paint(): void {
     const editable = status === "PAUSED" || status === "WAITING_FOR_INPUT";
-    const stopping = status === "PAUSE_REQUESTED";
-    pause.hidden = !interruptible.has(status);
-    pause.disabled = sending || status === "CANCELLATION_REQUESTED";
-    pause.dataset.mode = stopping ? "stop" : "pause";
-    pause.textContent = stopping ? "立即停止" : status === "CANCELLATION_REQUESTED" ? "正在停止…" : "暂停";
-    pause.title = stopping
-      ? "当前这一步还没做完，正在等它结束后暂停。不想等就立即结束这一轮（记录和已改的文件都保留）"
-      : "在安全位置停下（Esc），可以补充要求后继续，或结束这一轮";
     endTask.hidden = !editable;
     endTask.disabled = sending;
     panel.hidden = !editable && status !== "PAUSE_REQUESTED" && error.hidden;
@@ -156,10 +139,6 @@ export function createInteractionView(callbacks: {
     }
   }
 
-  pause.addEventListener("click", () => {
-    if (pause.dataset.mode === "stop") cancel.click();
-    else void submit({ action: "pause" });
-  });
   endTask.addEventListener("click", () => cancel.click());
   resume.addEventListener("click", () => { void submit({ action: "resume" }); });
   applyButton.addEventListener("click", async () => {
@@ -343,5 +322,9 @@ export function createInteractionView(callbacks: {
       return submit({ action: "answer", questionId: question.id, text });
     },
     pendingKind: kind,
+    /** 在安全位置停下（当前模型请求或工具做完后）。 */
+    pause(): Promise<boolean> { return submit({ action: "pause" }); },
+    /** 已暂停时不加新要求、接着执行。 */
+    resume(): Promise<boolean> { return submit({ action: "resume" }); },
   };
 }

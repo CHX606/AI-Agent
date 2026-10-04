@@ -77,6 +77,11 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
     return theme === "dark" ? "#181817" : "#f2f2ef";
   }
 
+  /** 自绘标题栏的颜色和页面一致；右上角的最小化、最大化、关闭按钮由系统绘制在同色底上。 */
+  function titleBar(theme: ColorTheme): Electron.TitleBarOverlayOptions {
+    return { color: themeBackground(theme), symbolColor: theme === "dark" ? "#c7c4bb" : "#555550", height: 32 };
+  }
+
   function createWindow(): BrowserWindow {
     const window = new BrowserWindow({
       show: false,
@@ -87,6 +92,9 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
       backgroundColor: themeBackground(activeTheme),
       title: "Bit Agent",
       autoHideMenuBar: true,
+      // 系统标题栏在暗色主题下是蓝灰色，和页面不一致；改为页面自己画 32px 的标题栏。
+      titleBarStyle: "hidden",
+      titleBarOverlay: titleBar(activeTheme),
       webPreferences: {
         preload: join(currentDirectory, "transport/preload.cjs"),
         contextIsolation: true,
@@ -239,9 +247,10 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
       if (theme !== "light" && theme !== "dark") return;
       activeTheme = theme;
       nativeTheme.themeSource = theme;
-      BrowserWindow.fromWebContents(event.sender)?.setBackgroundColor(
-        themeBackground(theme),
-      );
+      const window = BrowserWindow.fromWebContents(event.sender);
+      window?.setBackgroundColor(themeBackground(theme));
+      // 切换主题时标题栏右上角的系统按钮也换成同色底。
+      try { window?.setTitleBarOverlay(titleBar(theme)); } catch { /* 不支持叠加标题栏的平台忽略 */ }
       try {
         saveTheme(theme);
       } catch (error) {

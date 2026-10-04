@@ -1,0 +1,217 @@
+/* 输入框右下角的主按钮（参照 Codex / Claude Code）和运行中的“引导 / 排队”。 */
+
+.run-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--brand);
+  color: #fff;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 120ms ease;
+}
+
+.run-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.1;
+}
+
+.run-button:hover:not(:disabled) { background: var(--brand-hover); }
+.run-button:active:not(:disabled) { transform: scale(0.95); }
+.run-button:focus-visible { outline: none; box-shadow: var(--field-focus-ring); }
+.run-button:disabled { cursor: default; opacity: 0.45; }
+
+/* 空闲且没写字：按钮变淡，写了字才是醒目的橙色。 */
+.run-button[data-state="send"][data-empty="true"] {
+  background: var(--bg-pressed);
+  color: var(--text-muted);
+}
+
+/* 运行中：转动的弧线 + 中间的小方块（点击暂停）。 */
+.run-button[data-state="running"],
+.run-button[data-state="pausing"],
+.run-button[data-state="stopping"] {
+  border-color: var(--border-strong);
+  background: var(--bg-panel);
+  color: var(--text);
+}
+
+.run-button[data-state="running"]:hover:not(:disabled),
+.run-button[data-state="pausing"]:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.run-button .run-spinner {
+  width: 24px;
+  height: 24px;
+}
+
+.run-track {
+  opacity: 0.16;
+  stroke-width: 2;
+}
+
+.run-arc {
+  stroke: var(--brand);
+  stroke-width: 2.4;
+  transform-origin: 12px 12px;
+  animation: run-spin 0.9s linear infinite;
+}
+
+.run-stop {
+  fill: currentColor;
+  stroke: none;
+}
+
+/* 正在暂停：弧线变慢、变成琥珀色，方块变红，提示再点就是立即停止。 */
+.run-button[data-state="pausing"] .run-arc {
+  stroke: var(--amber);
+  animation-duration: 2.2s;
+}
+
+.run-button[data-state="pausing"] .run-stop { fill: var(--red); }
+
+/* 已暂停：▶ 继续。 */
+.run-button[data-state="paused"] {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--border));
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.run-button[data-state="paused"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand) 22%, var(--bg-main));
+}
+
+.run-play {
+  fill: currentColor;
+  stroke: none;
+}
+
+@keyframes run-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .run-arc { animation: none; }
+}
+
+/* 运行中写了文字：工具栏左侧换成两个选择。 */
+
+.composer-context[data-choosing="true"] > :not(.steer-choice) {
+  display: none;
+}
+
+.steer-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.steer-choice[hidden] { display: none; }
+
+.steer-choice button {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-panel);
+  color: var(--text-soft);
+  font: 500 12px var(--font-sans);
+}
+
+.steer-choice button:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* Enter 对应的“引导”是默认选择，用强调色标出。 */
+.steer-choice button[data-send="steer"] {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--border));
+  color: var(--brand);
+}
+
+.steer-choice kbd {
+  color: var(--text-muted);
+  font: 10.5px var(--font-mono);
+}
+
+/* 排队中的消息，显示在输入框上方。 */
+
+.queued-messages {
+  display: grid;
+  width: min(820px, 100%);
+  gap: 4px;
+  margin: 0 auto 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.queued-messages[hidden] { display: none; }
+
+.queued-message {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 9px;
+  background: var(--bg-panel);
+  font-size: 13px;
+}
+
+.queued-label {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.queued-text {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--text-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queued-remove {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  place-items: center;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+}
+
+.queued-remove:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.queued-remove svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}

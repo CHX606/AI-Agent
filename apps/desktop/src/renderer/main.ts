@@ -1,6 +1,7 @@
 import "@awesome.me/webawesome/dist/styles/themes/default.css";
 import "@awesome.me/webawesome/dist/components/details/details.js";
 import "./styles.css";
+import "./composer.css";
 
 import type { ColorTheme, TaskEvent } from "../shared/contracts";
 import { element, errorText, formatHistoryTime, object, projectName } from "./dom";
@@ -424,7 +425,6 @@ function setBusy(busy: boolean): void {
   const permission = document.querySelector<HTMLElement & { disabled: boolean }>("#permission-mode");
   if (permission) permission.disabled = busy;
   document.body.dataset.busy = String(busy);
-  runButton.disabled = busy;
   retryButton.disabled = busy;
   newTaskButton.disabled = submitting;
   cancelButton.disabled = !busy;
@@ -465,23 +465,135 @@ function fitComposer(): void {
   const limit = Number.parseFloat(getComputedStyle(objectiveInput).maxHeight) || 220;
   objectiveInput.style.height = `${Math.min(objectiveInput.scrollHeight + 1, limit)}px`;
 }
-objectiveInput.addEventListener("input", fitComposer);
+objectiveInput.addEventListener("input", () => paintComposer());
+
+/**
+ * 输入框右下角唯一的主按钮（参照 Codex / Claude Code），图标随状态变化：
+ * send 发送 ⏎（空闲，或运行中已经写了要发的文字）；running 运行中（转圈 + 方块，点击暂停）；
+ * pausing 正在暂停（再点立即停止这一轮）；paused 已暂停 ▶（点击继续）。
+ */
+type RunState = "send" | "running" | "pausing" | "paused" | "waiting" | "stopping";
+const RUN_ICONS = {
+  send: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 5v6a3 3 0 0 1-3 3H6"/><path d="m10 10-4 4 4 4"/></svg>',
+  running: '<svg class="run-spinner" viewBox="0 0 24 24" aria-hidden="true"><circle class="run-track" cx="12" cy="12" r="9"/><path class="run-arc" d="M12 3a9 9 0 0 1 9 9"/><rect class="run-stop" x="9" y="9" width="6" height="6" rx="1.4"/></svg>',
+  paused: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="run-play" d="M9.5 7.3v9.4c0 .7.7 1.1 1.3.7l7.2-4.7a.8.8 0 0 0 0-1.4l-7.2-4.7c-.6-.4-1.3 0-1.3.7z"/></svg>',
+};
+const RUN_LABELS: Record<RunState, string> = {
+  send: "发送（Enter）",
+  running: "正在运行 · 点击暂停（等当前这一步做完再停下）",
+  pausing: "正在暂停，等当前这一步做完。再点一次立即停止这一轮",
+  paused: "已暂停 · 点击继续执行",
+  waiting: "在上方卡片里选择，或在输入框写下回答",
+  stopping: "正在处理…",
+};
+
+function runState(): RunState {
+  if (document.body.dataset.busy !== "true") return "send";
+  const status = statusText.dataset.status ?? "";
+  const mode = composerMode();
+  if (objectiveInput.value.trim() && (mode === "supplement" || mode === "answer")) return "send";
+  if (status === "PAUSE_REQUESTED") return "pausing";
+  if (status === "PAUSED") return "paused";
+  if (status === "WAITING_FOR_INPUT") return "waiting";
+  if (mode === "locked") return "stopping";
+  return "running";
+}
+
+function paintRunButton(): void {
+  const state = runState();
+  if (runButton.dataset.state !== state) {
+    runButton.dataset.state = state;
+    const icon = state === "pausing" || state === "stopping" ? "running" : state === "waiting" ? "send" : state;
+    runButton.innerHTML = RUN_ICONS[icon];
+  }
+  runButton.dataset.empty = String(!objectiveInput.value.trim());
+  runButton.title = RUN_LABELS[state];
+  runButton.setAttribute("aria-label", RUN_LABELS[state]);
+  runButton.disabled = submitting || state === "stopping" || state === "waiting";
+}
+
+/** 主按钮：按当前状态发送、暂停、立即停止或继续。 */
+async function primaryAction(): Promise<void> {
+  const state = runState();
+  if (state === "send") {
+    if (document.body.dataset.busy !== "true" && !objectiveInput.value.trim()) { objectiveInput.focus(); return; }
+    await runAgent();
+  } else if (state === "running") await interactionView?.pause();
+  else if (state === "pausing") cancelButton.click();
+  else if (state === "paused") await interactionView?.resume();
+}
+
+const steerChoice = element<HTMLElement>("#steer-choice");
+const composerContext = element<HTMLElement>(".composer-context");
 
 function paintComposer(): void {
   fitComposer();
   const mode = composerMode();
   const status = statusText.dataset.status;
   document.body.dataset.steering = mode === "answer" ? "WAITING_FOR_INPUT" : mode === "supplement" ? status ?? "" : "";
-  if (document.body.dataset.busy === "true") {
-    objectiveInput.disabled = mode === "locked";
-    runButton.disabled = mode === "locked" || submitting;
-  }
+  if (document.body.dataset.busy === "true") objectiveInput.disabled = mode === "locked";
+  // 运行中写了文字：工具栏左侧换成“引导 / 排队”两个选择（多 Agent 和权限这时本来就不能改）。
+  const choosing = mode === "supplement" && Boolean(objectiveInput.value.trim());
+  steerChoice.hidden = !choosing;
+  composerContext.dataset.choosing = String(choosing);
+  paintRunButton();
   const approval = interactionView?.pendingKind() === "approval";
   objectiveInput.placeholder = mode === "answer"
     ? approval ? "不批准？写下原因按 Enter，Agent 会按你的意见调整…" : "直接写下你的回答，按 Enter 提交…"
     : mode === "supplement"
-      ? status === "PAUSED" ? "写下补充要求，按 Enter 提交并继续…" : "补充要求，Agent 会在下一步读取（Esc 暂停）…"
+      ? status === "PAUSED"
+        ? "写下补充要求，按 Enter 提交并继续…"
+        : "补充要求：Enter 立即引导正在运行的 Agent，Tab 排到这一轮结束后发送…"
       : defaultPlaceholder;
+}
+
+/** 排队的消息：这一轮结束后按顺序作为新消息自动发送（参照 Codex）。 */
+const queued: string[] = [];
+const queuedList = element<HTMLOListElement>("#queued-messages");
+
+function renderQueue(): void {
+  queuedList.replaceChildren(...queued.map((text, index) => {
+    const item = document.createElement("li");
+    item.className = "queued-message";
+    const label = document.createElement("span");
+    label.className = "queued-label";
+    label.textContent = index === 0 ? "下一条" : "排队";
+    const copy = document.createElement("span");
+    copy.className = "queued-text";
+    copy.textContent = text;
+    copy.title = text;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "queued-remove";
+    remove.setAttribute("aria-label", `移除排队的消息：${text}`);
+    remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>';
+    remove.addEventListener("click", () => { queued.splice(index, 1); renderQueue(); });
+    item.append(label, copy, remove);
+    return item;
+  }));
+  queuedList.hidden = queued.length === 0;
+}
+
+function enqueue(): void {
+  const text = objectiveInput.value.trim();
+  if (!text) return;
+  queued.push(text);
+  objectiveInput.value = "";
+  renderQueue();
+  paintComposer();
+}
+
+/** 这一轮结束后发出排队的下一条；你主动停止的那一轮之后不自动发。 */
+function sendQueued(status: string): void {
+  if (!queued.length || status === "CANCELLED" || submitting || document.body.dataset.busy === "true") return;
+  const text = queued.shift()!;
+  renderQueue();
+  void runAgent(text);
+}
+
+function clearQueue(): void {
+  queued.length = 0;
+  renderQueue();
 }
 
 function setStatus(status: string): void {
@@ -704,6 +816,7 @@ async function loadResult(): Promise<void> {
     if (generation !== viewGeneration || input.taskId !== activeTaskId) return;
     renderResult(payload);
     setBusy(false);
+    sendQueued(status);
   } catch (error) {
     if (generation !== viewGeneration || input.taskId !== activeTaskId) return;
     showError(error);
@@ -779,15 +892,16 @@ async function steer(mode: "supplement" | "answer"): Promise<void> {
   }
 }
 
-async function runAgent(): Promise<void> {
+/** 发送：空闲时开始新一轮；运行中则是引导或回答。text 给定时是排队的消息，不读输入框。 */
+async function runAgent(text?: string): Promise<void> {
   const composer = composerMode();
-  if (composer === "supplement" || composer === "answer") { await steer(composer); return; }
+  if (text === undefined && (composer === "supplement" || composer === "answer")) { await steer(composer); return; }
   if (submitting || document.body.dataset.busy === "true") return;
-  const objective = objectiveInput.value.trim();
+  const objective = (text ?? objectiveInput.value).trim();
   const workspaceRoot = workspaceInput.value.trim();
   if (objective) {
     activeObjective = objective;
-    objectiveInput.value = "";
+    if (text === undefined) objectiveInput.value = "";
   }
   if (!objective || !workspaceRoot) {
     if (!workspaceRoot) setWorkspace("");
@@ -869,6 +983,7 @@ async function restoreTask(entry: TaskHistoryEntry): Promise<void> {
   objectiveInput.value = "";
   setAgentMode(entry.multiAgentMode);
   dropProcesses();
+  clearQueue();
   clearPreviousTurns();
   interactionView?.reset();
   setBusy(true);
@@ -926,6 +1041,7 @@ function resetTask(): void {
   activeSessionId = null;
   setAgentMode("auto");
   dropProcesses();
+  clearQueue();
   clearPreviousTurns();
   activeObjective = "";
   replaying = false;
@@ -984,7 +1100,13 @@ healthButton.addEventListener("click", async () => {
   }
 });
 
-runButton.addEventListener("click", () => void runAgent());
+runButton.addEventListener("click", () => void primaryAction());
+steerChoice.addEventListener("click", (event) => {
+  const choice = (event.target as HTMLElement).closest<HTMLButtonElement>("button")?.dataset.send;
+  if (choice === "queue") enqueue();
+  else if (choice === "steer") void runAgent();
+  objectiveInput.focus();
+});
 retryButton.addEventListener("click", () => {
   objectiveInput.value = activeObjective || objectiveInput.value;
   void runAgent();
@@ -1005,21 +1127,16 @@ objectiveInput.addEventListener("keydown", (event) => {
   // 输入法组字时的回车只是确认候选词，不能发送。
   if (event.isComposing || event.keyCode === 229) return;
   if (event.key === "Enter" && !event.shiftKey) {
+    // 空闲时发送；运行中是“引导”（立即交给正在运行的 Agent）；等回答时是回答。
     event.preventDefault();
-    if (!runButton.disabled) void runAgent();
+    if (!submitting) void runAgent();
   } else if (event.key === "Tab" && event.shiftKey) {
     event.preventDefault();
     cyclePermission();
-  }
-});
-
-// Esc 暂停：在安全位置停下，之后可以补充要求或继续（和 Claude Code 中断后再输入的体验一致）。
-document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape" || event.defaultPrevented || document.querySelector("dialog[open]")) return;
-  const pause = document.querySelector<HTMLButtonElement>("#pause-task");
-  if (pause && !pause.hidden && !pause.disabled) {
+  } else if (event.key === "Tab" && composerMode() === "supplement" && objectiveInput.value.trim()) {
+    // 运行中按 Tab：排到这一轮结束后再发送。
     event.preventDefault();
-    pause.click();
+    enqueue();
   }
 });
 

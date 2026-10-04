@@ -1,8 +1,3 @@
-.interaction-pause { height: 31px; padding: 0 9px; border-radius: 7px; background: transparent; color: var(--text-soft); font-size: 13px; }
-.interaction-pause:hover:not(:disabled) { background: var(--bg-hover); }
-/* 正在暂停时同一个按钮变成“立即停止”。 */
-.interaction-pause[data-mode="stop"] { color: var(--red); font-weight: 600; }
-.interaction-pause[data-mode="stop"]:hover:not(:disabled) { background: var(--red-soft); }
 .interaction-end { flex: none; min-height: 27px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: var(--text-muted); font-size: 12px; }
 .interaction-end:hover:not(:disabled) { background: var(--red-soft); color: var(--red); }
 /* 等待回答是一个单独的状态卡片，不再塞进用户正在打字的输入框。 */

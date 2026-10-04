@@ -50,7 +50,7 @@ export function mountProfileMenu(options: { toggleTheme(): void }): void {
   });
   menu.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      // 只关菜单，不能冒泡到全局的“Esc 暂停”。
+      // 只关菜单，不让 Esc 冒泡到页面上的其他处理。
       event.preventDefault();
       event.stopPropagation();
       close(true);

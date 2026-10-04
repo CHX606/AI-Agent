@@ -65,7 +65,7 @@
 .repository-view {
   display: grid;
   min-width: 0;
-  height: 100vh;
+  height: var(--app-height);
   grid-column: 2 / -1;
   grid-row: 1;
   grid-template-rows: 36px 26px minmax(0, 1fr) 24px;

@@ -292,7 +292,7 @@
   white-space: pre-wrap;
 }
 
-/* 状态行：✻ 思考中… 12s · Esc 暂停 */
+/* 状态行：✻ 思考中… 12s */
 
 .status-line {
   display: flex;
