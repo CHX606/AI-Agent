@@ -102,6 +102,45 @@ def tool_operation(tool_name: str, raw_arguments: str) -> dict[str, str]:
     return {"kind": tool_name, "label": label, "target": target(arguments)}
 
 
+_VERIFY_OUTCOMES = {
+    "PASSED": "检查通过",
+    "FAILED": "出现新的失败",
+    "UNVERIFIED": "没有能运行的检查",
+    "NOT_APPLICABLE": "只改了文档，无需检查",
+}
+
+
+def _lines(output: Any) -> int:
+    return len(output.splitlines()) if isinstance(output, str) and output else 0
+
+
+def result_summary(tool_name: str, result: ToolResult) -> str:
+    """一句话说明工具结果，显示在界面的工具行下面；不包含文件内容。"""
+    output = result.output
+    if tool_name == "verify_project" and isinstance(output, dict):
+        return _VERIFY_OUTCOMES.get(str(output.get("outcome")), "")
+    if tool_name == "verify_task" and isinstance(output, dict) and output.get("verdict"):
+        return {"PASSED": "验收通过", "FAILED": "验收发现问题"}.get(
+            str(output["verdict"]), "验收未完成"
+        )
+    if result.error is not None:
+        return result.error.message.strip().splitlines()[0][:160] if result.error.message else ""
+    if tool_name == "read_file":
+        return f"{_lines(output)} 行"
+    if tool_name == "list_files":
+        return f"{_lines(output)} 项"
+    if tool_name == "search_code":
+        count = _lines(output)
+        return f"{count} 处匹配" if count else "没有匹配"
+    if tool_name == "apply_patch":
+        return f"修改 {len(result.metadata.affected_paths)} 个文件"
+    if tool_name == "delegate_tasks" and isinstance(output, dict):
+        return f"{len(output.get('investigations') or [])} 个调查已返回"
+    if tool_name == "ask_user" and isinstance(output, dict):
+        return str(output.get("text") or "")[:160]
+    return ""
+
+
 def tool_error_result(
     tool_call_id: str,
     tool_name: str,

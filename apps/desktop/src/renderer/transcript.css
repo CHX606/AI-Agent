@@ -1,0 +1,318 @@
+/* Claude Code 风格的对话流：单列、等宽工具行、彩色圆点、底部状态行。 */
+
+.turn {
+  width: min(820px, calc(100% - 56px));
+  margin: 0 auto;
+  padding: 18px 0 10px;
+}
+
+.turn + .turn {
+  border-top: 1px solid var(--border);
+}
+
+.turn-user {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 9px 14px;
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+}
+
+.turn-prompt {
+  flex: none;
+  color: var(--text-muted);
+  font: 600 15px/1.6 var(--font-mono);
+}
+
+.turn-user-text {
+  min-width: 0;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.turn-update {
+  margin: 6px 0 0 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.stream {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stream:empty {
+  display: none;
+}
+
+.stream-item {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 6px;
+}
+
+.stream-item[data-nested="true"] {
+  margin-left: 24px;
+}
+
+.stream-bullet {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 25px;
+  text-align: center;
+}
+
+.stream-text .stream-bullet {
+  color: var(--text);
+}
+
+.stream-text .markdown-body {
+  min-width: 0;
+  color: var(--text-soft);
+  font-size: 15px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+/* 工具行：● 动作 目标 / ⎿ 结果 */
+
+.stream-tool {
+  display: block;
+}
+
+.tool-head {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 18px auto minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  font: 13px/1.7 var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tool-head:hover .tool-label,
+.tool-head:focus-visible .tool-label {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.tool-head .stream-bullet {
+  line-height: 22px;
+}
+
+.tool-label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tool-target {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-result {
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+  padding-left: 24px;
+  color: var(--text-muted);
+  font: 12px/1.6 var(--font-mono);
+}
+
+.tool-summary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tool-branch {
+  flex: none;
+  color: var(--text-faint);
+}
+
+.stream-tool[data-tone="success"] .stream-bullet {
+  color: var(--green);
+}
+
+.stream-tool[data-tone="error"] .stream-bullet,
+.stream-tool[data-tone="error"] .tool-summary {
+  color: var(--red);
+}
+
+.stream-tool[data-tone="neutral"] .stream-bullet {
+  color: var(--text-faint);
+}
+
+.stream-tool[data-tone="running"] .stream-bullet {
+  color: var(--text-muted);
+  animation: stream-blink 1s steps(2, start) infinite;
+}
+
+@keyframes stream-blink {
+  to { visibility: hidden; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-tool[data-tone="running"] .stream-bullet { animation: none; }
+}
+
+.tool-diff {
+  margin: 6px 0 2px 24px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: 12px/1.55 var(--font-mono);
+}
+
+.diff-file {
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+}
+
+/* 全局的 .diff-* 给 Markdown 代码块用（带负外边距），这里限定在工具行的差异框内。 */
+.tool-diff .diff-add,
+.tool-diff .diff-remove,
+.tool-diff .diff-hunk,
+.tool-diff .diff-context {
+  margin: 0;
+  padding: 0 10px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.tool-diff .diff-add { background: var(--diff-add-bg); color: var(--diff-add-text); }
+.tool-diff .diff-remove { background: var(--diff-remove-bg); color: var(--diff-remove-text); }
+.tool-diff .diff-hunk { background: none; color: var(--blue); }
+.tool-diff .diff-context { color: var(--text-soft); }
+
+.diff-more {
+  display: block;
+  width: 100%;
+  padding: 3px 10px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.diff-more:hover { color: var(--text); }
+
+.tool-detail {
+  margin: 6px 0 2px 24px;
+}
+
+.tool-detail dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 3px 12px;
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.tool-detail dt { color: var(--text-muted); }
+.tool-detail dd { min-width: 0; margin: 0; color: var(--text-soft); overflow-wrap: anywhere; }
+
+/* 任务进行中补充的要求 */
+
+.stream-user {
+  padding: 6px 10px 6px 0;
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.stream-user .turn-prompt {
+  text-align: center;
+}
+
+.stream-user p {
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* 流程提示和错误 */
+
+.stream-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.stream-note-mark {
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.stream-note[data-tone="error"] { color: var(--red); }
+
+.stream-error .stream-bullet,
+.stream-error strong {
+  color: var(--red);
+}
+
+.stream-error strong {
+  font-size: 14px;
+  line-height: 25px;
+}
+
+.stream-error p {
+  margin: 2px 0 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* 状态行：✻ 思考中… 12s · Esc 暂停 */
+
+.status-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 14px 0 4px;
+  color: var(--brand);
+  font: 13px/1.6 var(--font-mono);
+}
+
+.status-glyph {
+  width: 18px;
+  flex: none;
+  text-align: center;
+}
+
+.status-verb { font-weight: 600; }
+.status-meta { color: var(--text-muted); }
+.status-line[data-state="waiting"] { color: var(--amber); }
+
+.turn .error-actions {
+  margin: 10px 0 0 24px;
+}

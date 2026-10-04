@@ -1132,262 +1132,6 @@ svg {
   font-size: 12px;
 }
 
-.message {
-  display: grid;
-  width: min(820px, calc(100% - 56px));
-  grid-template-columns: 26px minmax(0, 1fr);
-  gap: 11px;
-  margin: 0 auto;
-  padding: 24px 0;
-}
-
-.message + .message {
-  border-top: 1px solid var(--border);
-}
-
-.message-avatar {
-  display: grid;
-  width: 25px;
-  height: 25px;
-  place-items: center;
-  margin-top: 1px;
-  border-radius: 7px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.user-avatar {
-  background: var(--bg-hover);
-  color: var(--text-soft);
-}
-
-.agent-avatar {
-  background: var(--brand-soft);
-  color: var(--brand);
-  font-size: 13px;
-}
-
-.message-content {
-  min-width: 0;
-}
-
-.message-header {
-  display: flex;
-  min-height: 23px;
-  align-items: center;
-  margin-bottom: 5px;
-}
-
-.message-header strong {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.message-text,
-.answer {
-  color: var(--text-soft);
-  font-size: 15px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-}
-
-.user-message .message-text {
-  display: inline-block;
-  padding: 9px 12px;
-  border-radius: 4px 10px 10px 10px;
-  background: var(--bg-panel);
-  color: var(--text);
-}
-
-.activity-header {
-  justify-content: space-between;
-}
-
-.activity-count {
-  margin-left: auto;
-  color: var(--text-faint);
-  font: 11px var(--font-mono);
-}
-
-.activity-toggle {
-  margin-left: 10px;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.activity-toggle:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-/* 任务结束后执行记录折叠成一行，让最终回答直接可见。 */
-.activity-message[data-collapsed="true"] .timeline,
-.activity-message[data-collapsed="true"] .activity-empty {
-  display: none;
-}
-
-.timeline {
-  display: grid;
-  gap: 8px;
-  margin-top: 8px;
-  list-style: none;
-}
-
-.activity-item {
-  min-width: 0;
-}
-
-.operation-card {
-  display: block;
-  width: 100%;
-  --spacing: 0;
-}
-
-.operation-card::part(details) {
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--bg-panel) 74%, var(--bg-main));
-  box-shadow: 0 1px 1px rgb(25 25 22 / 4%);
-  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
-}
-
-.operation-card::part(header) {
-  min-height: 48px;
-  padding: 0 12px;
-}
-
-.operation-card::part(header):hover {
-  background: var(--bg-hover);
-}
-
-.operation-card::part(summary) {
-  min-width: 0;
-}
-
-.operation-card::part(content) {
-  padding: 0 12px 11px 38px;
-}
-
-.operation-card::part(icon) {
-  color: var(--text-faint);
-}
-
-.operation-summary {
-  display: grid;
-  width: 100%;
-  min-width: 0;
-  grid-template-columns: 14px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-}
-
-.operation-copy {
-  display: grid;
-  min-width: 0;
-  gap: 1px;
-}
-
-.operation-copy strong {
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.operation-copy > span {
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.operation-summary time {
-  color: var(--text-faint);
-  font: 11px var(--font-mono);
-}
-
-.event-dot {
-  width: 10px;
-  height: 10px;
-  border: 2px solid var(--text-faint);
-  border-radius: 50%;
-  background: transparent;
-}
-
-.activity-item[data-tone="running"] .event-dot {
-  border-color: var(--brand);
-  border-top-color: transparent;
-  animation: operation-spin 0.9s linear infinite;
-}
-
-@keyframes operation-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .activity-item[data-tone="running"] .event-dot {
-    animation: none;
-  }
-}
-
-.activity-item[data-tone="success"] .event-dot {
-  border-color: var(--green);
-  background: var(--green);
-}
-
-.activity-item[data-tone="error"] .event-dot {
-  border-color: var(--red);
-  background: var(--red);
-}
-
-.activity-item[data-tone="success"] .operation-card::part(details) {
-  border-color: color-mix(in srgb, var(--green) 30%, var(--border));
-}
-
-.activity-item[data-tone="error"] .operation-card::part(details) {
-  border-color: color-mix(in srgb, var(--red) 44%, var(--border));
-  background: color-mix(in srgb, var(--red-soft) 32%, var(--bg-main));
-}
-
-.operation-meta {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 5px 14px;
-  margin: 1px 0 9px;
-  font-size: 12px;
-}
-
-.operation-meta dt {
-  color: var(--text-muted);
-}
-
-.operation-meta dd {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: var(--text-soft);
-}
-
-.technical-detail {
-  border-top: 1px solid var(--border);
-}
-
-.technical-detail > summary {
-  padding: 8px 0 2px;
-  color: var(--text-muted);
-  font-size: 11px;
-  cursor: pointer;
-}
-
 .event-payload {
   max-height: 240px;
   margin: 7px 0 0;
@@ -1406,57 +1150,6 @@ svg {
 .code-block code > span {
   display: block;
   min-height: 1.5em;
-}
-
-.activity-empty {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding-left: 3px;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.thinking-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--brand);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-.answer[data-state="loading"] {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: var(--text-muted);
-}
-
-.thinking-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.thinking-indicator i {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--brand);
-  animation: thinking 1.2s ease-in-out infinite;
-}
-
-.thinking-indicator i:nth-child(2) {
-  animation-delay: 120ms;
-}
-
-.thinking-indicator i:nth-child(3) {
-  animation-delay: 240ms;
-}
-
-.error-actions {
-  margin-top: 10px;
 }
 
 /* Composer */
@@ -1507,6 +1200,12 @@ body[data-busy="true"] .composer-card {
   color: var(--text-faint);
 }
 
+/* 等待回答时问答卡片是主角，输入框收成一行，像 Claude Code 提问时那样。 */
+body[data-steering="WAITING_FOR_INPUT"] .composer-textarea {
+  height: 48px;
+  min-height: 0;
+}
+
 .composer-toolbar {
   display: flex;
   min-height: 42px;
@@ -1547,6 +1246,10 @@ body[data-busy="true"] .composer-card {
   gap: 3px;
   color: var(--text-faint);
   font-size: 11px;
+}
+
+.composer-tip span + kbd {
+  margin-left: 6px;
 }
 
 .composer-tip kbd {
@@ -2122,10 +1825,6 @@ body[data-resizing="true"] {
 
   .sidebar-left {
     grid-template-columns: 48px;
-  }
-
-  .message {
-    width: calc(100% - 30px);
   }
 
   .composer-container {

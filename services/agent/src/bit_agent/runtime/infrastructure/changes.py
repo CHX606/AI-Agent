@@ -145,7 +145,15 @@ class ChangeJournal:
                     }
                 )
             if files:
-                result.append({"id": entry["id"], "status": entry["status"], "files": files})
+                # call_id 让界面把差异显示在对应的那次修改下面。
+                result.append(
+                    {
+                        "id": entry["id"],
+                        "call_id": entry.get("call_id"),
+                        "status": entry["status"],
+                        "files": files,
+                    }
+                )
         return {"changes": result}
 
     def review(self, change_id: str, action: str) -> dict:

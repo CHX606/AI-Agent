@@ -206,38 +206,19 @@
           </div>
 
           <div id="previous-turns"></div>
-          <article id="user-message" class="message user-message" hidden>
-            <div class="message-avatar user-avatar" aria-hidden="true">你</div>
-            <div class="message-content">
-              <header class="message-header"><strong>你</strong></header>
-              <p id="objective-display" class="message-text"></p>
+          <article id="current-turn" class="turn" hidden>
+            <div class="turn-user">
+              <span class="turn-prompt" aria-hidden="true">›</span>
+              <p id="objective-display" class="turn-user-text"></p>
             </div>
-          </article>
-
-          <article id="activity-message" class="message activity-message" hidden>
-            <div class="message-avatar agent-avatar" aria-hidden="true">✦</div>
-            <div class="message-content">
-              <header class="message-header activity-header">
-                <strong>执行记录</strong>
-                <span id="activity-count" class="activity-count">0 个操作</span>
-                <button id="activity-toggle" class="activity-toggle" type="button" aria-expanded="true" hidden>收起</button>
-              </header>
-              <ol id="timeline" class="timeline"></ol>
-              <div id="activity-empty" class="activity-empty">
-                <span class="thinking-dot"></span>
-                正在等待 Agent 选择下一步操作…
-              </div>
+            <ol id="stream" class="stream" aria-label="执行过程和回答"></ol>
+            <div id="status-line" class="status-line" role="status" hidden>
+              <span class="status-glyph" aria-hidden="true">✻</span>
+              <span class="status-verb">思考中…</span>
+              <span class="status-meta"></span>
             </div>
-          </article>
-
-          <article id="assistant-message" class="message assistant-message" hidden>
-            <div class="message-avatar agent-avatar" aria-hidden="true">✦</div>
-            <div class="message-content">
-              <header class="message-header"><strong>Bit Agent</strong></header>
-              <div id="answer" class="answer markdown-body">等待任务</div>
-              <div id="error-actions" class="error-actions" hidden>
-                <button id="retry" class="button-secondary" type="button">重新运行</button>
-              </div>
+            <div id="error-actions" class="error-actions" hidden>
+              <button id="retry" class="button-secondary" type="button">重新运行</button>
             </div>
           </article>
         </section>
@@ -248,7 +229,7 @@
             <textarea
               id="objective"
               class="composer-textarea"
-              placeholder="交给 Bit Agent 一个代码任务…"
+              placeholder="交给 Bit Agent 一个代码任务…（Shift+Tab 切换权限）"
               rows="3"
               spellcheck="false"
             ></textarea>
@@ -272,7 +253,7 @@
                     <wa-option value="auto">智能</wa-option>
                   </wa-select>
                 </div>
-                <span class="composer-tip"><kbd>Ctrl</kbd><span>+</span><kbd>Enter</kbd></span>
+                <span class="composer-tip" title="Shift+Tab 切换本轮工具权限；运行中按 Esc 暂停"><kbd>Enter</kbd><span>发送</span><kbd>Shift+Enter</kbd><span>换行</span></span>
               </div>
               <div class="composer-actions">
                 <button id="cancel" class="button-danger danger" type="button" disabled>停止</button>

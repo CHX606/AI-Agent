@@ -36,7 +36,7 @@ export function createInteractionView(callbacks: {
     <div class="interaction-question" hidden>
       <h3 class="question-title"></h3>
       <p class="question-deadline" aria-live="off"></p>
-      <details class="operation-details" hidden><summary>展开完整操作详情</summary><pre></pre></details>
+      <details class="operation-details" hidden><summary>操作详情</summary><pre></pre></details>
       <fieldset class="question-options"><legend class="sr-only">选择一个方案</legend></fieldset>
       <details class="question-free-answer"><summary>或者填写自己的回答</summary>
         <label class="sr-only" for="question-answer">自己的回答</label>
@@ -45,7 +45,7 @@ export function createInteractionView(callbacks: {
       <div class="question-submit-row"><button id="submit-question-answer" class="button-primary" type="button">提交回答并继续</button></div>
     </div>
     <details class="intent-editor">
-      <summary>补充要求或修改目标</summary>
+      <summary>修改目标（替换原目标和原计划）</summary>
       <div class="intent-kind-row"><label for="intent-kind">调整方式</label>
       <select id="intent-kind">
         <option value="supplement">补充要求：保留原目标</option>
@@ -92,13 +92,13 @@ export function createInteractionView(callbacks: {
     panel.dataset.status = status;
     panelBody.hidden = !editable && error.hidden;
     intentEditor.hidden = !editable;
-    // 进入暂停时展开编辑区；重复刷新状态时，不打断用户手动展开或收起。
-    if (paintedStatus !== status) intentEditor.open = status === "PAUSED";
+    // 补充要求直接写在下方输入框里按 Enter；这里只在需要“替换目标”时手动展开。
+    if (paintedStatus !== status) intentEditor.open = false;
     paintedStatus = status;
     notice.textContent = status === "PAUSED"
-      ? "任务已暂停，可以调整要求或直接继续。"
+      ? "已暂停。在下方输入框写补充要求后按 Enter，或直接继续执行。"
       : status === "WAITING_FOR_INPUT"
-        ? "需要你的回答"
+        ? "需要你的回答（按数字键选择；也可以在下方输入框直接写新的要求）"
         : status === "PAUSE_REQUESTED"
           ? "正在等待当前调用结束，随后暂停。"
           : "操作未完成，请查看下面的提示。";
@@ -172,6 +172,36 @@ export function createInteractionView(callbacks: {
     });
   });
 
+  /** 补丁按差异着色；其他操作详情原样显示。 */
+  function renderOperation(pre: HTMLElement, detail: string): void {
+    pre.replaceChildren();
+    for (const line of detail.split("\n")) {
+      const row = document.createElement("span");
+      row.className = /^\+(?!\+\+)/u.test(line) ? "op-add" : /^-(?!--)/u.test(line) ? "op-remove"
+        : line.startsWith("@@") ? "op-hunk" : "op-context";
+      row.textContent = line || " ";
+      pre.append(row);
+    }
+  }
+
+  // 键盘作答：按数字选择对应选项并提交；选中后按 Enter 提交。正在输入文字时不拦截。
+  document.addEventListener("keydown", (event) => {
+    if (questionBox.hidden || panel.hidden || sending || event.ctrlKey || event.altKey || event.metaKey) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("textarea, input[type=text], select, [contenteditable=true]")) return;
+    if (target && target !== document.body && !panel.contains(target) && target.id !== "objective") return;
+    const radios = [...options.querySelectorAll<HTMLInputElement>("input[type=radio]")];
+    const digit = Number.parseInt(event.key, 10);
+    if (Number.isInteger(digit) && digit >= 1 && digit <= radios.length) {
+      event.preventDefault();
+      radios[digit - 1]!.checked = true;
+      answerButton.click();
+    } else if (event.key === "Enter" && radios.some((radio) => radio.checked)) {
+      event.preventDefault();
+      answerButton.click();
+    }
+  });
+
   function reset(): void {
     taskId = "";
     status = "IDLE";
@@ -195,27 +225,35 @@ export function createInteractionView(callbacks: {
     const operation = record(question?.operation);
     const operationDetails = find<HTMLDetailsElement>(".operation-details");
     operationDetails.hidden = typeof operation?.detail !== "string";
-    operationDetails.querySelector("pre")!.textContent = String(operation?.detail ?? "");
+    renderOperation(operationDetails.querySelector("pre")!, String(operation?.detail ?? ""));
     if (changed) {
       freeAnswer.value = "";
       find<HTMLDetailsElement>(".question-free-answer").open = false;
-      operationDetails.open = false;
+      // 批准写文件时直接展开差异，和 Claude Code 先给你看改动再问要不要写一样。
+      operationDetails.open = typeof operation?.detail === "string";
       panelBody.scrollTop = 0;
       options.replaceChildren();
       const legend = document.createElement("legend");
       legend.className = "sr-only";
       legend.textContent = "选择一个方案";
       options.append(legend);
-      questionTitle.textContent = typeof question?.question === "string" ? question.question : "";
+      // 权限确认的标题只取第一行（例如“写入以下补丁”），补丁正文在下面的差异框里。
+      const text = typeof question?.question === "string" ? question.question : "";
+      questionTitle.textContent = typeof operation?.title === "string" ? operation.title : text;
       if (Array.isArray(question?.options)) {
+        let index = 0;
         for (const raw of question.options) {
           const option = record(raw);
           if (typeof option?.id !== "string" || typeof option.label !== "string") continue;
+          index += 1;
           const label = document.createElement("label");
           const radio = document.createElement("input");
           radio.type = "radio";
           radio.name = "agent-question-option";
           radio.value = option.id;
+          const number = document.createElement("span");
+          number.className = "option-index";
+          number.textContent = `${index}.`;
           const copy = document.createElement("span");
           const title = document.createElement("strong");
           title.textContent = option.label;
@@ -228,13 +266,17 @@ export function createInteractionView(callbacks: {
           const description = document.createElement("small");
           description.textContent = String(option.description ?? "");
           copy.append(title, description);
-          label.append(radio, copy);
+          label.append(radio, number, copy);
           options.append(label);
         }
       }
     }
     updateCountdown();
     paint();
+    // 新问题出现时把焦点交给第一个选项，可以直接按数字键作答（输入框里有未发送的文字时不抢焦点）。
+    if (changed && question && !composer.value.trim()) {
+      options.querySelector<HTMLInputElement>("input[type=radio]")?.focus({ preventScroll: true });
+    }
   }
 
   function updateCountdown(): void {
@@ -255,5 +297,7 @@ export function createInteractionView(callbacks: {
   return {
     update, reset,
     setStatus(value: string): void { status = value; paint(); },
+    /** 暂停或等待回答时，把输入框里的文字作为补充要求提交；当前问题随之失效，Agent 重新规划。 */
+    supplement(text: string): Promise<boolean> { return submit({ action: "supplement", text }); },
   };
 }

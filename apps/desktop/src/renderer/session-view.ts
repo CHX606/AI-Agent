@@ -32,7 +32,11 @@ export function onAgentModeChange(listener: (mode: MultiAgentMode) => void): voi
 
 export function clearPreviousTurns(): void { previousTurns.replaceChildren(); }
 
-/** 旧轮次展示在上方，当前轮次继续使用原来的执行记录和结果面板。 */
+const statusNotes: Record<string, string> = {
+  FAILED: "这一轮未完成", CANCELLED: "这一轮已停止", PARTIAL: "这一轮部分完成",
+};
+
+/** 旧轮次和当前轮次用同一种样式：› 你的要求，● 最终回答。旧轮次只保留要求和回答，不重放过程。 */
 export function renderPreviousTurns(payload: Record<string, unknown>, currentTaskId: string | null): void {
   clearPreviousTurns();
   if (!Array.isArray(payload.turns)) return;
@@ -41,30 +45,55 @@ export function renderPreviousTurns(payload: Record<string, unknown>, currentTas
     const turn = raw as Record<string, unknown>;
     if (turn.task_id === currentTaskId) continue;
     const section = document.createElement("section");
-    section.className = "saved-turn";
-    const user = document.createElement("strong");
-    user.textContent = "你";
+    section.className = "turn saved-turn";
+    const user = document.createElement("div");
+    user.className = "turn-user";
+    const prompt = document.createElement("span");
+    prompt.className = "turn-prompt";
+    prompt.setAttribute("aria-hidden", "true");
+    prompt.textContent = "›";
     const question = document.createElement("p");
-    question.className = "saved-question";
+    question.className = "turn-user-text saved-question";
     question.textContent = typeof turn.objective === "string" ? turn.objective : "";
-    const agent = document.createElement("strong");
-    agent.textContent = `Bit Agent · ${String(turn.status ?? "")}`;
-    const response = document.createElement("div");
-    response.className = "markdown-body";
-    renderMarkdown(response, typeof turn.final_answer === "string" && turn.final_answer ? turn.final_answer : "该轮没有最终回答。");
-    section.append(user, question);
+    user.append(prompt, question);
+    section.append(user);
     if (Array.isArray(turn.intent_updates)) {
       for (const rawUpdate of turn.intent_updates) {
         if (!rawUpdate || typeof rawUpdate !== "object") continue;
         const update = rawUpdate as Record<string, unknown>;
         if (typeof update.text !== "string") continue;
         const note = document.createElement("p");
-        note.className = "saved-question";
+        note.className = "turn-update";
         note.textContent = (update.kind === "replace" ? "修改目标：" : "补充要求：") + update.text;
         section.append(note);
       }
     }
-    section.append(agent, response);
+    const stream = document.createElement("ol");
+    stream.className = "stream";
+    const status = String(turn.status ?? "");
+    if (statusNotes[status]) {
+      const note = document.createElement("li");
+      note.className = "stream-item stream-note";
+      note.dataset.tone = status === "FAILED" ? "error" : "neutral";
+      note.innerHTML = `<span class="stream-note-mark" aria-hidden="true">※</span><span></span>`;
+      note.lastElementChild!.textContent = statusNotes[status]!;
+      stream.append(note);
+    }
+    const answer = typeof turn.final_answer === "string" ? turn.final_answer : "";
+    if (answer) {
+      const item = document.createElement("li");
+      item.className = "stream-item stream-text";
+      const mark = document.createElement("span");
+      mark.className = "stream-bullet";
+      mark.setAttribute("aria-hidden", "true");
+      mark.textContent = "●";
+      const response = document.createElement("div");
+      response.className = "markdown-body";
+      renderMarkdown(response, answer);
+      item.append(mark, response);
+      stream.append(item);
+    }
+    section.append(stream);
     previousTurns.append(section);
   }
 }

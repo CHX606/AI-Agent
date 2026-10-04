@@ -3,13 +3,12 @@ import "@awesome.me/webawesome/dist/components/details/details.js";
 import "./styles.css";
 
 import type { ColorTheme, TaskEvent } from "../shared/contracts";
-import { createActivityCard } from "./activity-card";
 import { element, errorText, formatHistoryTime, object, projectName } from "./dom";
-import { renderMarkdown } from "./markdown";
 import {
-  estimateCost, eventPresentation, formatTokens, isMainAgentText, summarizeResult,
+  estimateCost, formatTokens, summarizeResult,
   usageDescription, type TokenPrices, type UsageSummary,
 } from "./presentation";
+import { createStreamView, type FileDiff } from "./stream-view";
 import {
   clearPreviousTurns, getAgentMode, onAgentModeChange,
   renderPreviousTurns, setAgentMode, setModeDisabled,
@@ -46,8 +45,6 @@ const reportClientError = (kind: "exception" | "rejection", line?: number) => {
 };
 window.addEventListener("error", event => reportClientError("exception", event.lineno));
 window.addEventListener("unhandledrejection", () => reportClientError("rejection"));
-let streamingText = "";
-let streamingIdentity = "";
 const initialTheme: ColorTheme = window.bitAgent.colorTheme;
 
 document.documentElement.dataset.theme = initialTheme;
@@ -68,11 +65,7 @@ const browseButton = element<HTMLButtonElement>("#browse");
 const healthButton = element<HTMLButtonElement>("#health");
 const statusText = element<HTMLElement>("#status");
 const taskIdText = element<HTMLElement>("#task-id");
-const timeline = element<HTMLOListElement>("#timeline");
-const activityCount = element<HTMLElement>("#activity-count");
-const activityToggle = element<HTMLButtonElement>("#activity-toggle");
-const activityEmpty = element<HTMLElement>("#activity-empty");
-const answer = element<HTMLElement>("#answer");
+const currentTurn = element<HTMLElement>("#current-turn");
 const files = element<HTMLElement>("#changed-files");
 const tests = element<HTMLElement>("#tests-state");
 const lint = element<HTMLElement>("#lint-state");
@@ -88,9 +81,6 @@ const taskHistory = element<HTMLElement>("#task-history");
 const historyCount = element<HTMLElement>("#history-count");
 const historyEmpty = element<HTMLElement>("#history-empty");
 const emptyState = element<HTMLElement>("#empty-state");
-const userMessage = element<HTMLElement>("#user-message");
-const activityMessage = element<HTMLElement>("#activity-message");
-const assistantMessage = element<HTMLElement>("#assistant-message");
 const errorActions = element<HTMLElement>("#error-actions");
 const inspectorToggle = element<HTMLButtonElement>("#inspector-toggle");
 const inspectorClose = element<HTMLButtonElement>("#inspector-close");
@@ -113,9 +103,23 @@ let submitting = false;
 let viewGeneration = 0;
 let nextSessionOffset: number | null = 0;
 let activeObjective = "";
-let eventCount = 0;
-const activityCards = new Map<string, HTMLLIElement>();
+/** 历史任务回放事件期间为 true；回放结束（desktop_stream_ended）后再载入最终结果。 */
+let replaying = false;
 let history = loadHistory();
+const streamView = createStreamView({
+  stream: element<HTMLOListElement>("#stream"),
+  statusLine: element<HTMLElement>("#status-line"),
+  scroller: element<HTMLElement>("#conversation"),
+  loadDiff: async (callId: string): Promise<FileDiff[]> => {
+    if (!activeTaskId) return [];
+    const payload = await window.bitAgent.getChanges(requestInput());
+    const change = (Array.isArray(payload.changes) ? payload.changes : [])
+      .map(object).find((item) => item?.call_id === callId);
+    return (Array.isArray(change?.files) ? change.files : []).map(object)
+      .filter((file): file is Record<string, unknown> => typeof file?.path === "string" && typeof file.diff === "string")
+      .map((file) => ({ path: String(file.path), diff: String(file.diff) }));
+  },
+});
 /** 搜索时显示的结果；为 null 时显示完整历史。 */
 let searchResults: TaskHistoryEntry[] | null = null;
 const sessionSearch = element<HTMLInputElement>("#session-search");
@@ -332,12 +336,36 @@ function setBusy(busy: boolean): void {
   for (const button of taskHistory.querySelectorAll<HTMLButtonElement>("button")) {
     button.disabled = submitting;
   }
+  paintComposer();
+}
+
+const defaultPlaceholder = objectiveInput.placeholder;
+/** 暂停或等待回答时，输入框用来写补充要求（像 Claude Code 中断后继续输入），其余运行期间锁定。 */
+function steering(): boolean {
+  const status = statusText.dataset.status;
+  return !replaying && Boolean(activeTaskId) && (status === "PAUSED" || status === "WAITING_FOR_INPUT");
+}
+
+function paintComposer(): void {
+  const steer = steering();
+  document.body.dataset.steering = steer ? String(statusText.dataset.status) : "";
+  if (document.body.dataset.busy === "true") {
+    objectiveInput.disabled = !steer;
+    runButton.disabled = !steer || submitting;
+  }
+  objectiveInput.placeholder = !steer ? defaultPlaceholder
+    : statusText.dataset.status === "PAUSED"
+      ? "写下补充要求，按 Enter 提交并继续…"
+      : "也可以直接写新的要求，按 Enter 提交：Agent 会放弃当前问题并按你的话重新规划…";
 }
 
 function setStatus(status: string): void {
   statusText.textContent = statusLabels[status] ?? status;
   statusText.dataset.status = status;
   interactionView?.setStatus(status);
+  // 回放历史事件时，事件里的旧状态只更新顶部标签，不驱动底部状态行。
+  if (!replaying) streamView.setStatus(status);
+  paintComposer();
   updateActiveHistory({ status });
 }
 
@@ -347,10 +375,7 @@ function applyInteractionTask(task: Record<string, unknown>): void {
   const status = typeof task.status === "string" ? task.status : "UNKNOWN";
   setStatus(status);
   setBusy(!terminalStatuses.has(status));
-  if (status === "PAUSED") showThinking("已暂停，等待你继续或修改要求。");
-  else if (status === "WAITING_FOR_INPUT") showThinking("Agent 提出了问题，请在下方回答。");
-  else if (status === "RUNNING") showThinking("正在按当前要求继续执行…");
-  if (terminalStatuses.has(status)) void loadResult();
+  if (terminalStatuses.has(status) && !replaying) void loadResult();
 }
 
 async function refreshInteraction(): Promise<void> {
@@ -371,8 +396,6 @@ async function refreshInteraction(): Promise<void> {
 }
 
 function resetMetrics(): void {
-  streamingText = "";
-  streamingIdentity = "";
   tests.textContent = "-";
   lint.textContent = "-";
   acceptance.textContent = "-";
@@ -391,37 +414,16 @@ function resetMetrics(): void {
 
 function showConversation(objective: string): void {
   emptyState.hidden = true;
-  userMessage.hidden = false;
-  activityMessage.hidden = false;
-  assistantMessage.hidden = false;
+  currentTurn.hidden = false;
   objectiveDisplay.textContent = objective;
 }
 
-function setActivityPlaceholder(message: string): void {
-  const dot = document.createElement("span");
-  dot.className = "thinking-dot";
-  activityEmpty.replaceChildren(dot, document.createTextNode(message));
-  activityEmpty.hidden = false;
-}
-
-function showThinking(message = "Agent 正在分析项目并选择下一步操作…"): void {
-  answer.replaceChildren();
-  answer.dataset.state = "loading";
-  const indicator = document.createElement("span");
-  indicator.className = "thinking-indicator";
-  indicator.append(document.createElement("i"), document.createElement("i"), document.createElement("i"));
-  const copy = document.createElement("span");
-  copy.textContent = message;
-  answer.append(indicator, copy);
-  errorActions.hidden = true;
-}
-
 function showError(error: unknown): void {
-  const message = errorText(error);
+  replaying = false;
+  currentTurn.hidden = false;
+  emptyState.hidden = true;
   setStatus("ERROR");
-  assistantMessage.hidden = false;
-  delete answer.dataset.state;
-  renderMarkdown(answer, `### 任务未完成\n\n${message}`);
+  streamView.showError(errorText(error));
   errorActions.hidden = false;
   setBusy(false);
 }
@@ -430,6 +432,7 @@ function appendEvent(event: TaskEvent): void {
   // 切换对话后，旧任务仍可在后台执行，但它的事件不能写进新对话。
   if (event.taskId && event.taskId !== activeTaskId) return;
   if (event.event_type === "desktop_stream_ended") {
+    replaying = false;
     void loadResult();
     return;
   }
@@ -455,53 +458,14 @@ function appendEvent(event: TaskEvent): void {
     if (state?.connected) void refreshInteraction();
     return;
   }
-  if (event.event_type === "MODEL_TEXT_DELTA") {
-    const data = object(event.data);
-    if (!isMainAgentText(data)) return;
-    const payload = object(data?.payload);
-    if (typeof payload?.text !== "string") return;
-    const identity = `${activeTaskId}:${String(payload.response_id)}`;
-    if (identity !== streamingIdentity) { streamingIdentity = identity; streamingText = ""; }
-    streamingText += payload.text;
-    delete answer.dataset.state;
-    renderMarkdown(answer, streamingText);
-    return;
-  }
   const data = object(event.data);
   if (typeof data?.status === "string") setStatus(data.status);
-  if (["TASK_PAUSE_REQUESTED", "TASK_PAUSED", "TASK_RESUMED", "TASK_INTENT_UPDATED",
+  if (!replaying && ["TASK_PAUSE_REQUESTED", "TASK_PAUSED", "TASK_RESUMED", "TASK_INTENT_UPDATED",
     "USER_QUESTION", "USER_ANSWERED", "QUESTION_DEFAULTED"].includes(event.event_type)) {
     void refreshInteraction();
   }
-  if (event.event_type === "desktop_error") showError(data?.message ?? event.data);
-
-  const presentation = eventPresentation(event);
-  if (!presentation) return;
-  const previous = activityCards.get(presentation.key);
-  if (presentation.remove) {
-    previous?.remove();
-    activityCards.delete(presentation.key);
-    eventCount = activityCards.size;
-    activityCount.textContent = `${eventCount} 个操作`;
-    activityEmpty.hidden = eventCount > 0;
-    return;
-  }
-
-  const item = createActivityCard(presentation, event.data);
-  if (previous) previous.replaceWith(item); else timeline.append(item);
-  activityCards.set(presentation.key, item);
-  eventCount = activityCards.size;
-  activityCount.textContent = `${eventCount} 个操作`;
-  activityEmpty.hidden = true;
-  item.scrollIntoView({ block: "nearest" });
-}
-
-/** collapsed 为 null 时隐藏切换按钮（任务进行中或操作很少）。 */
-function setTimelineCollapsed(collapsed: boolean | null): void {
-  activityMessage.dataset.collapsed = String(collapsed === true);
-  activityToggle.hidden = collapsed === null;
-  activityToggle.textContent = collapsed ? `展开 ${eventCount} 个操作` : "收起";
-  activityToggle.setAttribute("aria-expanded", String(collapsed !== true));
+  if (event.event_type === "desktop_error") { showError(data?.message ?? event.data); return; }
+  streamView.handle(event);
 }
 
 function renderChangedFiles(changedFiles: string[]): void {
@@ -535,8 +499,17 @@ function renderVerificationState(element: HTMLElement, passed: boolean | null): 
 
 function renderResult(payload: Record<string, unknown>): void {
   const summary = summarizeResult(payload);
-  delete answer.dataset.state;
-  renderMarkdown(answer, summary.answer);
+  const result = object(payload.result);
+  const finalAnswer = typeof result?.final_answer === "string" && result.final_answer ? result.final_answer : null;
+  const status = typeof payload.status === "string" ? payload.status : "";
+  const failure = typeof payload.error === "string" ? payload.error
+    : typeof result?.error === "string" ? result.error : null;
+  showConversation(objectiveDisplay.textContent || activeObjective);
+  streamView.finish({
+    answer: finalAnswer,
+    cancelled: status === "CANCELLED",
+    failure: finalAnswer ? null : failure ?? (status === "FAILED" ? summary.answer : null),
+  });
   renderChangedFiles(summary.changedFiles);
   renderVerificationState(tests, summary.testsPassed);
   renderVerificationState(lint, summary.qualityPassed);
@@ -560,8 +533,7 @@ function renderResult(payload: Record<string, unknown>): void {
   rounds.textContent = summary.rounds === null ? "-" : String(summary.rounds);
   void renderUsage(summary.usage);
   rawResult.textContent = JSON.stringify(payload, null, 2);
-  errorActions.hidden = true;
-  setTimelineCollapsed(eventCount > 6 ? true : null);
+  errorActions.hidden = status !== "FAILED";
   updateActiveHistory({ finalAnswer: summary.answer });
 }
 
@@ -649,23 +621,36 @@ async function refreshSessions(append = false): Promise<void> {
 
 function prepareRun(objective: string): void {
   interactionView?.reset();
-  setTimelineCollapsed(null);
+  replaying = false;
   activeObjective = objective;
   taskIdText.textContent = objective;
   taskIdText.removeAttribute("title");
-  eventCount = 0;
-  timeline.replaceChildren();
-  activityCards.clear();
-  activityCount.textContent = "0 个操作";
-  setActivityPlaceholder("正在等待 Agent 的下一步操作…");
+  errorActions.hidden = true;
+  streamView.reset();
   showConversation(objective);
-  showThinking();
   resetMetrics();
   setBusy(true);
   setStatus("SUBMITTING");
 }
 
+async function steer(): Promise<void> {
+  const text = objectiveInput.value.trim();
+  if (!text || !interactionView || submitting) return;
+  submitting = true;
+  paintComposer();
+  try {
+    if (await interactionView.supplement(text)) {
+      objectiveInput.value = "";
+      streamView.userNote(text);
+    }
+  } finally {
+    submitting = false;
+    paintComposer();
+  }
+}
+
 async function runAgent(): Promise<void> {
+  if (steering()) { await steer(); return; }
   if (submitting || document.body.dataset.busy === "true") return;
   const objective = objectiveInput.value.trim();
   const workspaceRoot = workspaceInput.value.trim();
@@ -691,6 +676,7 @@ async function runAgent(): Promise<void> {
     if (previousSession) {
       const saved = await window.bitAgent.getSession({ gatewayUrl: gatewayInput.value.trim(), sessionId: previousSession });
       renderPreviousTurns(saved, null);
+      streamView.scrollToEnd();
     }
     const task = await window.bitAgent.createTask({
       gatewayUrl: gatewayInput.value.trim(),
@@ -750,15 +736,12 @@ async function restoreTask(entry: TaskHistoryEntry): Promise<void> {
   setBusy(true);
   taskIdText.textContent = entry.objective;
   taskIdText.title = `任务 ID：${entry.taskId}`;
-  eventCount = 0;
-  timeline.replaceChildren();
-  activityCards.clear();
-  activityCount.textContent = "历史任务";
-  setActivityPlaceholder("正在载入任务状态…");
+  errorActions.hidden = true;
+  replaying = false;
+  streamView.reset();
+  streamView.setLoading("正在载入记录…");
   showConversation(entry.objective);
   setStatus(entry.status);
-  if (entry.finalAnswer) renderMarkdown(answer, entry.finalAnswer);
-  else showThinking("正在载入历史任务结果…");
   renderHistory();
 
   try {
@@ -767,6 +750,7 @@ async function restoreTask(entry: TaskHistoryEntry): Promise<void> {
       const saved = await window.bitAgent.getSession({ gatewayUrl: entry.gatewayUrl, sessionId: entry.sessionId });
       if (generation !== viewGeneration) return;
       renderPreviousTurns(saved, entry.taskId);
+      streamView.scrollToEnd();
       setAgentMode(object(saved.session)?.multi_agent_mode);
     }
     const task = await window.bitAgent.getTask(input);
@@ -777,14 +761,15 @@ async function restoreTask(entry: TaskHistoryEntry): Promise<void> {
     }
     interactionView?.update(task);
     const status = typeof task.status === "string" ? task.status : entry.status;
-    setStatus(status);
+    streamView.setStartedAt(typeof task.started_at === "string" ? task.started_at : null);
     if (terminalStatuses.has(status)) {
-      const payload = await window.bitAgent.getResult(input);
-      if (generation !== viewGeneration) return;
-      renderResult(payload);
-      setBusy(false);
+      // 已结束的任务：回放保存的事件，重建完整的过程；回放结束后再载入最终结果。
+      replaying = true;
+      setStatus(status);
+      window.bitAgent.watchTask(requestInput());
     } else {
-      showThinking("任务仍在运行，正在恢复实时事件…");
+      streamView.setLoading(null);
+      setStatus(status);
       setBusy(true);
       window.bitAgent.watchTask(requestInput());
     }
@@ -804,17 +789,14 @@ function resetTask(): void {
   setAgentMode("auto");
   clearPreviousTurns();
   activeObjective = "";
-  eventCount = 0;
-  setTimelineCollapsed(null);
+  replaying = false;
   taskIdText.textContent = "新任务";
   taskIdText.removeAttribute("title");
   setStatus("IDLE");
-  timeline.replaceChildren();
-  activityCards.clear();
+  streamView.reset();
   emptyState.hidden = false;
-  userMessage.hidden = true;
-  activityMessage.hidden = true;
-  assistantMessage.hidden = true;
+  currentTurn.hidden = true;
+  errorActions.hidden = true;
   objectiveInput.value = "";
   resetMetrics();
   setBusy(false);
@@ -869,21 +851,42 @@ retryButton.addEventListener("click", () => {
   void runAgent();
 });
 newTaskButton.addEventListener("click", resetTask);
-activityToggle.addEventListener("click", () => {
-  setTimelineCollapsed(activityMessage.dataset.collapsed !== "true");
-});
+
+const permissionOrder = ["confirm", "edit", "read_only"] as const;
+/** Shift+Tab 依次切换本轮工具权限，和 Claude Code 切换模式的方式一致。 */
+function cyclePermission(): void {
+  const select = document.querySelector<HTMLElement & { value: string; disabled: boolean }>("#permission-mode");
+  if (!select || select.disabled) return;
+  const index = permissionOrder.indexOf(select.value as typeof permissionOrder[number]);
+  select.value = permissionOrder[(index + 1) % permissionOrder.length]!;
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+}
 
 objectiveInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && event.ctrlKey) {
+  // 输入法组字时的回车只是确认候选词，不能发送。
+  if (event.isComposing || event.keyCode === 229) return;
+  if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     if (!runButton.disabled) void runAgent();
+  } else if (event.key === "Tab" && event.shiftKey) {
+    event.preventDefault();
+    cyclePermission();
+  }
+});
+
+// Esc 暂停：在安全位置停下，之后可以补充要求或继续（和 Claude Code 中断后再输入的体验一致）。
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.defaultPrevented || document.querySelector("dialog[open]")) return;
+  const pause = document.querySelector<HTMLButtonElement>("#pause-task");
+  if (pause && !pause.hidden && !pause.disabled) {
+    event.preventDefault();
+    pause.click();
   }
 });
 
 cancelButton.addEventListener("click", async () => {
   try {
     cancelButton.disabled = true;
-    showThinking("正在停止任务…");
     const task = await window.bitAgent.cancelTask(requestInput());
     setStatus(typeof task.status === "string" ? task.status : "CANCELLATION_REQUESTED");
   } catch (error) {

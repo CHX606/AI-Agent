@@ -48,6 +48,7 @@ from bit_agent.agent.tool_dispatch import (
 from bit_agent.agent.tool_dispatch import TOOL_HANDLERS as TOOL_HANDLERS
 from bit_agent.agent.tool_dispatch import ToolHandler as ToolHandler
 from bit_agent.agent.tool_dispatch import execute_tool as execute_tool
+from bit_agent.agent.tool_dispatch import result_summary
 from bit_agent.agent.tool_dispatch import tool_error_result as tool_error_result
 from bit_agent.agent.tool_dispatch import tool_operation as tool_operation
 from bit_agent.agent.verification import (
@@ -527,6 +528,7 @@ class _AgentRun:
                 "error_code": record.error.code if record.error else None,
                 "diagnostic_id": self._log_tool_failure(tool_call, record),
                 "operation": operation_display,
+                "summary": result_summary(tool_call.name, tool_result),
             },
         )
         self.memory_tracker.record_tool_call(record)
