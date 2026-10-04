@@ -19,7 +19,7 @@ export interface RepositoryPort {
 
 export interface RuntimePort {
   managedHeaders(url: string): Record<string, string>;
-  runtimeConfiguration(): { managed: boolean; gatewayUrl: string; startupError: string };
+  runtimeConfiguration(): { managed: boolean; gatewayUrl: string; startupError: string; version: string; userName: string };
   modelSettings(includeSecret?: boolean): Record<string, string | boolean>;
   saveModelSettings(input: unknown): Promise<Record<string, string | boolean>>;
   testModelSettings(input: unknown): Promise<Record<string, unknown>>;

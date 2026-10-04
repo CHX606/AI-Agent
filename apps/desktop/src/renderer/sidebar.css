@@ -1,0 +1,371 @@
+/* 侧边栏（参照 Claude 桌面版）：快捷操作、按工作区分组的对话、左下角个人中心。 */
+
+.sidebar-actions {
+  display: grid;
+  gap: 1px;
+  margin-top: 10px;
+}
+
+.sidebar-action {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 13px;
+  text-align: left;
+}
+
+.sidebar-action:hover,
+.sidebar-action:focus-visible {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.sidebar-action svg,
+.workspace-group svg,
+.profile-button svg {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidebar-action svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.7;
+}
+
+/* “新对话”的加号是实心圆，和 Claude 的 New 一样醒目。 */
+#new-task svg {
+  box-sizing: content-box;
+  width: 11px;
+  height: 11px;
+  padding: 2.5px;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--bg-main);
+  stroke-width: 2.6;
+}
+
+.history-section {
+  margin-top: 12px;
+}
+
+.history-section .session-search {
+  margin-bottom: 14px;
+}
+
+.task-history {
+  gap: 6px;
+  margin: 0 -2px;
+  padding: 0 2px 8px;
+}
+
+/* 工作区分组：▸ 文件夹 名称 …… + */
+
+.workspace-group-header {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  gap: 2px;
+  padding-right: 3px;
+  border-radius: 7px;
+}
+
+.workspace-group-header:hover {
+  background: var(--bg-hover);
+}
+
+.workspace-group-toggle {
+  display: flex;
+  min-width: 0;
+  height: 30px;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.workspace-group[data-active="true"] .workspace-group-toggle {
+  color: var(--text);
+}
+
+.workspace-chevron {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.6;
+  transition: transform 120ms ease;
+}
+
+.workspace-group-toggle[aria-expanded="true"] .workspace-chevron {
+  transform: rotate(90deg);
+}
+
+.workspace-folder {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.6;
+}
+
+.workspace-group[data-active="true"] .workspace-folder {
+  color: var(--brand);
+}
+
+.workspace-group-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-group-action {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  place-items: center;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+}
+
+.workspace-group-action:hover:not(:disabled),
+.workspace-group-action:focus-visible {
+  background: var(--bg-pressed);
+  color: var(--text);
+}
+
+.workspace-group-action svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.8;
+}
+
+/* “从列表移除”只在悬停时出现，避免误点。 */
+.workspace-group-action[data-action="remove"] {
+  opacity: 0;
+}
+
+.workspace-group-header:hover .workspace-group-action[data-action="remove"],
+.workspace-group-action[data-action="remove"]:focus-visible {
+  opacity: 1;
+}
+
+.workspace-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 0 2px 8px;
+}
+
+.workspace-group-items[hidden] {
+  display: none;
+}
+
+.workspace-group-empty {
+  padding: 4px 8px 4px 22px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.workspace-group-items .history-item {
+  align-items: center;
+  padding: 6px 8px 6px 12px;
+}
+
+.workspace-group-items .history-status {
+  margin-top: 0;
+}
+
+.workspace-group-items .history-copy strong {
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.workspace-group-items .history-item[data-active="true"] .history-copy strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.workspace-group-items .history-actions {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* 个人中心：左下角头像和名字，点开向上弹出设置菜单。 */
+
+.sidebar-bottom {
+  position: relative;
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.profile-button {
+  display: flex;
+  width: 100%;
+  height: 46px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+  border-radius: 9px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+
+.profile-button:hover,
+.profile-button[aria-expanded="true"] {
+  background: var(--bg-hover);
+}
+
+.profile-avatar {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  font: 600 13px var(--font-sans);
+}
+
+.profile-copy,
+.profile-menu-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.profile-copy strong,
+.profile-menu-copy strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-copy small,
+.profile-menu-copy small {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.profile-button .settings-status {
+  flex: none;
+}
+
+.profile-chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  stroke-width: 1.8;
+}
+
+.profile-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  max-height: calc(100vh - 120px);
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--bg-main);
+  box-shadow: var(--shadow-composer);
+}
+
+.profile-menu[hidden] {
+  display: none;
+}
+
+.profile-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  padding: 6px 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-menu-items {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 各模块插入按钮的先后不固定，这里统一排序。 */
+#model-settings { order: 1; }
+#execution-settings { order: 2; }
+#mcp-settings { order: 3; }
+#memory-settings { order: 4; }
+#diagnostics-settings { order: 5; }
+#settings-panel { order: 6; }
+
+.profile-menu .sidebar-model-settings {
+  min-height: 32px;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.profile-menu .settings-panel {
+  border-top: 0;
+}
+
+.profile-menu .settings-panel > summary {
+  min-height: 32px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.profile-menu .settings-panel > summary:hover {
+  background: var(--bg-hover);
+}
+
+.profile-menu .settings-summary-copy {
+  gap: 9px;
+}
+
+.profile-menu .settings-summary-copy svg {
+  width: 15px;
+  height: 15px;
+}
+
+.profile-menu .settings-content {
+  padding: 4px 8px 8px;
+}
+
+.settings-status-label {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.settings-status-label[data-connected="true"] { color: var(--green); }
+.settings-status-label[data-connected="false"] { color: var(--red); }
+
+.profile-menu-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+.profile-version {
+  padding: 4px 8px 2px;
+  color: var(--text-faint);
+  font: 11px var(--font-mono);
+}

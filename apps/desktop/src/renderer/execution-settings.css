@@ -1,11 +1,5 @@
 /* 使用 Web Awesome 的交互、焦点管理和响应式弹窗，仅映射现有产品主题。 */
-.execution-settings-trigger { display: block; width: 100%; margin-bottom: 3px; }
-.execution-settings-trigger::part(base) {
-  justify-content: flex-start; min-height: 34px; padding: 6px 8px;
-  border-radius: 6px; color: var(--text-soft); font: 12px var(--font-sans);
-}
-.execution-settings-trigger::part(base):hover { background: var(--bg-hover); color: var(--text); }
-.execution-settings-trigger svg, .execution-settings-compact svg {
+.execution-settings-compact svg {
   display: block; width: 15px; height: 15px; fill: none; stroke: currentColor;
   stroke-width: 1.7; stroke-linecap: round;
 }

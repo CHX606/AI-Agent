@@ -18,6 +18,8 @@ import { createInteractionView } from "./interaction-view";
 import { mountModelMenu, type ModelMenu } from "./model-menu";
 import { createRepositoryView } from "./repository-view";
 import { loadHistory, saveHistory, type TaskHistoryEntry } from "./task-history";
+import { mountProfileMenu } from "./profile-menu";
+import { rememberWorkspace, renderWorkspaceTree } from "./workspace-tree";
 
 const terminalStatuses = new Set(["COMPLETED", "PARTIAL", "FAILED", "CANCELLED"]);
 const statusLabels: Record<string, string> = {
@@ -224,7 +226,10 @@ function setWorkspace(path: string): void {
   workspaceSummary.title = workspaceRoot;
   if (workspaceRoot) localStorage.setItem(workspaceKey, workspaceRoot);
   else localStorage.removeItem(workspaceKey);
+  // 选过的工作区留在侧边栏里，即使还没有对话。
+  if (workspaceRoot) rememberWorkspace(workspaceRoot);
   repository.setWorkspace(workspaceRoot, activeView === "repository");
+  renderHistory();
 }
 
 function setActiveView(view: "tasks" | "repository"): void {
@@ -249,58 +254,77 @@ function setActiveView(view: "tasks" | "repository"): void {
 const renameIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/></svg>`;
 const deleteIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg>`;
 
+/** 侧边栏：按工作区分组的文件夹，每组下面是这个工作区的对话。 */
 function renderHistory(): void {
-  taskHistory.replaceChildren();
   const visible = searchResults ?? history;
-  historyCount.textContent = String(visible.length);
-  historyEmpty.hidden = visible.length > 0;
-  historyEmpty.textContent = searchResults ? "没有找到匹配的对话。" : "运行第一个任务后，会话会保存在这里。";
+  renderWorkspaceTree(taskHistory, {
+    entries: visible,
+    searching: searchResults !== null,
+    activeWorkspace: activeWorkspaceRoot,
+    disabled: submitting,
+    renderEntry: historyRow,
+    onNewConversation: newConversationIn,
+    onChange: renderHistory,
+  });
+  // 标题旁的数字是工作区个数，悬停时显示对话数。
+  historyCount.textContent = String(taskHistory.childElementCount);
+  historyCount.title = `${taskHistory.childElementCount} 个工作区，${visible.length} 段对话`;
+  historyEmpty.hidden = taskHistory.childElementCount > 0;
+  historyEmpty.textContent = searchResults
+    ? "没有找到匹配的对话。"
+    : "点“添加工作区”选择一个本地代码仓库，对话会按工作区归类在这里。";
+}
 
-  for (const entry of visible) {
-    const row = document.createElement("div");
-    row.className = "history-row";
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "history-item";
-    button.disabled = submitting;
-    button.dataset.active = String(entry.taskId === activeTaskId);
-    button.title = entry.objective;
+/** 在某个工作区里新开一段对话（工作区标题右侧的 +）。 */
+function newConversationIn(root: string): void {
+  if (submitting) return;
+  setWorkspace(root);
+  resetTask();
+}
 
-    const icon = document.createElement("span");
-    icon.className = "history-status";
-    icon.dataset.status = entry.status;
-    icon.setAttribute("aria-hidden", "true");
+function historyRow(entry: TaskHistoryEntry): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "history-row";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "history-item";
+  button.disabled = submitting;
+  button.dataset.active = String(entry.taskId === activeTaskId);
+  button.title = entry.objective;
+  button.setAttribute("aria-description", formatHistoryTime(entry.createdAt));
 
-    const copy = document.createElement("span");
-    copy.className = "history-copy";
-    const title = document.createElement("strong");
-    title.textContent = entry.objective;
-    const meta = document.createElement("span");
-    meta.textContent = `${projectName(entry.workspaceRoot)} · ${formatHistoryTime(entry.createdAt)}`;
-    copy.append(title, meta);
-    button.append(icon, copy);
-    button.addEventListener("click", () => void restoreTask(entry));
+  const icon = document.createElement("span");
+  icon.className = "history-status";
+  icon.dataset.status = entry.status;
+  icon.setAttribute("aria-hidden", "true");
 
-    const actions = document.createElement("div");
-    actions.className = "history-actions";
-    for (const [action, label, svg] of [["rename", "重命名", renameIcon], ["delete", "删除", deleteIcon]] as const) {
-      const control = document.createElement("button");
-      control.type = "button";
-      control.dataset.action = action;
-      control.title = label;
-      control.setAttribute("aria-label", `${label}对话：${entry.objective}`);
-      control.innerHTML = svg;
-      control.disabled = submitting;
-      control.addEventListener("click", (event) => {
-        event.stopPropagation();
-        if (action === "rename") startRename(entry, title);
-        else void deleteConversation(entry);
-      });
-      actions.append(control);
-    }
-    row.append(button, actions);
-    taskHistory.append(row);
+  const copy = document.createElement("span");
+  copy.className = "history-copy";
+  const title = document.createElement("strong");
+  title.textContent = entry.objective;
+  copy.append(title);
+  button.append(icon, copy);
+  button.addEventListener("click", () => void restoreTask(entry));
+
+  const actions = document.createElement("div");
+  actions.className = "history-actions";
+  for (const [action, label, svg] of [["rename", "重命名", renameIcon], ["delete", "删除", deleteIcon]] as const) {
+    const control = document.createElement("button");
+    control.type = "button";
+    control.dataset.action = action;
+    control.title = label;
+    control.setAttribute("aria-label", `${label}对话：${entry.objective}`);
+    control.innerHTML = svg;
+    control.disabled = submitting;
+    control.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (action === "rename") startRename(entry, title);
+      else void deleteConversation(entry);
+    });
+    actions.append(control);
   }
+  row.append(button, actions);
+  return row;
 }
 
 /** 在列表里直接改名：回车或失去焦点保存，Esc 放弃。 */
@@ -1037,6 +1061,7 @@ interactionView = createInteractionView({ current: requestInput, apply: applyInt
 mountProductControls(requestInput, () => ({ gatewayUrl: gatewayInput.value.trim(),
   ...(activeTaskId ? { taskId: activeTaskId } : {}) }),
 () => ({ gatewayUrl: gatewayInput.value.trim(), workspaceRoot: workspaceInput.value.trim() }));
+mountProfileMenu({ toggleTheme: () => themeToggle.click() });
 modelMenu = mountModelMenu(element<HTMLElement>(".composer-actions"), () => element<HTMLButtonElement>("#model-settings").click());
 modelMenu.setDisabled(document.body.dataset.busy === "true");
 window.bitAgent.onTaskEvent(appendEvent);

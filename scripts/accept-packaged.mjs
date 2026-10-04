@@ -239,7 +239,7 @@ async function captureLayouts(command, evaluate, stage) {
           permissionInToolbar:Boolean(document.querySelector('#permission-mode').closest('.composer-toolbar')),
           reviewInInspector:Boolean(document.querySelector('#review-changes').closest('.inspector-heading')),
           extraComposerRow:Boolean(document.querySelector('.composer-card .product-controls')),
-          menu:rect('.choice-popover:not([hidden])') };
+          menu:rect('.choice-popover:not([hidden])') ?? rect('#profile-menu:not([hidden])') };
       })()`);
       assert(geometry.settingsInSidebar && geometry.permissionInToolbar && geometry.reviewInInspector && !geometry.extraComposerRow, "新入口不在约定的位置");
       const inside = r => r && r.x >= -1 && r.y >= -1 && r.right <= width + 1 && r.bottom <= height + 1;
@@ -317,6 +317,17 @@ try {
   const screenshot = await captureScreenshot();
   writeFileSync(join(directory, "packaged-desktop.png"), Buffer.from(screenshot.data, "base64"));
   await captureLayouts(command, evaluate, "conversation");
+  // 侧边栏按工作区分组；左下角个人中心显示版本 1.0，页面上不再有 Local harness。
+  assert(await evaluate("document.querySelector('.workspace-group[data-active=true] .workspace-group-name')?.textContent==='workspace' && document.querySelectorAll('.workspace-group[data-active=true] .history-item').length===1"), "对话没有归到所在工作区下");
+  await evaluate("document.querySelector('.workspace-group[data-active=true] .workspace-group-toggle').click()");
+  assert(await evaluate("document.querySelector('.workspace-group[data-active=true] .workspace-group-items').hidden"), "工作区分组不能折叠");
+  await evaluate("document.querySelector('.workspace-group[data-active=true] .workspace-group-toggle').click()");
+  assert(await evaluate("!document.body.innerText.includes('Local harness') && document.querySelector('#profile-button').textContent.includes('Bit Agent 1.0')"), "个人中心没有显示版本号 1.0");
+  await evaluate("document.querySelector('#profile-button').click()");
+  await check(() => evaluate("!document.querySelector('#profile-menu').hidden && ['#model-settings','#execution-settings','#mcp-settings','#memory-settings','#diagnostics-settings','#settings-panel','#profile-theme'].every(s=>document.querySelector('#profile-menu').contains(document.querySelector(s)))"), "个人中心菜单没有包含全部设置");
+  await captureLayouts(command, evaluate, "profile-menu");
+  await evaluate("document.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))");
+  await check(() => evaluate("document.querySelector('#profile-menu').hidden"), "点击别处没有收起个人中心菜单");
   // Codex 风格的权限菜单：三项、当前项打勾，选中后值随之改变。
   await evaluate("document.querySelector('#permission-mode .choice-trigger').click()");
   await check(() => evaluate("document.querySelectorAll('#permission-mode .choice-popover:not([hidden]) .choice-item').length===3 && document.querySelector('#permission-mode .choice-item[aria-checked=true]').dataset.value==='confirm'"), "权限菜单没有打开");
@@ -419,7 +430,9 @@ try {
   await captureLayouts(command, evaluate, "mcp");
   await evaluate("document.querySelector('.product-dialog-header button').click()");
   // 新开一段对话：上一段对话撤销过改动，下一轮会被要求重新验证，与外部工具无关。
-  await evaluate("document.querySelector('#new-task').click()");
+  // 用工作区标题右侧的 + 在同一工作区新开对话。
+  await evaluate("document.querySelector('.workspace-group[data-active=true] .workspace-group-action[data-action=new]').click()");
+  await check(() => evaluate("document.querySelector('#task-id').textContent==='新任务' && !document.querySelector('#empty-state').hidden"), "工作区的 + 没有新开对话");
   await evaluate("document.querySelector('#objective').value='PACKAGE-MCP';document.querySelector('#run').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='WAITING_FOR_INPUT' && document.querySelector('.question-title').textContent.includes('调用外部工具 self · list_files')"), "调用外部工具前没有要求确认");
   await evaluate("document.querySelector('input[name=agent-question-option][value=approve]').click();document.querySelector('#submit-question-answer').click()");

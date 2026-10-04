@@ -1,6 +1,7 @@
 import { app, net, safeStorage } from "electron";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { userInfo } from "node:os";
 import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { createInterface } from "node:readline";
@@ -17,7 +18,10 @@ let startupError = "";
 let stopping = false;
 
 export function runtimeConfiguration() {
-  return { managed: app.isPackaged, gatewayUrl: address, startupError };
+  // 版本号和本机用户名只用于左下角“个人中心”的显示。
+  let userName = "";
+  try { userName = userInfo().username; } catch { /* 取不到时界面显示默认头像 */ }
+  return { managed: app.isPackaged, gatewayUrl: address, startupError, version: app.getVersion(), userName };
 }
 
 export function managedHeaders(url: string): Record<string, string> {

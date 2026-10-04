@@ -8,14 +8,13 @@ import "./execution-settings.css";
 
 export function mountExecutionSettings(): void {
   const icon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>`;
-  const trigger = document.createElement("wa-button");
+  // 和个人中心菜单里的其他设置项同样式。
+  const trigger = document.createElement("button");
+  trigger.type = "button";
   trigger.id = "execution-settings";
-  trigger.className = "execution-settings-trigger";
-  trigger.appearance = "plain";
-  trigger.variant = "neutral";
-  trigger.size = "s";
-  trigger.innerHTML = `<span slot="start">${icon}</span>执行设置`;
-  document.querySelector("#model-settings")?.before(trigger);
+  trigger.className = "sidebar-model-settings";
+  trigger.innerHTML = `${icon}<span>执行设置</span>`;
+  document.querySelector("#model-settings")?.after(trigger);
 
   const compact = document.createElement("wa-button");
   compact.className = "execution-settings-compact";

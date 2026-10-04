@@ -63,78 +63,92 @@
               <h1>Bit Agent</h1>
               <p>Code agent</p>
             </div>
-            <button id="new-task" class="new-task-button" type="button" aria-label="新建任务">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
           </header>
 
-          <section class="sidebar-section project-section">
-            <div class="section-heading">
-              <span class="section-label">工作区</span>
-            </div>
-            <div class="project-control">
-              <div class="project-mark" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M3.5 7.5h7l2-2h8v13h-17z" /></svg>
-              </div>
-              <div class="project-copy">
-                <strong id="workspace-name">尚未选择项目</strong>
-                <span id="workspace-summary">选择本地代码仓库</span>
-              </div>
-              <button id="browse" class="icon-button" type="button" aria-label="选择工作区">…</button>
-            </div>
+          <!-- 参照 Claude 桌面版：顶部是“新对话 / 添加工作区”，下面按工作区分组列出对话。 -->
+          <nav class="sidebar-actions" aria-label="快捷操作">
+            <button id="new-task" class="sidebar-action" type="button" aria-label="新对话">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+              <span>新对话</span>
+            </button>
+            <button id="browse" class="sidebar-action" type="button" aria-label="添加工作区">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5h7l2-2h8v13h-17zM12 10.5v5M9.5 13h5" /></svg>
+              <span>添加工作区</span>
+            </button>
+          </nav>
+          <!-- 当前工作区由所选分组决定；这些元素留给脚本和自动化使用，不显示。 -->
+          <div class="workspace-state" hidden>
+            <strong id="workspace-name">尚未选择项目</strong>
+            <span id="workspace-summary">选择本地代码仓库</span>
             <label for="workspace" class="sr-only">工作区路径</label>
-            <input
-              id="workspace"
-              class="workspace-path"
-              placeholder="也可粘贴项目目录路径…"
-              spellcheck="false"
-              autocomplete="off"
-            />
-          </section>
+            <input id="workspace" class="workspace-path" spellcheck="false" autocomplete="off" />
+          </div>
 
           <section class="sidebar-section history-section">
-            <div class="section-heading">
-              <span class="section-label">会话</span>
-              <span id="history-count" class="section-count">0</span>
-            </div>
             <label for="session-search" class="sr-only">搜索对话</label>
             <input id="session-search" class="session-search" type="search" placeholder="搜索对话…" spellcheck="false" autocomplete="off" maxlength="200" />
-            <nav id="task-history" class="task-history" aria-label="最近任务"></nav>
-            <p id="history-empty" class="history-empty">运行第一个任务后，会话会保存在这里。</p>
+            <div class="section-heading">
+              <span class="section-label">工作区</span>
+              <span id="history-count" class="section-count">0</span>
+            </div>
+            <nav id="task-history" class="task-history" aria-label="工作区和对话"></nav>
+            <p id="history-empty" class="history-empty">点“添加工作区”选择一个本地代码仓库，对话会按工作区归类在这里。</p>
             <button id="more-sessions" class="button-secondary" type="button" hidden>加载更早对话</button>
           </section>
 
+          <!-- 个人中心：左下角头像，点开向上弹出设置菜单（参照 Claude 桌面版）。 -->
           <div class="sidebar-bottom">
-            <details id="settings-panel" class="settings-panel">
-              <summary>
-                <span class="settings-summary-copy">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zM19 12a7 7 0 0 0-.12-1.28l2-1.55-2-3.46-2.45 1a7 7 0 0 0-2.2-1.28L13.88 3h-4l-.35 2.43a7 7 0 0 0-2.2 1.28l-2.45-1-2 3.46 2 1.55A7 7 0 0 0 4.76 12c0 .44.04.87.12 1.28l-2 1.55 2 3.46 2.45-1a7 7 0 0 0 2.2 1.28L9.88 21h4l.35-2.43a7 7 0 0 0 2.2-1.28l2.45 1 2-3.46-2-1.55c.08-.41.12-.84.12-1.28z" />
-                  </svg>
-                  连接设置
+            <div id="profile-menu" class="profile-menu" role="menu" aria-label="个人中心" hidden>
+              <div class="profile-menu-head">
+                <span class="profile-avatar" aria-hidden="true">B</span>
+                <span class="profile-menu-copy">
+                  <strong class="profile-name">本机用户</strong>
+                  <small title="对话记录和设置只保存在这台电脑">本地运行</small>
                 </span>
-                <span id="connection-dot" class="settings-status" aria-hidden="true"></span>
-              </summary>
-              <div class="settings-content">
-                <label for="gateway" class="section-label">Gateway</label>
-                <div class="field-row">
-                  <input
-                    id="gateway"
-                    value="http://127.0.0.1:3000"
-                    spellcheck="false"
-                    autocomplete="off"
-                  />
-                  <button id="health" class="button-secondary secondary" type="button">检查</button>
-                </div>
-                <span id="connection" class="connection-text">尚未连接</span>
               </div>
-            </details>
-            <footer class="sidebar-footer">
-              <span class="environment-badge">Local harness</span>
-              <span>v0.1</span>
-            </footer>
+              <div class="profile-menu-items">
+                <details id="settings-panel" class="settings-panel">
+                  <summary>
+                    <span class="settings-summary-copy">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zM19 12a7 7 0 0 0-.12-1.28l2-1.55-2-3.46-2.45 1a7 7 0 0 0-2.2-1.28L13.88 3h-4l-.35 2.43a7 7 0 0 0-2.2 1.28l-2.45-1-2 3.46 2 1.55A7 7 0 0 0 4.76 12c0 .44.04.87.12 1.28l-2 1.55 2 3.46 2.45-1a7 7 0 0 0 2.2 1.28L9.88 21h4l.35-2.43a7 7 0 0 0 2.2-1.28l2.45 1 2-3.46-2-1.55c.08-.41.12-.84.12-1.28z" />
+                      </svg>
+                      连接设置
+                    </span>
+                    <span id="connection-state-label" class="settings-status-label"></span>
+                  </summary>
+                  <div class="settings-content">
+                    <label for="gateway" class="section-label">Gateway</label>
+                    <div class="field-row">
+                      <input
+                        id="gateway"
+                        value="http://127.0.0.1:3000"
+                        spellcheck="false"
+                        autocomplete="off"
+                      />
+                      <button id="health" class="button-secondary secondary" type="button">检查</button>
+                    </div>
+                    <span id="connection" class="connection-text">尚未连接</span>
+                  </div>
+                </details>
+              </div>
+              <div class="profile-menu-divider"></div>
+              <button id="profile-theme" class="sidebar-model-settings" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4 8.4 8.4 0 1 0 20 15.2z" /></svg>
+                <span>切换为暗色主题</span>
+              </button>
+              <div class="profile-menu-divider"></div>
+              <p class="profile-version">Bit Agent <span id="app-version">1.0</span></p>
+            </div>
+            <button id="profile-button" class="profile-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">
+              <span class="profile-avatar" aria-hidden="true">B</span>
+              <span class="profile-copy">
+                <strong class="profile-name">本机用户</strong>
+                <small>Bit Agent <span class="app-version">1.0</span></small>
+              </span>
+              <span id="connection-dot" class="settings-status" title="本地服务连接状态" aria-hidden="true"></span>
+              <svg class="profile-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 14 5-5 5 5" /></svg>
+            </button>
           </div>
         </div>
 

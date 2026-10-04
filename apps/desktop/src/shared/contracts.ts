@@ -136,7 +136,7 @@ export interface DesktopApi {
   diagnosticStatus(input: { gatewayUrl?: string; taskId?: string }): Promise<Record<string, unknown>>;
   exportDiagnostics(input: { gatewayUrl?: string; taskId?: string }): Promise<Record<string, unknown>>;
   readonly colorTheme: ColorTheme;
-  readonly runtimeConfig: { managed: boolean; gatewayUrl: string; startupError: string };
+  readonly runtimeConfig: { managed: boolean; gatewayUrl: string; startupError: string; version?: string; userName?: string };
   getChanges(input: TaskRequestInput): Promise<Record<string, unknown>>;
   reviewChange(input: TaskRequestInput & { changeId: string; action: "accept" | "undo" }): Promise<Record<string, unknown>>;
   gitStatus(input: TaskRequestInput): Promise<GitStatusResult>;

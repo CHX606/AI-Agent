@@ -1,5 +1,5 @@
 // 生成独立便携目录。只写入一个全新目录，不覆盖已有发布包或用户数据。
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
@@ -22,7 +22,9 @@ const resources = join(output, "resources");
 const app = join(resources, "app");
 mkdirSync(app, { recursive: true });
 cpSync(join(desktop, "dist"), join(app, "dist"), { recursive: true });
-writeFileSync(join(app, "package.json"), JSON.stringify({ name: "bit-agent", version: "0.1.0", type: "module", main: "dist/main/main/main.js" }));
+// 版本号以桌面端 package.json 为准，界面“个人中心”里显示的就是它（app.getVersion）。
+const { version } = JSON.parse(readFileSync(join(desktop, "package.json"), "utf8"));
+writeFileSync(join(app, "package.json"), JSON.stringify({ name: "bit-agent", version, type: "module", main: "dist/main/main/main.js" }));
 
 const esbuildDirectory = readdirSync(join(root, "node_modules", ".pnpm")).find((name) => /^esbuild@/u.test(name));
 if (!esbuildDirectory) throw new Error("缺少 esbuild，请先安装项目依赖");
