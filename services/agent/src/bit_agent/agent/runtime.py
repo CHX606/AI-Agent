@@ -25,7 +25,14 @@ from agents import (
     Runner,
 )
 from agents.run_config import ModelInputData, ToolExecutionConfig
-from openai import AsyncOpenAI, OpenAI
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    AsyncOpenAI,
+    AuthenticationError,
+    OpenAI,
+    RateLimitError,
+)
 
 from bit_agent.agent.limits import DEFAULT_MAX_TOOL_ROUNDS, validate_max_tool_rounds
 from bit_agent.agent.result import (
@@ -739,7 +746,7 @@ class _AgentRun:
             return await self.run_until_finished(agent)
         except Exception as exc:
             identifier = failure("agent_failed", exc)
-            message = (
+            message = _model_failure_message(exc) or (
                 "修改后未完成验证，请检查验证工具和执行结果"
                 if self.verification.has_unverified_changes
                 else "任务未完成，请查看日志与诊断"
@@ -753,6 +760,27 @@ class _AgentRun:
                     operation.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
             await self.stack.aclose()
+
+
+_RESUME_HINT = "网络恢复后，在同一对话发送“继续”即可，已有记录会保留。"
+
+
+def _model_failure_message(error: BaseException) -> str | None:
+    """模型服务本身出问题时，告诉用户具体原因；其他异常返回 None，沿用通用提示。"""
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, APITimeoutError):
+            return "连接模型服务超时，请检查网络、代理或接口地址。" + _RESUME_HINT
+        if isinstance(current, APIConnectionError):
+            return "无法连接模型服务，请检查网络、代理或接口地址。" + _RESUME_HINT
+        if isinstance(current, AuthenticationError):
+            return "模型服务拒绝了 API Key，请在模型设置中检查密钥。"
+        if isinstance(current, RateLimitError):
+            return "模型服务提示请求过于频繁或额度不足，请稍后再试或检查账户额度。"
+        current = current.__cause__ or current.__context__
+    return None
 
 
 def _summary_model(response_client: Any, model_name: str) -> str:
