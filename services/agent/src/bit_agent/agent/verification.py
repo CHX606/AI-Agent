@@ -158,6 +158,16 @@ class VerificationState:
                 self.acceptance_status = "FAILED"
             else:
                 self.acceptance_status = "NOT_VERIFIED"
+            if verdict == "NOT_VERIFIED" and self.tests_passed and self.quality_checks_passed:
+                # 验收真的跑了，但没能得出结论（环境、执行器或证据不足），不是代码有缺陷。
+                # 代码没变时重验只会得到同样的结论（真实遇到过：每次 3 分钟，连续重验）。
+                # 允许如实收尾：基础检查通过、独立验收记为“未完成验证”，并写明原因。
+                self.has_unverified_changes = False
+                summary = str(record.output.get("summary") or "").split("。")[0][:200]
+                note = "独立验收没能完成" + (f"：{summary}" if summary else "")
+                if note not in self.notes:
+                    self.notes = [*self.notes, note]
+                return
             self.has_unverified_changes = pending and not (
                 self.tests_passed
                 and self.quality_checks_passed

@@ -428,8 +428,9 @@ function setBusy(busy: boolean): void {
   retryButton.disabled = busy;
   newTaskButton.disabled = submitting;
   cancelButton.disabled = !busy;
-  // 空闲时不显示红色的“停止”，只在有任务可停时出现。
-  cancelButton.hidden = !busy;
+  // “停止”不再单独显示：运行中的“暂停”在正在暂停时变成“立即停止”，
+  // 暂停或等待回答时卡片上有“结束这一轮”，它们都通过这个按钮取消任务。
+  cancelButton.hidden = true;
   workspaceInput.disabled = busy;
   objectiveInput.disabled = busy;
   browseButton.disabled = busy;

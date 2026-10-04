@@ -394,6 +394,20 @@ class DelegatingToolProvider(LocalToolProvider):
                         "ACCEPTANCE_STALE",
                         "验收期间用户要求发生变化，需要按新要求重新验收",
                     )
+                verdict = result.output.get("verdict") if isinstance(result.output, dict) else None
+                if verdict == "NOT_VERIFIED" and result.error is not None:
+                    # 没能得出结论不等于代码有缺陷；代码没变时重验结论不会变，还要再等几分钟。
+                    result = result.model_copy(
+                        update={
+                            "error": result.error.model_copy(
+                                update={
+                                    "message": result.error.message
+                                    + "。独立验收没能得出结论，这不是代码缺陷：不要重复调用 "
+                                    "verify_task，直接给出最终回答，说明哪些要求没能验证及原因。"
+                                }
+                            )
+                        }
+                    )
                 return result
             except (ValueError, RuntimeError) as exc:
                 return tool_error_result(

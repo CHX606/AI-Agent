@@ -28,6 +28,24 @@ def test_declined_check_lets_the_task_finish_as_unverified():
     assert USER_DECLINED_NOTE in state.notes
 
 
+def test_inconclusive_acceptance_lets_the_task_finish_honestly():
+    """真实遇到的循环：基础检查通过 → 验收执行器没跑起来（NOT_VERIFIED）
+    → 被要求重验，每次 3 分钟。"""
+    state = VerificationState(require_independent_acceptance=True)
+    state.observe("apply_patch", call("apply_patch", {}, True, ["todo.py"]))
+    state.observe("verify_project", call("verify_project", {"outcome": "PASSED"}, True))
+    assert state.has_unverified_changes, "基础检查通过后仍需独立验收"
+    inconclusive = {"verdict": "NOT_VERIFIED", "summary": "执行器没有启动测试。其余说明"}
+    state.observe("verify_task", call("verify_task", inconclusive, False))
+    assert not state.has_unverified_changes
+    assert state.acceptance_status == "NOT_VERIFIED"
+    assert "独立验收没能完成：执行器没有启动测试" in state.notes
+    # 发现缺陷（FAILED）时仍然必须修复，不能直接收尾。
+    state.observe("verify_project", call("verify_project", {"outcome": "PASSED"}, True))
+    state.observe("verify_task", call("verify_task", {"verdict": "FAILED"}, False))
+    assert state.has_unverified_changes
+
+
 def test_refused_checks_do_not_reset_the_reminder_counter():
     state = VerificationState()
     state.observe("apply_patch", call("apply_patch", {}, True, ["a.py"]))

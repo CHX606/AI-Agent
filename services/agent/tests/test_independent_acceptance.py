@@ -152,6 +152,20 @@ async def test_docker_command_is_fixed_and_language_explicit(project, tmp_path, 
     assert sandbox[1][3] == "node"
 
 
+async def test_plain_python_folder_can_run_acceptance_tests(tmp_path, sandbox):
+    """真实遇到的问题：只有 todo.py、tests/ 和 requirements-dev.txt 的项目，基础检查能跑，
+    验收却报“只支持配置了 pytest 的项目”，三次验收都没有执行任何测试。"""
+    project = tmp_path / "todo"
+    (project / "tests").mkdir(parents=True)
+    (project / "todo.py").write_text("def add(a, b):\n    return a + b\n")
+    (project / "tests" / "test_todo.py").write_text("def test_add():\n    assert True\n")
+    (project / "requirements-dev.txt").write_text("pytest\n")
+    async with AcceptanceWorkspace(project, tmp_path / "artifacts") as workspace:
+        await workspace.write_test("", "test_acceptance_todo.py", "def test_x():\n    pass\n")
+        await workspace.run_test("", "tests", "python", "plain")
+    assert sandbox[-1][1] == ["python", "-m", "pytest", "-q", "--", "tests"]
+
+
 async def test_tool_set_and_evidence_validation(project, tmp_path, sandbox):
     async with AcceptanceWorkspace(project, tmp_path / "artifacts") as workspace:
         provider = AcceptanceToolProvider(workspace)

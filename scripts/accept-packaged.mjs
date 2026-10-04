@@ -380,6 +380,15 @@ try {
   await captureLayouts(command, evaluate, "paused");
   await evaluate("document.querySelector('#intent-input').value='CHANGED-INTENT';document.querySelector('#apply-intent').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && !document.querySelector('#run').disabled && document.querySelector('#current-turn').textContent.includes('CHANGED-INTENT')"), "修改意图后没有重新执行");
+  // “暂停”和“停止”合成一个按钮：正在暂停时变成“立即停止”，点了直接结束这一轮。
+  await evaluate("document.querySelector('#objective').value='STOP-NOW';document.querySelector('#run').click()");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && !document.querySelector('#pause-task').hidden"), "STOP-NOW 没有开始运行");
+  assert(await evaluate("document.querySelector('#cancel').hidden"), "仍然单独显示了“停止”按钮");
+  await evaluate("document.querySelector('#pause-task').click()");
+  await check(() => evaluate("document.querySelector('#pause-task').dataset.mode==='stop' || document.querySelector('#status').dataset.status==='PAUSED'"), "暂停请求没有生效");
+  const stopMode = await evaluate("document.querySelector('#pause-task').dataset.mode==='stop' && document.querySelector('#pause-task').textContent==='立即停止'");
+  await evaluate(stopMode ? "document.querySelector('#pause-task').click()" : "document.querySelector('#end-task').click()");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='CANCELLED' && document.body.dataset.busy==='false'"), "“立即停止”没有结束这一轮");
   // 像 Claude Code 一样：暂停后直接在主输入框写补充要求，按 Enter 继续。
   // 运行中直接在输入框补充要求：先排队，Agent 下一步读取，最终回答里能看到。
   await evaluate("document.querySelector('#objective').value='RUN-NOTE-TEST';document.querySelector('#run').click()");
@@ -401,7 +410,8 @@ try {
   await evaluate("document.querySelector('input[name=agent-question-option][value=approve]').click();document.querySelector('#submit-question-answer').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='WAITING_FOR_INPUT' && document.querySelector('.question-title').textContent.includes('等待审阅')"), "批准后工具未执行或问题卡片未更新");
   assert(existsSync(join(workspace, "package-demo.py")));
-  await evaluate("document.querySelector('#cancel').click()");
+  assert(await evaluate("!document.querySelector('#end-task').hidden && document.querySelector('#pause-task').hidden"), "等待回答时卡片上没有“结束这一轮”");
+  await evaluate("document.querySelector('#end-task').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='CANCELLED' && document.body.dataset.busy==='false'"), "等待回答时不能取消");
   await evaluate("document.querySelector('#review-changes').click()");
   await check(() => evaluate("Boolean(document.querySelector('.change-entry pre')?.textContent.includes('package fixture'))"), "审阅界面没有显示真实差异");

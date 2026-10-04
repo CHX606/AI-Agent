@@ -14,6 +14,19 @@ from bit_agent.sandbox.node_environment import node_manifest
 from bit_agent.security.paths import resolve_workspace_path
 from bit_agent.tools.run_tests import _is_allowed_test_target
 
+from .verification import PYTHON_MARKERS
+
+
+def _looks_like_python(directory: Path) -> bool:
+    """和基础检查同一套规则：有 Python 项目配置、requirements*.txt，或者就是一个放着 .py 的文件夹
+    （例如只有 todo.py 和 tests/）。以前这里只认 pyproject.toml / pytest.ini，基础检查能跑、
+    验收却拒绝运行，验收结论永远是“没能验证”。"""
+    if any((directory / marker).is_file() for marker in PYTHON_MARKERS):
+        return True
+    if any(item.is_file() for item in directory.glob("requirements*.txt")):
+        return True
+    return any(item.is_file() for pattern in ("*.py", "*/*.py") for item in directory.glob(pattern))
+
 
 async def _finish_io(function, *args):
     # Do not delete a temporary directory while its background writer is still running.
@@ -114,9 +127,7 @@ class AcceptanceWorkspace:
             if not test_path.is_file() or not re.search(r"\.test\.(?:[cm]?js|tsx?)$", target):
                 raise ValueError("只允许运行测试文件或测试目录")
         relative = test_path.relative_to(directory).as_posix()
-        if language == "python" and (
-            (directory / "pyproject.toml").is_file() or (directory / "pytest.ini").is_file()
-        ):
+        if language == "python" and _looks_like_python(directory):
             command = ["python", "-m", "pytest", "-q"]
             if target:
                 command += ["--", relative]

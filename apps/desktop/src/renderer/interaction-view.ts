@@ -29,6 +29,7 @@ export function createInteractionView(callbacks: {
     <div class="interaction-heading">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 3V6a2 2 0 0 1 2-2Z"/><path d="M8 9h8m-8 4h5"/></svg>
       <p class="interaction-notice" aria-live="polite"></p>
+      <button id="end-task" class="interaction-end" type="button" title="结束这一轮，记录和已改的文件都保留；之后可以在同一对话继续">结束这一轮</button>
       <button id="resume-task" class="button-secondary" type="button">继续执行</button>
     </div>
     <div class="interaction-body">
@@ -63,6 +64,7 @@ export function createInteractionView(callbacks: {
   const intent = find<HTMLTextAreaElement>("#intent-input");
   const applyButton = find<HTMLButtonElement>("#apply-intent");
   const resume = find<HTMLButtonElement>("#resume-task");
+  const endTask = find<HTMLButtonElement>("#end-task");
   const intentEditor = find<HTMLDetailsElement>(".intent-editor");
   const panelBody = find<HTMLDivElement>(".interaction-body");
   let status = "IDLE";
@@ -70,13 +72,22 @@ export function createInteractionView(callbacks: {
   let taskId = "";
   let question: Record<string, unknown> | null = null;
   let sending = false;
-  const running = new Set(["QUEUED", "RUNNING", "PAUSE_REQUESTED", "PAUSED", "WAITING_FOR_INPUT"]);
+  // “暂停”和“停止”合成一个按钮：运行中是暂停（Esc），正在暂停时变成“立即停止”；
+  // 已暂停或等你回答时，卡片上有“继续执行”和“结束这一轮”。
+  const interruptible = new Set(["QUEUED", "RUNNING", "PAUSE_REQUESTED", "CANCELLATION_REQUESTED"]);
 
   function paint(): void {
     const editable = status === "PAUSED" || status === "WAITING_FOR_INPUT";
-    pause.hidden = !running.has(status);
-    pause.disabled = sending || status !== "RUNNING" && status !== "QUEUED";
-    pause.textContent = status === "PAUSE_REQUESTED" ? "正在暂停" : "暂停";
+    const stopping = status === "PAUSE_REQUESTED";
+    pause.hidden = !interruptible.has(status);
+    pause.disabled = sending || status === "CANCELLATION_REQUESTED";
+    pause.dataset.mode = stopping ? "stop" : "pause";
+    pause.textContent = stopping ? "立即停止" : status === "CANCELLATION_REQUESTED" ? "正在停止…" : "暂停";
+    pause.title = stopping
+      ? "当前这一步还没做完，正在等它结束后暂停。不想等就立即结束这一轮（记录和已改的文件都保留）"
+      : "在安全位置停下（Esc），可以补充要求后继续，或结束这一轮";
+    endTask.hidden = !editable;
+    endTask.disabled = sending;
     panel.hidden = !editable && status !== "PAUSE_REQUESTED" && error.hidden;
     panel.dataset.status = status;
     panelBody.hidden = !editable && error.hidden;
@@ -145,7 +156,11 @@ export function createInteractionView(callbacks: {
     }
   }
 
-  pause.addEventListener("click", () => { void submit({ action: "pause" }); });
+  pause.addEventListener("click", () => {
+    if (pause.dataset.mode === "stop") cancel.click();
+    else void submit({ action: "pause" });
+  });
+  endTask.addEventListener("click", () => cancel.click());
   resume.addEventListener("click", () => { void submit({ action: "resume" }); });
   applyButton.addEventListener("click", async () => {
     const text = intent.value.trim();
