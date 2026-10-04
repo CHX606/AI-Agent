@@ -19,6 +19,18 @@ AcceptanceStatus = Literal["NOT_RUN", "PASSED", "FAILED", "NOT_VERIFIED"]
 # 模型连续这么多次想结束却不做任何验证，就停止任务，不再空耗轮数。
 MAX_IGNORED_REMINDERS = 3
 _VERIFICATION_TOOLS = frozenset({"verify_project", "verify_task", "run_tests", "run_checks"})
+# 这些结果说明检查根本没有运行（被拒绝、参数不对、前提不满足）：不算“做过验证”，
+# 不能把提醒计数清零，否则模型反复申请同一个被拒绝的检查就会无限循环。
+_NOT_RUN_CODES = frozenset(
+    {
+        "PERMISSION_DENIED",
+        "INVALID_ARGUMENT",
+        "ACCEPTANCE_NOT_VERIFIED",
+        "ACCEPTANCE_NOT_APPLICABLE",
+        "USE_PROJECT_VERIFICATION",
+    }
+)
+USER_DECLINED_NOTE = "你没有批准运行检查，这些改动没有经过验证"
 
 VERIFICATION_REQUIRED_MESSAGE = (
     "[框架验证要求] 最近一次代码修改尚未完成验证。"
@@ -99,8 +111,19 @@ class VerificationState:
         """根据一次工具调用的结果推进状态；name 是模型请求调用的工具名。"""
         success = record.succeeded
         pending = self.has_unverified_changes or bool(self.changed_files)
-        if name in _VERIFICATION_TOOLS:
+        code = record.error.code if record.error else None
+        if name in _VERIFICATION_TOOLS and code not in _NOT_RUN_CODES:
             self.ignored_reminders = 0
+
+        if name in _VERIFICATION_TOOLS and code == "PERMISSION_DENIED":
+            # 用户明确拒绝运行检查：尊重选择，允许结束，如实记为“未验证”，不再催模型反复申请。
+            if pending:
+                self.has_unverified_changes = False
+                self.tests_passed = self.quality_checks_passed = False
+                self.status = "UNVERIFIED"
+                if USER_DECLINED_NOTE not in self.notes:
+                    self.notes = [*self.notes, USER_DECLINED_NOTE]
+            return
 
         if name == "verify_project":
             output = record.output if isinstance(record.output, dict) else {}

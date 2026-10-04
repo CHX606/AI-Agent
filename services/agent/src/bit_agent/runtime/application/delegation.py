@@ -110,6 +110,7 @@ class DelegatingToolProvider(LocalToolProvider):
         max_tool_rounds: int = DEFAULT_MAX_TOOL_ROUNDS,
         external: ExternalMcpTools | None = None,
         report: Callable[[str, dict], Awaitable[None]] | None = None,
+        approved_categories: set[str] | None = None,
     ) -> None:
         super().__init__(root, execute_tool)
         # 只读模式不连接外部工具：它们可能写文件、联网或改动外部系统。
@@ -130,26 +131,44 @@ class DelegatingToolProvider(LocalToolProvider):
         self.acceptance_context = acceptance_context
         self.baseline: ToolResult | None = None
         self.max_tool_rounds = max_tool_rounds
-        # 用户选择“本任务内同类操作都批准”的类别；删除文件和改验证配置不在此列，每次都问。
-        self.approved_categories: set[str] = set()
+        # 用户选择“本对话内同类操作都批准”的类别（同一对话的各轮共用这个集合）；
+        # 删除文件和改验证配置不在此列，每次都问。
+        self.approved_categories: set[str] = (
+            approved_categories if approved_categories is not None else set()
+        )
 
-    async def _approve(self, title: str, detail: str, category: str | None = None) -> bool:
+    @staticmethod
+    def _denied(
+        tool_call_id: str, tool_name: str, message: str, feedback: str | None
+    ) -> ToolResult:
+        """拒绝结果；用户写了意见时附上，让 Agent 按意见调整，而不是原样再申请。"""
+        if feedback:
+            message += f"。用户的意见：{feedback}。请按意见调整方案，不要原样重复申请"
+        return tool_error_result(tool_call_id, tool_name, "PERMISSION_DENIED", message)
+
+    async def _approve(
+        self, title: str, detail: str, category: str | None = None
+    ) -> tuple[bool, str | None]:
+        """返回（是否批准，用户拒绝时写的意见）。"""
         if category is not None and category in self.approved_categories:
-            return True
+            return True, None
         if self.interaction is None:
-            return False
+            return False, None
+        # 和 Claude Code / Codex 一样：批准在前，拒绝在后；按 1 就是批准本次。
         options = [
-            QuestionOption(id="reject", label="拒绝", description="不执行这次操作"),
-            QuestionOption(id="approve", label="批准本次", description="仅允许本次显示的操作"),
+            QuestionOption(id="approve", label="批准本次", description="仅允许这一次操作"),
         ]
         if category is not None:
             options.append(
                 QuestionOption(
                     id="approve_task",
-                    label="本任务内都批准",
-                    description="本轮任务结束前，同类操作不再询问；删除文件仍会逐次确认",
+                    label="本对话内都批准",
+                    description="这个对话里同类操作不再询问；删除文件仍会逐次确认",
                 )
             )
+        options.append(
+            QuestionOption(id="reject", label="拒绝", description="不执行；可以在输入框写下原因")
+        )
         answer = await self.interaction.ask(
             UserQuestion(
                 question=(
@@ -159,17 +178,21 @@ class DelegatingToolProvider(LocalToolProvider):
                     + ("\n补丁预览已截断，请展开下方完整操作详情。" if len(detail) > 1600 else "")
                 ),
                 options=options,
+                # 权限确认必须明确回答、永不超时，这里的推荐项不会被自动采用；界面也不显示“推荐”。
                 recommended_option_id="reject",
                 requires_confirmation=True,
             ),
             operation={"title": title, "detail": detail},
         )
         if answer.get("source") != "user":
-            return False
+            return False, None
         if category is not None and answer.get("option_id") == "approve_task":
             self.approved_categories.add(category)
-            return True
-        return answer.get("option_id") == "approve"
+            return True, None
+        if answer.get("option_id") is None and isinstance(answer.get("text"), str):
+            # 用文字回答权限确认：视为拒绝，文字作为意见转给模型。
+            return False, answer["text"].strip()[:2000] or None
+        return answer.get("option_id") == "approve", None
 
     async def __aenter__(self) -> "DelegatingToolProvider":
         if self.external is not None:
@@ -210,14 +233,13 @@ class DelegatingToolProvider(LocalToolProvider):
                 shown = json.dumps(json.loads(raw_arguments), ensure_ascii=False, indent=2)
             except (ValueError, TypeError):
                 shown = raw_arguments
-            if not await self._approve(
+            approved, feedback = await self._approve(
                 f"调用外部工具 {server.name} · {self.external.original_name(tool_name)}",
                 "外部工具在本机或远程服务上运行，不在隔离环境中，也不会进入改动审阅。\n" + shown,
                 f"mcp:{server.name}",
-            ):
-                return tool_error_result(
-                    tool_call_id, tool_name, "PERMISSION_DENIED", "未批准调用外部工具"
-                )
+            )
+            if not approved:
+                return self._denied(tool_call_id, tool_name, "未批准调用外部工具", feedback)
         return await self.external.call(tool_name, tool_call_id, raw_arguments)
 
     async def call_tool(self, tool_name: str, tool_call_id: str, raw_arguments: str) -> ToolResult:
@@ -234,9 +256,8 @@ class DelegatingToolProvider(LocalToolProvider):
             return tool_error_result(
                 tool_call_id, tool_name, "PERMISSION_DENIED", "本轮只读：不能修改文件或运行项目代码"
             )
-        if tool_name in {"run_tests", "run_checks"} and self.permission_mode == "confirm":
-            if not await self._approve("运行项目代码", tool_name + "\n" + raw_arguments, "run"):
-                return tool_error_result(tool_call_id, tool_name, "PERMISSION_DENIED", "未批准运行")
+        # 测试、检查和独立验收都在隔离容器里运行（不联网、不改原工作区），隔离就是安全边界，
+        # “逐次确认”模式也不再为它们弹审批；需要确认的是写文件、删除和外部工具。
         if tool_name in {"run_tests", "run_checks"} and self.changed_paths:
             return tool_error_result(
                 tool_call_id,
@@ -253,11 +274,16 @@ class DelegatingToolProvider(LocalToolProvider):
                     for name in entry["files"]
                 )
                 if self.permission_mode == "confirm" or sensitive:
-                    title = "修改验证配置或删除文件" if sensitive else "写入以下补丁"
+                    files = [str(name) for name in entry["files"]]
+                    names = "、".join(files[:3])
+                    if len(files) > 3:
+                        names += f" 等 {len(files)} 个文件"
+                    title = "修改验证配置或删除文件" if sensitive else f"修改 {names}"
                     category = None if sensitive else "patch"
-                    if not await self._approve(title, entry["patch"], category):
-                        return tool_error_result(
-                            tool_call_id, tool_name, "PERMISSION_DENIED", "本次修改未获明确批准"
+                    approved, feedback = await self._approve(title, entry["patch"], category)
+                    if not approved:
+                        return self._denied(
+                            tool_call_id, tool_name, "用户没有批准这次修改", feedback
                         )
                 self.journal.begin(entry)
                 self.baseline = None
@@ -281,15 +307,6 @@ class DelegatingToolProvider(LocalToolProvider):
             try:
                 if json.loads(raw_arguments) != {}:
                     raise ValueError("verify_project 不接受参数")
-                if self.permission_mode == "confirm" and not await self._approve(
-                    "运行基础检查",
-                    "只在隔离容器内运行测试、检查和构建；不允许项目代码访问网络或改写原工作区。"
-                    "检查失败时会在另一份隔离副本中运行修改前的版本作对比。",
-                    "verify",
-                ):
-                    return tool_error_result(
-                        tool_call_id, tool_name, "PERMISSION_DENIED", "未批准运行项目代码"
-                    )
                 originals = self.journal.originals()
                 if self.acceptance_workspace is None:
                     self.baseline = await self.verifier(
@@ -352,15 +369,6 @@ class DelegatingToolProvider(LocalToolProvider):
                     raise ValueError(
                         "请先运行并通过 verify_project 基础检查；"
                         "基础检查无法运行或不需要运行时，不进行独立验收"
-                    )
-                if self.permission_mode == "confirm" and not await self._approve(
-                    "启动独立测试 Agent",
-                    "额外调用模型，依据原始需求检查改动，在隔离副本补写测试并运行。"
-                    "不修改原项目；测试和报告保存为本次任务的验收记录。",
-                    "acceptance",
-                ):
-                    return tool_error_result(
-                        tool_call_id, tool_name, "PERMISSION_DENIED", "未批准独立验收"
                     )
                 requirements = await self.acceptance_context()
                 result = await run_acceptance(

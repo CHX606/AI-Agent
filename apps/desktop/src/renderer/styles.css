@@ -1164,7 +1164,8 @@ svg {
 .composer-card {
   width: min(820px, 100%);
   margin: 0 auto;
-  overflow: hidden;
+  /* 权限和多 Agent 菜单从工具栏向上弹出，不能被卡片裁掉。 */
+  overflow: visible;
   border: 1px solid var(--border-strong);
   border-radius: 11px;
   background: var(--bg-main);

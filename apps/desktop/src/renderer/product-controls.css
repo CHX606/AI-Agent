@@ -7,59 +7,6 @@
 .composer-context:has(.permission-control) { min-width: 0; flex: 1 1 270px; flex-wrap: wrap; gap: 8px; }
 .composer-toolbar:has(.permission-control) .composer-actions { flex: none; margin-left: auto; }
 
-/* 两个社区下拉框共用尺寸。为文字单独留位置，防止前缀和箭头把文字挤没。 */
-.composer-context wa-select {
-  --wa-form-control-height: 30px;
-  --wa-form-control-padding-inline: 0px;
-  --composer-value-width: 4.4em;
-  display: block;
-  width: max-content;
-  flex: none;
-  color: var(--text-soft);
-  font: 500 12px/1.4 var(--font-sans);
-}
-.composer-context .agent-mode-control { --composer-value-width: 2.4em; }
-.composer-context wa-select::part(form-control-label) {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-}
-.composer-context wa-select::part(combobox) {
-  display: grid;
-  grid-template-columns: max-content var(--composer-value-width) 12px;
-  align-items: center;
-  gap: 7px;
-  width: max-content;
-  box-sizing: border-box;
-  height: 30px;
-  min-height: 30px;
-  padding: 0 10px;
-  border-color: var(--border);
-  border-radius: 7px;
-  background: var(--bg-panel);
-  box-shadow: none;
-}
-.composer-context wa-select::part(combobox):hover { border-color: var(--border-strong); background: var(--bg-hover); }
-.composer-context wa-select::part(start),
-.composer-context wa-select::part(expand-icon) { margin: 0; }
-.composer-context wa-select::part(end) { display: none; }
-.composer-context wa-select::part(display-input) {
-  min-width: 0;
-  width: 100%;
-  padding: 0;
-  color: var(--text-soft);
-  font: 500 12px/1.4 var(--font-sans);
-  text-align: center;
-}
-.composer-context wa-select::part(listbox) {
-  border-color: var(--border-strong);
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-composer);
-}
-.composer-select-chevron { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.permission-shield { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 .sidebar-model-settings {
   display: flex;
   align-items: center;
@@ -178,7 +125,12 @@
 .mcp-form { display: grid; gap: 14px; margin-top: 12px; }
 .mcp-form textarea { width: 100%; padding: 8px 11px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--bg-main); color: var(--text); font: 12px/1.6 var(--font-mono); resize: vertical; }
 .mcp-form-actions { display: flex; justify-content: flex-end; }
-.docker-notice { margin: 0 0 8px; padding: 8px 12px; border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border)); border-radius: 8px; background: var(--amber-soft); color: var(--text-soft); font-size: 12px; line-height: 1.6; }
+.docker-notice { display: flex; align-items: center; gap: 8px; width: min(820px, 100%); margin: 0 auto 8px; padding: 5px 6px 5px 12px; border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border)); border-radius: 8px; background: var(--amber-soft); color: var(--text-soft); font-size: 12px; line-height: 1.55; }
+.docker-notice[hidden] { display: none; }
+.docker-notice > span { flex: 1; min-width: 0; }
+.docker-dismiss { display: grid; flex: none; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-muted); cursor: pointer; }
+.docker-dismiss:hover { background: color-mix(in srgb, var(--amber) 18%, transparent); color: var(--text); }
+.docker-dismiss svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .model-field p { margin-top: 6px; color: var(--text-muted); font-size: 12px; line-height: 1.65; }
 .model-key-state { padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-size: 10px; font-weight: 400; }
 .model-settings-footer { display: flex; align-items: center; gap: 8px; padding-top: 18px; border-top: 1px solid var(--border); }

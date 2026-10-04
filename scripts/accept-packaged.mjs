@@ -232,7 +232,8 @@ async function captureLayouts(command, evaluate, stage) {
           settingsInSidebar:Boolean(document.querySelector('#model-settings').closest('.sidebar-bottom')),
           permissionInToolbar:Boolean(document.querySelector('#permission-mode').closest('.composer-toolbar')),
           reviewInInspector:Boolean(document.querySelector('#review-changes').closest('.inspector-heading')),
-          extraComposerRow:Boolean(document.querySelector('.composer-card .product-controls')) };
+          extraComposerRow:Boolean(document.querySelector('.composer-card .product-controls')),
+          menu:rect('.choice-popover:not([hidden])') };
       })()`);
       assert(geometry.settingsInSidebar && geometry.permissionInToolbar && geometry.reviewInInspector && !geometry.extraComposerRow, "新入口不在约定的位置");
       const inside = r => r && r.x >= -1 && r.y >= -1 && r.right <= width + 1 && r.bottom <= height + 1;
@@ -244,6 +245,7 @@ async function captureLayouts(command, evaluate, stage) {
         assert(inside(geometry.interaction), `${filename}: 问答卡片超出窗口`);
         assert(geometry.interaction.bottom <= geometry.card.y + 1, `${filename}: 问答卡片侵入输入框`);
       }
+      if (geometry.menu) assert(inside(geometry.menu), `${filename}: 选择菜单超出窗口`);
       if (geometry.dialog) {
         assert(inside(geometry.dialog), `${filename}: 弹窗超出窗口`);
         assert(Math.abs(geometry.dialog.x + geometry.dialog.width / 2 - width / 2) <= 2, `${filename}: 弹窗没有居中`);
@@ -306,6 +308,15 @@ try {
   const screenshot = await captureScreenshot();
   writeFileSync(join(directory, "packaged-desktop.png"), Buffer.from(screenshot.data, "base64"));
   await captureLayouts(command, evaluate, "conversation");
+  // Codex 风格的权限菜单：三项、当前项打勾，选中后值随之改变。
+  await evaluate("document.querySelector('#permission-mode .choice-trigger').click()");
+  await check(() => evaluate("document.querySelectorAll('#permission-mode .choice-popover:not([hidden]) .choice-item').length===3 && document.querySelector('#permission-mode .choice-item[aria-checked=true]').dataset.value==='confirm'"), "权限菜单没有打开");
+  await captureLayouts(command, evaluate, "permission-menu");
+  await evaluate("document.querySelector('#permission-mode .choice-item[data-value=edit]').click()");
+  assert.equal(await evaluate("document.querySelector('#permission-mode').value"), "edit");
+  assert(await evaluate("document.querySelector('#permission-mode .choice-popover').hidden"), "选中后菜单没有收起");
+  await evaluate("document.querySelector('#permission-mode .choice-trigger').click();document.querySelector('#permission-mode .choice-item[data-value=confirm]').click()");
+  assert.equal(await evaluate("document.querySelector('#permission-mode').value"), "confirm");
   await evaluate("document.querySelector('#model-settings').click()");
   await check(() => evaluate("Boolean(document.querySelector('.model-settings-form'))"), "模型设置表单没有打开");
   await captureLayouts(command, evaluate, "model-settings");
@@ -326,15 +337,21 @@ try {
   await evaluate("document.querySelector('#pause-task').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='PAUSED'"), "暂停未在安全位置生效");
   await captureLayouts(command, evaluate, "paused");
-  await evaluate("document.querySelector('#intent-kind').value='replace';document.querySelector('#intent-input').value='CHANGED-INTENT';document.querySelector('#apply-intent').click()");
+  await evaluate("document.querySelector('#intent-input').value='CHANGED-INTENT';document.querySelector('#apply-intent').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && !document.querySelector('#run').disabled && document.querySelector('#current-turn').textContent.includes('CHANGED-INTENT')"), "修改意图后没有重新执行");
   // 像 Claude Code 一样：暂停后直接在主输入框写补充要求，按 Enter 继续。
+  // 运行中直接在输入框补充要求：先排队，Agent 下一步读取，最终回答里能看到。
+  await evaluate("document.querySelector('#objective').value='RUN-NOTE-TEST';document.querySelector('#run').click()");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && !document.querySelector('#objective').disabled"), "运行中输入框不能补充要求");
+  await evaluate("const r=document.querySelector('#objective');r.value='RUNNING-NOTE';r.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && document.querySelector('#stream .stream-user')?.textContent.includes('RUNNING-NOTE') && [...document.querySelectorAll('#stream .stream-text')].some(e=>e.textContent.includes('RUNNING-NOTE'))"), "运行中补充的要求没有被 Agent 读到");
+  assert(await evaluate("[...document.querySelectorAll('.saved-turn .stream-note')].some(e=>e.textContent.includes('暂停'))"), "继续对话后上一轮的执行过程不见了");
   await evaluate("document.querySelector('#objective').value='PAUSE-AGAIN';document.querySelector('#run').click()");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && document.querySelector('#objective').disabled"), "运行中输入框没有锁定");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING'"), "第二次暂停测试没有开始运行");
   await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='PAUSED' && !document.querySelector('#objective').disabled && !document.querySelector('#run').disabled"), "Esc 暂停后输入框不能写补充要求");
   await evaluate("const o=document.querySelector('#objective');o.value='COMPOSER-NOTE';o.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && document.querySelector('.stream-user')?.textContent.includes('COMPOSER-NOTE') && document.querySelector('#objective').value===''"), "输入框补充要求没有提交并继续");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && document.querySelector('#stream .stream-user')?.textContent.includes('COMPOSER-NOTE') && document.querySelector('#objective').value===''"), "输入框补充要求没有提交并继续");
   await evaluate("document.querySelector('#objective').value='PACKAGE-EDIT';document.querySelector('#run').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='WAITING_FOR_INPUT' && !document.querySelector('.operation-details').hidden"), "文件修改没有要求用户授权");
   const { existsSync } = await import("node:fs");
@@ -410,6 +427,11 @@ try {
   await evaluate("document.querySelector('.history-actions [data-action=delete]').click()");
   await check(() => evaluate("document.querySelectorAll('.history-item').length===1 && document.querySelector('.history-item').title==='PACKAGE-CANARY-73'"), "界面删除对话没有生效");
   assert.deepEqual((await evaluate(listSessions)).sessions.map((session) => session.title), ["PACKAGE-CANARY-73"]);
+  // 重新打开多轮对话：更早的轮次只显示回答，点“查看执行过程”回放那一轮。
+  await evaluate("document.querySelector('.history-item').click()");
+  await check(() => evaluate("document.body.dataset.busy==='false' && document.querySelectorAll('.saved-turn .turn-expand').length>0"), "旧轮次没有“查看执行过程”入口");
+  await evaluate("document.querySelector('.saved-turn .turn-expand').click()");
+  await check(() => evaluate("(()=>{const t=document.querySelector('.saved-turn');return !t.querySelector('.turn-expand') && Boolean(t.querySelector('.stream-text')?.textContent.includes('PACKAGED_STREAM_START'));})()"), "点开后没有回放旧轮次的过程");
   await close();
   writeFileSync(join(directory, "result.json"), JSON.stringify({ passed: true, executable,
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,

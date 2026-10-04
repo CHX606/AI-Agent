@@ -13,8 +13,11 @@ export interface FileDiff { path: string; diff: string; truncated?: boolean }
 
 export interface StreamViewOptions {
   stream: HTMLOListElement;
-  statusLine: HTMLElement;
+  /** 底部状态行；回放旧轮次过程时不需要，可以省略。 */
+  statusLine?: HTMLElement;
   scroller: HTMLElement;
+  /** 新内容出现时是否“粘在底部”跟随；回放旧轮次时为 false，不打扰当前的阅读位置。 */
+  follow?: boolean;
   /** 取某次 apply_patch 调用写入的差异；取不到时返回空数组。 */
   loadDiff(callId: string): Promise<FileDiff[]>;
 }
@@ -35,7 +38,13 @@ export function formatElapsed(milliseconds: number): string {
 }
 
 export function createStreamView(options: StreamViewOptions) {
-  const { stream, statusLine, scroller } = options;
+  const { stream, scroller } = options;
+  const follow = options.follow ?? true;
+  const statusLine = options.statusLine ?? document.createElement("div");
+  if (!options.statusLine) {
+    statusLine.hidden = true;
+    statusLine.innerHTML = '<span class="status-glyph"></span><span class="status-verb"></span><span class="status-meta"></span>';
+  }
   const glyph = statusLine.querySelector<HTMLElement>(".status-glyph")!;
   const verb = statusLine.querySelector<HTMLElement>(".status-verb")!;
   const meta = statusLine.querySelector<HTMLElement>(".status-meta")!;
@@ -52,10 +61,12 @@ export function createStreamView(options: StreamViewOptions) {
   const nearBottom = () => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 140;
   const toBottom = () => scroller.scrollTo({ top: scroller.scrollHeight, behavior: "instant" });
   // 和终端一样“粘在底部”：用户停在底部时新内容自动跟随；往上翻看时不打扰。
-  let stuck = true;
-  scroller.addEventListener("scroll", () => { stuck = nearBottom(); }, { passive: true });
-  // 下方的问答卡片、暂停面板出现时可视区域变矮，最新内容不能被挤出视野。
-  new ResizeObserver(() => { if (stuck) toBottom(); }).observe(scroller);
+  let stuck = follow;
+  if (follow) {
+    scroller.addEventListener("scroll", () => { stuck = nearBottom(); }, { passive: true });
+    // 下方的问答卡片、暂停面板出现时可视区域变矮，最新内容不能被挤出视野。
+    new ResizeObserver(() => { if (stuck) toBottom(); }).observe(scroller);
+  }
 
   function append(item: HTMLElement): void {
     stream.append(item);
@@ -238,12 +249,12 @@ export function createStreamView(options: StreamViewOptions) {
     meta.textContent = `${formatElapsed(Date.now() - startedAt)}${status === "RUNNING" ? " · Esc 暂停" : ""}`;
   }
 
-  const timer = window.setInterval(() => {
+  const timer = options.statusLine ? window.setInterval(() => {
     if (statusLine.hidden) return;
     frame += 1;
     paintStatus();
-  }, 150);
-  window.addEventListener("beforeunload", () => window.clearInterval(timer), { once: true });
+  }, 150) : 0;
+  if (timer) window.addEventListener("beforeunload", () => window.clearInterval(timer), { once: true });
 
   return {
     reset(): void {
@@ -254,10 +265,20 @@ export function createStreamView(options: StreamViewOptions) {
       phase = "思考中";
       loading = null;
       startedAt = Date.now();
-      stuck = true;
+      stuck = follow;
       paintStatus();
-      requestAnimationFrame(toBottom);
+      if (follow) requestAnimationFrame(toBottom);
     },
+    /** 交出这一轮已经画好的过程（节点连同点击展开等行为一起移走），用于保留到旧轮次里。 */
+    detach(): Node[] {
+      const nodes = [...stream.childNodes];
+      stream.replaceChildren();
+      tools.clear();
+      text = null;
+      return nodes;
+    },
+    /** 回放旧轮次用完后释放计时器。 */
+    dispose(): void { if (timer) window.clearInterval(timer); },
     /** 载入历史轮次后回到底部，显示最新的一轮。 */
     scrollToEnd(): void { stuck = true; requestAnimationFrame(toBottom); },
     /** 任务进行中你补充的要求，像终端里那样显示成一行“› …”。 */
@@ -283,6 +304,12 @@ export function createStreamView(options: StreamViewOptions) {
     setLoading(message: string | null): void { loading = message; paintStatus(); },
     setStatus(value: string): void {
       status = value;
+      // 等你批准或回答时，正在申请的工具行写“等待你回应”，而不是“运行中”。
+      for (const item of tools.values()) {
+        if (item.dataset.tone !== "running") continue;
+        item.querySelector<HTMLElement>(".tool-summary")!.textContent =
+          value === "WAITING_FOR_INPUT" ? "等待你回应…" : value === "PAUSED" ? "已暂停" : "运行中…";
+      }
       paintStatus();
       // 问答卡片和暂停面板随状态出现，同步滚到底，不依赖下一帧的尺寸回调。
       if (stuck) toBottom();

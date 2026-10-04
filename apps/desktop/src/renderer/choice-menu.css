@@ -1,0 +1,153 @@
+/* Codex 风格的选择菜单：小按钮 + 向上弹出的说明卡片。 */
+
+choice-menu {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.choice-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-panel);
+  color: var(--text-soft);
+  font: 500 12px/1 var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.choice-trigger:hover:not(:disabled),
+.choice-trigger[aria-expanded="true"] {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.choice-trigger:focus-visible {
+  outline: none;
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-ring);
+}
+
+.choice-trigger:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.choice-trigger svg,
+.choice-item svg {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.choice-trigger svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.7;
+}
+
+.choice-trigger .choice-chevron {
+  width: 12px;
+  height: 12px;
+  color: var(--text-muted);
+}
+
+.choice-prefix {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.choice-trigger[data-tone="caution"] .choice-icon {
+  color: var(--amber);
+}
+
+.choice-popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 40;
+  width: max-content;
+  min-width: 300px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--bg-main);
+  box-shadow: var(--shadow-composer);
+}
+
+.choice-heading {
+  margin: 4px 8px 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.choice-item {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 20px minmax(0, 1fr) 16px;
+  gap: 10px;
+  align-items: start;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.choice-item:hover,
+.choice-item:focus-visible {
+  outline: none;
+  background: var(--bg-hover);
+}
+
+.choice-item .choice-icon {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  stroke-width: 1.6;
+}
+
+.choice-item .choice-check {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  stroke-width: 2;
+  visibility: hidden;
+}
+
+.choice-item[aria-checked="true"] .choice-check {
+  visibility: visible;
+}
+
+.choice-text strong {
+  display: block;
+  font: 600 13px/1.4 var(--font-sans);
+}
+
+.choice-text small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.choice-item[data-tone="caution"] {
+  color: var(--amber);
+}
+
+.choice-item[data-tone="caution"] small {
+  color: color-mix(in srgb, var(--amber) 70%, var(--text-muted));
+}

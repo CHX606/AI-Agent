@@ -1,5 +1,5 @@
 import type { TaskRequestInput } from "../shared/contracts.js";
-import "@awesome.me/webawesome/dist/components/select/select.js";
+import { type ChoiceMenu, icons } from "./choice-menu.js";
 import "./product-controls.css";
 import { errorText } from "./dom.js";
 import { mountExecutionSettings } from "./execution-settings.js";
@@ -11,13 +11,8 @@ const settingsIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h
 const memoryIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16l-6-4-6 4Z"/></svg>`;
 const toolsIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg>`;
 
-interface SelectElement extends HTMLElement {
-  disabled: boolean;
-  value: string | string[];
-}
-
 export function permissionMode(): "read_only" | "confirm" | "edit" {
-  const value = document.querySelector<SelectElement>("#permission-mode")?.value;
+  const value = document.querySelector<ChoiceMenu>("#permission-mode")?.value;
   return value === "read_only" || value === "edit" ? value : "confirm";
 }
 
@@ -27,23 +22,22 @@ export function mountProductControls(current: () => TaskRequestInput,
   // 和多 Agent 开关放在一起：这些选项都只影响下一次发送的任务。
   const permission = document.createElement("div");
   permission.className = "permission-control";
-  permission.innerHTML = `<wa-select id="permission-mode" label="本轮工具权限" value="confirm" size="s" appearance="filled-outlined" placement="top">
-      <svg slot="start" class="permission-shield" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 4-5 7-8 9-3-2-8-5-8-9V6Z"/><path d="m9 12 2 2 4-4"/></svg>
-      <wa-option value="confirm">逐次确认</wa-option>
-      <wa-option value="read_only">只读模式</wa-option>
-      <wa-option value="edit">允许修改</wa-option>
-      <svg slot="expand-icon" class="composer-select-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
-    </wa-select>`;
+  const menu = document.createElement("choice-menu");
+  menu.id = "permission-mode";
+  permission.append(menu);
   const context = document.querySelector(".composer-context");
   context?.insertBefore(permission, context.querySelector(".composer-tip"));
-  const select = permission.querySelector<SelectElement>("wa-select")!;
-  const describePermission = () => {
-    permission.title = select.value === "read_only" ? "只读：不修改文件，也不执行代码。"
-      : select.value === "edit" ? "允许修改文件和隔离验证；其他高风险操作仍需确认。"
-        : "文件修改和代码执行前，逐次向你确认。";
-  };
-  select.addEventListener("change", describePermission);
-  describePermission();
+  // 权限从小到大排列，和 Codex 的“应如何批准”菜单一样；Shift+Tab 在输入框里循环切换。
+  menu.configure({
+    heading: "应如何批准 Bit Agent 的操作？",
+    label: "本轮工具权限",
+    value: "confirm",
+    choices: [
+      { value: "read_only", label: "只读模式", icon: icons.eye, description: "只阅读和搜索代码；不修改文件，也不运行检查" },
+      { value: "confirm", label: "逐次确认", icon: icons.hand, description: "写文件和调用外部工具前先问你；隔离环境里的检查直接运行" },
+      { value: "edit", label: "允许修改", icon: icons.pencil, tone: "caution", description: "直接修改工作区文件；删除、改验证配置和外部工具仍会询问" },
+    ],
+  });
 
   const settingsButton = document.createElement("button");
   settingsButton.type = "button";
@@ -504,20 +498,37 @@ export function mountProductControls(current: () => TaskRequestInput,
 
 /** Docker 不可用时，在输入框上方提前说明：修改后的代码会显示“无法验证”。 */
 function mountDockerNotice(): void {
-  const notice = document.createElement("p");
+  const dismissedKey = "bit-agent.docker-notice-dismissed.v1";
+  const read = () => { try { return localStorage.getItem(dismissedKey); } catch { return null; } };
+  const write = (value: string | null) => {
+    try { if (value === null) localStorage.removeItem(dismissedKey); else localStorage.setItem(dismissedKey, value); } catch { /* 只影响提示是否再次出现 */ }
+  };
+  const notice = document.createElement("div");
   notice.className = "docker-notice";
   notice.setAttribute("role", "status");
   notice.hidden = true;
+  const text = document.createElement("span");
+  const dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.className = "docker-dismiss";
+  dismiss.setAttribute("aria-label", "关闭提示");
+  dismiss.title = "关闭提示（Docker 状态变化时会再提醒）";
+  dismiss.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  notice.append(text, dismiss);
   document.querySelector(".composer-container")?.prepend(notice);
+  let status = "";
+  // 关掉后同一种状态不再提示；状态变了（比如装好或重新启动 Docker）会重新出现。
+  dismiss.addEventListener("click", () => { write(status); notice.hidden = true; });
   let checkedAt = 0;
   const refresh = async (): Promise<void> => {
     if (Date.now() - checkedAt < 15_000) return;
     checkedAt = Date.now();
     try {
-      const status = await window.bitAgent.dockerStatus();
-      notice.hidden = status === "ready";
-      notice.textContent = `${status === "not_installed" ? "没有找到 Docker" : "Docker 没有运行"}：`
-        + "修改后的代码无法在隔离环境中运行测试，结果会显示为“无法验证”。启动 Docker Desktop 后会自动恢复。";
+      status = await window.bitAgent.dockerStatus();
+      if (status === "ready") write(null);
+      notice.hidden = status === "ready" || read() === status;
+      text.textContent = `${status === "not_installed" ? "没有找到 Docker" : "Docker 没有运行"}，`
+        + "改动无法在隔离环境里测试，会标为“无法验证”。启动 Docker Desktop 后自动恢复。";
     } catch { notice.hidden = true; }
   };
   void refresh();

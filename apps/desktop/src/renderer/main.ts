@@ -8,9 +8,9 @@ import {
   estimateCost, formatTokens, summarizeResult,
   usageDescription, type TokenPrices, type UsageSummary,
 } from "./presentation";
-import { createStreamView, type FileDiff } from "./stream-view";
+import { createStreamView, type FileDiff, type StreamView } from "./stream-view";
 import {
-  clearPreviousTurns, getAgentMode, onAgentModeChange,
+  clearPreviousTurns, getAgentMode, onAgentModeChange, type PreviousTurnOptions,
   renderPreviousTurns, setAgentMode, setModeDisabled,
 } from "./session-view";
 
@@ -106,20 +106,94 @@ let activeObjective = "";
 /** 历史任务回放事件期间为 true；回放结束（desktop_stream_ended）后再载入最终结果。 */
 let replaying = false;
 let history = loadHistory();
-const streamView = createStreamView({
-  stream: element<HTMLOListElement>("#stream"),
-  statusLine: element<HTMLElement>("#status-line"),
-  scroller: element<HTMLElement>("#conversation"),
-  loadDiff: async (callId: string): Promise<FileDiff[]> => {
-    if (!activeTaskId) return [];
-    const payload = await window.bitAgent.getChanges(requestInput());
+
+/** 取某个任务里某次 apply_patch 写入的差异。 */
+function diffLoader(taskId: () => string | null) {
+  return async (callId: string): Promise<FileDiff[]> => {
+    const id = taskId();
+    if (!id) return [];
+    const payload = await window.bitAgent.getChanges({ gatewayUrl: gatewayInput.value.trim(), taskId: id });
     const change = (Array.isArray(payload.changes) ? payload.changes : [])
       .map(object).find((item) => item?.call_id === callId);
     return (Array.isArray(change?.files) ? change.files : []).map(object)
       .filter((file): file is Record<string, unknown> => typeof file?.path === "string" && typeof file.diff === "string")
       .map((file) => ({ path: String(file.path), diff: String(file.diff) }));
-  },
+  };
+}
+
+const conversationScroller = element<HTMLElement>("#conversation");
+const streamView = createStreamView({
+  stream: element<HTMLOListElement>("#stream"),
+  statusLine: element<HTMLElement>("#status-line"),
+  scroller: conversationScroller,
+  loadDiff: diffLoader(() => activeTaskId),
 });
+
+/** 本次打开期间做过（或点开回放过）的轮次的过程节点，按任务 ID；继续对话时放回旧轮次。 */
+const processCache = new Map<string, Node[]>();
+/** 正在回放过程的旧轮次。 */
+const processLoaders = new Map<string, { view: StreamView; answer: string; done(): void; fail(error: Error): void }>();
+
+function keepProcess(taskId: string, nodes: Node[]): void {
+  if (!nodes.length) return;
+  processCache.delete(taskId);
+  processCache.set(taskId, nodes);
+  // 只留最近 20 轮，长对话不会无限占内存；更早的轮次仍可以点开回放。
+  while (processCache.size > 20) processCache.delete(processCache.keys().next().value!);
+}
+
+function dropProcesses(): void {
+  processCache.clear();
+  for (const [taskId, loader] of processLoaders) {
+    window.bitAgent.unwatchTask(taskId);
+    loader.view.dispose();
+    loader.fail(new Error("已切换对话"));
+  }
+  processLoaders.clear();
+}
+
+function previousTurnOptions(): PreviousTurnOptions {
+  return {
+    processes: processCache,
+    expand: (taskId, stream, answer) => new Promise<void>((resolve, reject) => {
+      // 先回放到一个新列表里，成功后再换上；失败时保留原来的回答。
+      const replay = document.createElement("ol");
+      replay.className = "stream";
+      const view = createStreamView({
+        stream: replay, scroller: conversationScroller, follow: false, loadDiff: diffLoader(() => taskId),
+      });
+      processLoaders.set(taskId, {
+        view, answer, fail: reject,
+        done: () => {
+          stream.replaceChildren(...replay.childNodes);
+          keepProcess(taskId, [...stream.childNodes]);
+          resolve();
+        },
+      });
+      window.bitAgent.watchTask({ gatewayUrl: gatewayInput.value.trim(), taskId });
+    }),
+  };
+}
+
+/** 旧轮次回放的事件交给对应的回放视图；返回 true 表示已处理。 */
+function routeProcessEvent(event: TaskEvent): boolean {
+  const loader = event.taskId ? processLoaders.get(event.taskId) : undefined;
+  if (!loader || !event.taskId) return false;
+  if (event.event_type === "desktop_stream_ended" || event.event_type === "desktop_error") {
+    processLoaders.delete(event.taskId);
+    window.bitAgent.unwatchTask(event.taskId);
+    loader.view.dispose();
+    if (event.event_type === "desktop_error") {
+      loader.fail(new Error("回放失败"));
+    } else {
+      loader.view.finish({ answer: loader.answer || null, failure: null, cancelled: false });
+      loader.done();
+    }
+  } else if (!event.event_type.startsWith("desktop_")) {
+    loader.view.handle(event);
+  }
+  return true;
+}
 /** 搜索时显示的结果；为 null 时显示完整历史。 */
 let searchResults: TaskHistoryEntry[] | null = null;
 const sessionSearch = element<HTMLInputElement>("#session-search");
@@ -328,6 +402,8 @@ function setBusy(busy: boolean): void {
   retryButton.disabled = busy;
   newTaskButton.disabled = submitting;
   cancelButton.disabled = !busy;
+  // 空闲时不显示红色的“停止”，只在有任务可停时出现。
+  cancelButton.hidden = !busy;
   workspaceInput.disabled = busy;
   objectiveInput.disabled = busy;
   browseButton.disabled = busy;
@@ -340,23 +416,35 @@ function setBusy(busy: boolean): void {
 }
 
 const defaultPlaceholder = objectiveInput.placeholder;
-/** 暂停或等待回答时，输入框用来写补充要求（像 Claude Code 中断后继续输入），其余运行期间锁定。 */
-function steering(): boolean {
-  const status = statusText.dataset.status;
-  return !replaying && Boolean(activeTaskId) && (status === "PAUSED" || status === "WAITING_FOR_INPUT");
+const supplementStatuses = new Set(["QUEUED", "RUNNING", "PAUSE_REQUESTED", "PAUSED"]);
+
+/**
+ * 输入框此刻的用途，和 Claude Code 一样随任务状态变化：
+ * new 新任务；supplement 运行中或暂停时补充要求；answer 回答 Agent 的问题或写下不批准的原因；
+ * locked 正在提交或停止，暂不能输入。
+ */
+function composerMode(): "new" | "supplement" | "answer" | "locked" {
+  if (document.body.dataset.busy !== "true") return "new";
+  const status = statusText.dataset.status ?? "";
+  if (replaying || !activeTaskId) return "locked";
+  if (status === "WAITING_FOR_INPUT" && interactionView?.pendingKind()) return "answer";
+  return supplementStatuses.has(status) ? "supplement" : "locked";
 }
 
 function paintComposer(): void {
-  const steer = steering();
-  document.body.dataset.steering = steer ? String(statusText.dataset.status) : "";
+  const mode = composerMode();
+  const status = statusText.dataset.status;
+  document.body.dataset.steering = mode === "answer" ? "WAITING_FOR_INPUT" : mode === "supplement" ? status ?? "" : "";
   if (document.body.dataset.busy === "true") {
-    objectiveInput.disabled = !steer;
-    runButton.disabled = !steer || submitting;
+    objectiveInput.disabled = mode === "locked";
+    runButton.disabled = mode === "locked" || submitting;
   }
-  objectiveInput.placeholder = !steer ? defaultPlaceholder
-    : statusText.dataset.status === "PAUSED"
-      ? "写下补充要求，按 Enter 提交并继续…"
-      : "也可以直接写新的要求，按 Enter 提交：Agent 会放弃当前问题并按你的话重新规划…";
+  const approval = interactionView?.pendingKind() === "approval";
+  objectiveInput.placeholder = mode === "answer"
+    ? approval ? "不批准？写下原因按 Enter，Agent 会按你的意见调整…" : "直接写下你的回答，按 Enter 提交…"
+    : mode === "supplement"
+      ? status === "PAUSED" ? "写下补充要求，按 Enter 提交并继续…" : "补充要求，Agent 会在下一步读取（Esc 暂停）…"
+      : defaultPlaceholder;
 }
 
 function setStatus(status: string): void {
@@ -429,6 +517,7 @@ function showError(error: unknown): void {
 }
 
 function appendEvent(event: TaskEvent): void {
+  if (routeProcessEvent(event)) return;
   // 切换对话后，旧任务仍可在后台执行，但它的事件不能写进新对话。
   if (event.taskId && event.taskId !== activeTaskId) return;
   if (event.event_type === "desktop_stream_ended") {
@@ -619,11 +708,12 @@ async function refreshSessions(append = false): Promise<void> {
   renderHistory();
 }
 
-function prepareRun(objective: string): void {
+function prepareRun(objective: string, title = objective): void {
   interactionView?.reset();
   replaying = false;
   activeObjective = objective;
-  taskIdText.textContent = objective;
+  // 顶部显示对话名（和左侧列表一致），不是最新一句话。
+  taskIdText.textContent = title;
   taskIdText.removeAttribute("title");
   errorActions.hidden = true;
   streamView.reset();
@@ -633,15 +723,18 @@ function prepareRun(objective: string): void {
   setStatus("SUBMITTING");
 }
 
-async function steer(): Promise<void> {
+/** 任务进行中的输入：补充要求（运行中排队、暂停时继续），或回答当前问题。 */
+async function steer(mode: "supplement" | "answer"): Promise<void> {
   const text = objectiveInput.value.trim();
   if (!text || !interactionView || submitting) return;
+  const approval = interactionView.pendingKind() === "approval";
   submitting = true;
   paintComposer();
   try {
-    if (await interactionView.supplement(text)) {
+    const sent = mode === "answer" ? await interactionView.answer(text) : await interactionView.supplement(text);
+    if (sent) {
       objectiveInput.value = "";
-      streamView.userNote(text);
+      streamView.userNote(mode === "answer" && approval ? `不批准：${text}` : text);
     }
   } finally {
     submitting = false;
@@ -650,7 +743,8 @@ async function steer(): Promise<void> {
 }
 
 async function runAgent(): Promise<void> {
-  if (steering()) { await steer(); return; }
+  const composer = composerMode();
+  if (composer === "supplement" || composer === "answer") { await steer(composer); return; }
   if (submitting || document.body.dataset.busy === "true") return;
   const objective = objectiveInput.value.trim();
   const workspaceRoot = workspaceInput.value.trim();
@@ -668,14 +762,19 @@ async function runAgent(): Promise<void> {
   const previousSession = activeSessionId;
   const mode = getAgentMode();
   if (activeTaskId) window.bitAgent.unwatchTask(activeTaskId);
+  // 继续同一对话时，上一轮已经画好的过程原样留在页面上，不折叠成只剩回答。
+  if (previousSession && activeTaskId) keepProcess(activeTaskId, streamView.detach());
   activeTaskId = null;
   const generation = ++viewGeneration;
   submitting = true;
-  prepareRun(objective);
+  const title = previousSession
+    ? history.find((item) => item.sessionId === previousSession && item.gatewayUrl === gatewayInput.value.trim())?.objective
+    : undefined;
+  prepareRun(objective, title ?? objective);
   try {
     if (previousSession) {
       const saved = await window.bitAgent.getSession({ gatewayUrl: gatewayInput.value.trim(), sessionId: previousSession });
-      renderPreviousTurns(saved, null);
+      renderPreviousTurns(saved, null, previousTurnOptions());
       streamView.scrollToEnd();
     }
     const task = await window.bitAgent.createTask({
@@ -731,6 +830,7 @@ async function restoreTask(entry: TaskHistoryEntry): Promise<void> {
   gatewayInput.value = entry.gatewayUrl;
   objectiveInput.value = "";
   setAgentMode(entry.multiAgentMode);
+  dropProcesses();
   clearPreviousTurns();
   interactionView?.reset();
   setBusy(true);
@@ -749,7 +849,7 @@ async function restoreTask(entry: TaskHistoryEntry): Promise<void> {
     if (entry.sessionId) {
       const saved = await window.bitAgent.getSession({ gatewayUrl: entry.gatewayUrl, sessionId: entry.sessionId });
       if (generation !== viewGeneration) return;
-      renderPreviousTurns(saved, entry.taskId);
+      renderPreviousTurns(saved, entry.taskId, previousTurnOptions());
       streamView.scrollToEnd();
       setAgentMode(object(saved.session)?.multi_agent_mode);
     }
@@ -787,6 +887,7 @@ function resetTask(): void {
   activeTaskId = null;
   activeSessionId = null;
   setAgentMode("auto");
+  dropProcesses();
   clearPreviousTurns();
   activeObjective = "";
   replaying = false;

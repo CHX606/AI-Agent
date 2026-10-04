@@ -126,6 +126,8 @@ class AgentRuntime:
         self._running: dict[str, asyncio.Task[None]] = {}
         self._interactions: dict[str, TaskInteraction] = {}
         self._sessions: dict[str, str] = {}
+        # 用户选了“本对话内都批准”的操作类别，按对话保存在内存里；重启应用后重新询问。
+        self._session_approvals: dict[str, set[str]] = {}
         self._submission_lock = asyncio.Lock()
         self._closing = False
         self._diagnostic_monitor: asyncio.Task[None] | None = None
@@ -304,6 +306,7 @@ class AgentRuntime:
                     max_tool_rounds=task.get("max_tool_rounds", DEFAULT_MAX_TOOL_ROUNDS),
                     external=ExternalMcpTools(servers) if servers else None,
                     report=report,
+                    approved_categories=self._session_approvals.setdefault(session_id, set()),
                 )
                 timeout = float(os.getenv("BIT_AGENT_TASK_TIMEOUT_SECONDS", "3600"))
                 if timeout <= 0:
@@ -575,6 +578,7 @@ class AgentRuntime:
             if await self.storage.call("session", session_id) is None:
                 raise InteractionError("对话不存在", 404)
             task_ids = await self.storage.call("delete_session", session_id)
+            self._session_approvals.pop(session_id, None)
         await self.storage.call("remove_artifacts", task_ids)
         return {"deleted": True, "session_id": session_id, "tasks": len(task_ids)}
 

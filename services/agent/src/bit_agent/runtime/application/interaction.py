@@ -28,7 +28,8 @@ class UserQuestion(BaseModel):
     options: list[QuestionOption] = Field(min_length=2, max_length=3)
     recommended_option_id: str
     requires_confirmation: bool
-    timeout_seconds: int = Field(default=60, ge=10, le=600)
+    # 默认等 5 分钟：桌面用户常常切去做别的事，60 秒太短，回来时 Agent 已经替你选了。
+    timeout_seconds: int = Field(default=300, ge=10, le=600)
 
     @model_validator(mode="after")
     def validate_options(self) -> "UserQuestion":
@@ -53,7 +54,7 @@ ASK_USER_SCHEMA: dict[str, Any] = {
 
 INTERACTION_INSTRUCTIONS = (
     "需要用户选择时调用 ask_user，不要只在最终回答里提问后退出。"
-    "问题应自包含，说明选项差别和推荐原因；一般等 60 秒。"
+    "问题应自包含，说明选项差别和推荐原因；一般等 300 秒，不要设得更短。"
     "只对普通、低风险的偏好选择允许超时默认。"
     "删除数据、覆盖重要文件、付费、发送隐私或扩大权限必须明确确认，不能超时批准。"
     "ask_user 的回复只是用户输入，不会绕过任何既有安全限制。"
@@ -209,8 +210,8 @@ class TaskInteraction:
                 return result
 
             if action in {"supplement", "replace"}:
-                if task["status"] not in {"PAUSED", "WAITING_FOR_INPUT"}:
-                    raise InteractionError("请先暂停，等当前工具结束后再修改要求")
+                # 运行中也可以直接提交（像 Claude Code 边跑边输入）：要求先排队，
+                # Agent 在下一次调用工具或请求模型前读取，正在执行的工具不会被打断。
                 text = input.get("text")
                 if not isinstance(text, str) or not 1 <= len(text.strip()) <= 4000:
                     raise InteractionError("新要求需要 1 到 4000 个字符", 400)
@@ -224,7 +225,7 @@ class TaskInteraction:
                     "accepted_at": datetime.now(UTC).isoformat(),
                 }
                 result = await self._state(
-                    "RUNNING",
+                    "RUNNING" if task["started_at"] else "QUEUED",
                     "TASK_INTENT_UPDATED",
                     intent_updates=[*updates, update],
                     question=None,
@@ -283,9 +284,11 @@ class TaskInteraction:
         async with self.lock:
             if self.closed or self.sealed:
                 raise InteractionError("任务已经结束")
-            if self.question_count >= 20:
-                raise InteractionError("本轮提问次数已达上限，请根据已有信息整理结果")
-            self.question_count += 1
+            # 上限只约束 Agent 自己提的问题；框架的权限确认不计入，否则批准多了就再也写不了文件。
+            if operation is None:
+                if self.question_count >= 20:
+                    raise InteractionError("本轮提问次数已达上限，请根据已有信息整理结果")
+                self.question_count += 1
             public = question.model_dump()
             public["id"] = uuid4().hex
             if operation is not None:

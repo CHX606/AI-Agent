@@ -236,22 +236,7 @@
             <div class="composer-toolbar">
               <div class="composer-context">
                 <div class="agent-mode-controls">
-                  <wa-select
-                    id="agent-mode"
-                    class="agent-mode-control"
-                    label="多 Agent 模式"
-                    name="agent-mode"
-                    value="auto"
-                    size="s"
-                    appearance="filled-outlined"
-                    placement="top"
-                  >
-                    <span slot="start" class="agent-mode-prefix">多 Agent</span>
-                    <svg slot="expand-icon" class="composer-select-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
-                    <wa-option value="off">关闭</wa-option>
-                    <wa-option value="on">开启</wa-option>
-                    <wa-option value="auto">智能</wa-option>
-                  </wa-select>
+                  <choice-menu id="agent-mode" class="agent-mode-control"></choice-menu>
                 </div>
                 <span class="composer-tip" title="Shift+Tab 切换本轮工具权限；运行中按 Esc 暂停"><kbd>Enter</kbd><span>发送</span><kbd>Shift+Enter</kbd><span>换行</span></span>
               </div>

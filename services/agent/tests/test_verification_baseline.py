@@ -472,7 +472,7 @@ async def test_verification_config_edit_needs_approval_even_in_edit_mode(tmp_pat
     )
     await until(lambda: interaction.question is not None)
     options = [item["id"] for item in interaction.question["options"]]
-    assert options == ["reject", "approve"], "验证配置不能整轮批准"
+    assert options == ["approve", "reject"], "验证配置不能整轮批准"
     await answer(interaction, "reject")
     result = await pending
     assert result.error.code == "PERMISSION_DENIED"

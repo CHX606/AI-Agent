@@ -175,9 +175,9 @@ async def test_confirm_mode_asks_and_can_approve_whole_server(tmp_path):
         question = interaction.question
         assert "调用外部工具 demo · echo" in question["question"]
         assert [option["id"] for option in question["options"]] == [
-            "reject",
             "approve",
             "approve_task",
+            "reject",
         ]
         await interaction.request(
             {"action": "answer", "question_id": question["id"], "option_id": "approve_task"}
