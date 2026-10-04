@@ -10,7 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from bit_agent.agent.limits import DEFAULT_MAX_TOOL_ROUNDS, validate_max_tool_rounds
-from bit_agent.agent.runtime import run_agent
+from bit_agent.agent.runtime import REASONING_EFFORTS, run_agent
 from bit_agent.memory import WorkingMemoryStore
 from bit_agent.memory.models import WorkingMemory
 from bit_agent.observability import AgentEvent
@@ -171,6 +171,15 @@ class AgentRuntime:
         )
         if permission not in {"read_only", "confirm", "edit"}:
             raise ValueError("权限模式无效")
+        # 本轮临时换用的模型和思考程度（输入框左下角选择）；不填时用模型设置里的主模型、模型默认档。
+        model = input.get("model")
+        if model is not None and (
+            not isinstance(model, str) or not re.fullmatch(r"[\w.:/@+\-]{1,200}", model)
+        ):
+            raise ValueError("模型名称无效")
+        effort = input.get("reasoning_effort")
+        if effort is not None and effort not in REASONING_EFFORTS:
+            raise ValueError("思考程度无效")
         if not isinstance(objective, str) or not 1 <= len(objective.strip()) <= 4000:
             raise ValueError("请填写 1 到 4000 个字符的任务要求")
         if not isinstance(workspace, str) or not Path(workspace).is_absolute():
@@ -206,6 +215,8 @@ class AgentRuntime:
                 "multi_agent_mode": mode,
                 "permission_mode": permission,
                 "max_tool_rounds": max_tool_rounds,
+                **({"model": model} if model else {}),
+                **({"reasoning_effort": effort} if effort else {}),
                 "objective": objective.strip(),
                 "workspace_root": str(root),
                 "status": "QUEUED",
@@ -334,6 +345,8 @@ class AgentRuntime:
                         task["objective"],
                         workspace_root=root,
                         max_tool_rounds=task.get("max_tool_rounds", DEFAULT_MAX_TOOL_ROUNDS),
+                        model_name=task.get("model"),
+                        reasoning_effort=task.get("reasoning_effort"),
                         thread_id=session_id,
                         working_memory_store=self.memory,
                         initial_state=state,

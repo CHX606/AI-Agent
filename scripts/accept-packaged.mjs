@@ -28,6 +28,12 @@ gitSetup("commit", "-q", "-m", "initial");
 const requests = [];
 const probes = [];
 const model = createServer(async (request, response) => {
+  if (request.method === "GET" && request.url?.endsWith("/models")) {
+    // “从服务获取”：向量模型应被过滤掉。
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ object: "list", data: ["local-fixture", "local-fixture-mini", "text-embedding-3-small"].map((id) => ({ id, object: "model" })) }));
+    return;
+  }
   let raw = ""; for await (const chunk of request) raw += String(chunk);
   const body = JSON.parse(raw);
   if (body.input === "ping") {
@@ -159,7 +165,7 @@ async function captureScreenshot() {
         const { BrowserWindow } = process.getBuiltinModule('module').createRequire(process.resourcesPath + '/app/package.json')('electron');
         const window = BrowserWindow.getAllWindows().find(item => item.webContents.getURL().includes('index.html'));
         window.webContents.setBackgroundThrottling(false);
-        const sample = await window.webContents.executeJavaScript("(() => { const element = document.querySelector('.product-dialog[open]') || document.querySelector('.composer-card'); const rect = element.getBoundingClientRect(); return { x:rect.right-16, y:rect.top+16, width:innerWidth, height:innerHeight, color:getComputedStyle(element).backgroundColor.match(/\\\\d+/g).slice(0,3).map(Number) }; })()");
+        const sample = await window.webContents.executeJavaScript("(() => { const element = ['.product-dialog[open]', '.composer-card', '.editor-scroll', '.repository-view'].map((selector) => document.querySelector(selector)).find((item) => item && item.getBoundingClientRect().width > 0); const rect = element.getBoundingClientRect(); return { x:rect.right-16, y:rect.top+16, width:innerWidth, height:innerHeight, color:getComputedStyle(element).backgroundColor.match(/\\\\d+/g).slice(0,3).map(Number) }; })()");
         // 隐藏窗口的第一张截图可能仍是上一帧。实际像素必须与当前主题一致。
         for (let attempt = 0; attempt < 8; attempt++) {
           const image = await window.webContents.capturePage(undefined, {stayHidden:true, stayAwake:true});
@@ -237,10 +243,13 @@ async function captureLayouts(command, evaluate, stage) {
       })()`);
       assert(geometry.settingsInSidebar && geometry.permissionInToolbar && geometry.reviewInInspector && !geometry.extraComposerRow, "新入口不在约定的位置");
       const inside = r => r && r.x >= -1 && r.y >= -1 && r.right <= width + 1 && r.bottom <= height + 1;
-      assert(inside(geometry.card), `${filename}: 输入框超出窗口`);
-      assert(geometry.card.overflow <= 1, `${filename}: 输入框出现横向溢出`);
-      const { context, actions } = geometry;
-      assert(context.right <= actions.x + 1 || context.bottom <= actions.y + 1 || actions.bottom <= context.y + 1, `${filename}: 底栏控件相互遮挡`);
+      // 仓库页没有输入框，只检查对话页的输入框布局。
+      if (geometry.card) {
+        assert(inside(geometry.card), `${filename}: 输入框超出窗口`);
+        assert(geometry.card.overflow <= 1, `${filename}: 输入框出现横向溢出`);
+        const { context, actions } = geometry;
+        assert(context.right <= actions.x + 1 || context.bottom <= actions.y + 1 || actions.bottom <= context.y + 1, `${filename}: 底栏控件相互遮挡`);
+      }
       if (geometry.interaction) {
         assert(inside(geometry.interaction), `${filename}: 问答卡片超出窗口`);
         assert(geometry.interaction.bottom <= geometry.card.y + 1, `${filename}: 问答卡片侵入输入框`);
@@ -320,9 +329,25 @@ try {
   await evaluate("document.querySelector('#model-settings').click()");
   await check(() => evaluate("Boolean(document.querySelector('.model-settings-form'))"), "模型设置表单没有打开");
   await captureLayouts(command, evaluate, "model-settings");
+  // 从服务获取模型列表（过滤掉向量模型），勾选一个加进“可切换的模型”。
+  await evaluate("document.querySelector('[data-fetch-models]').click()");
+  await check(() => evaluate("document.querySelectorAll('.model-fetch-result input').length===2"), "从服务获取模型列表失败");
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.model-fetch-result input')].map(i=>i.value)"), ["local-fixture", "local-fixture-mini"]);
+  await evaluate("[...document.querySelectorAll('.model-fetch-result input')].find(i=>i.value==='local-fixture-mini').click()");
+  assert(await evaluate("document.querySelector('#model-list').value.includes('local-fixture-mini')"), "勾选的模型没有加进列表");
   await evaluate("document.querySelector('.model-settings-form').requestSubmit()");
   await check(() => evaluate("Boolean(document.querySelector('.product-feedback[data-kind=success]'))"), "设置表单无法保存");
   await evaluate("document.querySelector('.product-dialog-header button').click()");
+  // 输入框右下角的模型菜单：换成 local-fixture-mini、思考程度“高”，下一轮请求要带上它们。
+  await check(() => evaluate("document.querySelector('#model-menu .choice-value')?.textContent==='local-fixture'"), "模型菜单没有显示主模型");
+  await evaluate("document.querySelector('#model-menu .choice-trigger').click()");
+  await check(() => evaluate("[...document.querySelectorAll('#model-menu .choice-item strong')].some(e=>e.textContent==='local-fixture-mini')"), "模型菜单没有列出可切换的模型");
+  await captureLayouts(command, evaluate, "model-menu");
+  await evaluate("[...document.querySelectorAll('#model-menu .choice-item')].find(e=>e.querySelector('strong')?.textContent==='local-fixture-mini').click()");
+  await evaluate("document.querySelector('#model-menu .choice-trigger').click()");
+  await check(() => evaluate("!document.querySelector('#model-menu .choice-popover').hidden"), "模型菜单没有再次打开");
+  await evaluate("[...document.querySelectorAll('#model-menu .choice-item')].find(e=>e.querySelector('strong')?.textContent==='高').click()");
+  await check(() => evaluate("document.querySelector('#model-menu .choice-value').textContent==='local-fixture-mini' && document.querySelector('#model-menu .model-effort')?.textContent==='高'"), "模型菜单的选择没有生效");
   await close();
   ({ command, evaluate } = await launch());
   await check(() => evaluate("Array.from(document.querySelectorAll('.history-item')).some(button=>button.title==='PACKAGE-CANARY-73')"), "重启后没有恢复已存会话");
@@ -332,6 +357,11 @@ try {
   await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && !document.querySelector('#run').disabled && document.querySelector('#current-turn').textContent.includes('PACKAGE-FOLLOWUP')"), "重启后不能继续对话");
   const followup = await evaluate("document.querySelector('#current-turn').textContent");
   assert(followup.includes("PACKAGE-CANARY-73"), `继续对话的回答没有带上前一轮：${followup}`);
+  // 重启后仍记得模型菜单的选择，请求里带着所选模型和思考程度。
+  const chosen = requests.filter((body) => body.tools?.length && JSON.stringify(body.input).includes("PACKAGE-FOLLOWUP")).at(-1);
+  assert(chosen, "没有找到这一轮主 Agent 的模型请求");
+  assert.equal(chosen.model, "local-fixture-mini", `请求没有使用所选模型：${chosen.model}`);
+  assert.equal(chosen.reasoning?.effort, "high", `请求没有带上思考程度：${JSON.stringify(chosen.reasoning)}`);
   await evaluate("document.querySelector('#objective').value='PAUSE-TEST';document.querySelector('#run').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && !document.querySelector('#pause-task').disabled"), "没有显示可用的暂停按钮");
   await evaluate("document.querySelector('#pause-task').click()");
@@ -432,6 +462,21 @@ try {
   await check(() => evaluate("document.body.dataset.busy==='false' && document.querySelectorAll('.saved-turn .turn-expand').length>0"), "旧轮次没有“查看执行过程”入口");
   await evaluate("document.querySelector('.saved-turn .turn-expand').click()");
   await check(() => evaluate("(()=>{const t=document.querySelector('.saved-turn');return !t.querySelector('.turn-expand') && Boolean(t.querySelector('.stream-text')?.textContent.includes('PACKAGED_STREAM_START'));})()"), "点开后没有回放旧轮次的过程");
+  // VS Code 式仓库页：标签页、行号、语法高亮、状态栏。
+  mkdirSync(join(workspace, "src"), { recursive: true });
+  writeFileSync(join(workspace, "src", "app.py"), "# 示例\ndef greet(name: str) -> str:\n    return f\"hi {name}\"  # 问候\n\nprint(greet('bit'), 42)\n");
+  await evaluate("document.querySelector('#nav-repository').click()");
+  await check(() => evaluate("Boolean(document.querySelector('.repository-entry[data-path=\"src\"]'))"), "仓库页没有列出目录");
+  await evaluate("document.querySelector('.repository-entry[data-path=\"src\"]').click()");
+  await check(() => evaluate("Boolean(document.querySelector('.repository-entry[data-path=\"src/app.py\"]'))"), "展开目录后没有列出文件");
+  await evaluate("document.querySelector('.repository-entry[data-path=\"src/app.py\"]').click()");
+  await check(() => evaluate("document.querySelector('.editor-gutter').textContent.startsWith('1\\n2\\n3') && Boolean(document.querySelector('#repository-file-content .tok-keyword')) && Boolean(document.querySelector('#repository-file-content .tok-comment')) && document.querySelector('#repository-file-meta').textContent.includes('Python')"), "代码没有行号、高亮或语言信息");
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('#repository-file-content')).fontFamily"), await evaluate("getComputedStyle(document.querySelector('.editor-code')).fontFamily"), "代码没有使用编辑区的等宽字体");
+  await evaluate("document.querySelector('.repository-entry[data-path=\"README.md\"]').click()");
+  await check(() => evaluate("document.querySelectorAll('.editor-tab').length===2 && document.querySelector('.editor-tab[aria-selected=true]').title==='README.md' && document.querySelector('#repository-breadcrumbs').textContent.includes('README.md')"), "第二个文件没有在新标签打开");
+  await evaluate("document.querySelector('.editor-tab[aria-selected=true] .editor-tab-close').click()");
+  await check(() => evaluate("document.querySelectorAll('.editor-tab').length===1 && document.querySelector('.editor-tab[aria-selected=true]').title==='src/app.py'"), "关闭标签后没有切回上一个文件");
+  await captureLayouts(command, evaluate, "repository");
   await close();
   writeFileSync(join(directory, "result.json"), JSON.stringify({ passed: true, executable,
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,

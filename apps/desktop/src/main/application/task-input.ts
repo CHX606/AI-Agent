@@ -12,5 +12,7 @@ export function taskRequestBody(input: CreateTaskInput, settings: ExecutionSetti
     ...(input.multiAgentMode ? { multi_agent_mode: input.multiAgentMode } : {}),
     permission_mode: input.permissionMode ?? "confirm",
     max_tool_rounds: parseExecutionSettings(settings).maxToolRounds,
+    ...(input.model?.trim() ? { model: input.model.trim() } : {}),
+    ...(input.reasoningEffort ? { reasoning_effort: input.reasoningEffort } : {}),
   };
 }

@@ -29,7 +29,7 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
   const { diagnostics, gatewayClient, saveDiagnosticBundle, loadTheme, saveTheme,
     readExecutionSettings, writeExecutionSettings, listRepositoryDirectory,
     readRepositoryFile, validateRepositoryWorkspace, managedHeaders, modelSettings,
-    runtimeConfiguration, saveModelSettings, testModelSettings, dockerStatus,
+    runtimeConfiguration, saveModelSettings, testModelSettings, listProviderModels, dockerStatus,
     mcpServers, saveMcpServers, testMcpServer,
     startManagedRuntime, stopManagedRuntime } = services;
   installProcessDiagnostics(diagnostics);
@@ -193,6 +193,7 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
     handle("model:get", () => modelSettings());
     handle("model:save", (_event, input: unknown) => saveModelSettings(input));
     handle("model:test", (_event, input: unknown) => testModelSettings(input));
+    handle("model:list", (_event, input: unknown) => listProviderModels(input));
     handle("environment:docker", () => dockerStatus());
     handle("mcp:list", () => mcpServers());
     handle("mcp:save", (_event, input: unknown) => saveMcpServers(input));

@@ -19,6 +19,7 @@ const api: DesktopApi = {
   getModelSettings: () => ipcRenderer.invoke("model:get"),
   saveModelSettings: (input) => ipcRenderer.invoke("model:save", input),
   testModelSettings: (input) => ipcRenderer.invoke("model:test", input),
+  listModels: (input) => ipcRenderer.invoke("model:list", input),
   dockerStatus: () => ipcRenderer.invoke("environment:docker"),
   listMcpServers: () => ipcRenderer.invoke("mcp:list"),
   saveMcpServers: (input) => ipcRenderer.invoke("mcp:save", input),

@@ -30,9 +30,12 @@ from openai import (
     APITimeoutError,
     AsyncOpenAI,
     AuthenticationError,
+    BadRequestError,
+    NotFoundError,
     OpenAI,
     RateLimitError,
 )
+from openai.types.shared import Reasoning
 
 from bit_agent.agent.limits import DEFAULT_MAX_TOOL_ROUNDS, validate_max_tool_rounds
 from bit_agent.agent.result import (
@@ -179,6 +182,7 @@ class _AgentRun:
         response_client: Any,
         model_name: str,
         model_api: str,
+        reasoning_effort: str | None,
         provider: ToolProvider,
         thread_id: str,
         restore_thread: bool,
@@ -207,6 +211,7 @@ class _AgentRun:
         self.response_client = response_client
         self.model_name = model_name
         self.model_api = model_api
+        self.reasoning_effort = reasoning_effort
         self.thread_id = thread_id
         self.restore_thread = restore_thread
         self.working_memory_objective = working_memory_objective
@@ -603,13 +608,17 @@ class _AgentRun:
                 )
             )
         max_tokens = self.context.policy.reserved_output_tokens
+        # 思考程度：没选时不发送，由模型自己决定；两种接口都只用 effort 这一项。
+        reasoning = Reasoning(effort=self.reasoning_effort) if self.reasoning_effort else None
         if self.model_api == "chat_completions":
             model = OpenAIChatCompletionsModel(model=self.model_name, openai_client=sdk_client)
             # 兼容服务常常不认识 store、parallel_tool_calls；工具本来就逐个执行，省略即可。
-            settings = ModelSettings(max_tokens=max_tokens)
+            settings = ModelSettings(max_tokens=max_tokens, reasoning=reasoning)
         else:
             model = OpenAIResponsesModel(model=self.model_name, openai_client=sdk_client)
-            settings = ModelSettings(parallel_tool_calls=False, store=False, max_tokens=max_tokens)
+            settings = ModelSettings(
+                parallel_tool_calls=False, store=False, max_tokens=max_tokens, reasoning=reasoning
+            )
         return Agent(
             name=self.agent_id,
             model=DiagnosticModel(
@@ -765,6 +774,8 @@ class _AgentRun:
 
 
 _RESUME_HINT = "网络恢复后，在同一对话发送“继续”即可，已有记录会保留。"
+# OpenAI 接口的 reasoning.effort 取值；不同模型支持的档位不同，不支持时服务会返回 400。
+REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 
 
 def _model_failure_message(error: BaseException) -> str | None:
@@ -781,6 +792,12 @@ def _model_failure_message(error: BaseException) -> str | None:
             return "模型服务拒绝了 API Key，请在模型设置中检查密钥。"
         if isinstance(current, RateLimitError):
             return "模型服务提示请求过于频繁或额度不足，请稍后再试或检查账户额度。"
+        if isinstance(current, NotFoundError):
+            return "模型服务找不到这个模型，请在输入框左下角换一个模型，或在模型设置中检查名称。"
+        if isinstance(current, BadRequestError) and "reasoning" in str(current).casefold():
+            return (
+                "这个模型不支持所选的思考程度，请在输入框左下角换一档，或选“默认”让模型自己决定。"
+            )
         current = current.__cause__ or current.__context__
     return None
 
@@ -804,6 +821,7 @@ async def run_agent(
     response_client: Any | None = None,
     model_name: str | None = None,
     model_api: str | None = None,
+    reasoning_effort: str | None = None,
     tool_provider: ToolProvider | None = None,
     thread_id: str | None = None,
     working_memory_objective: str | None = None,
@@ -859,6 +877,8 @@ async def run_agent(
             model_api = configured_model_api()
     if model_api not in {"responses", "chat_completions"}:
         raise ValueError("model_api 只能是 responses 或 chat_completions")
+    if reasoning_effort is not None and reasoning_effort not in REASONING_EFFORTS:
+        raise ValueError("思考程度只能是 " + "、".join(REASONING_EFFORTS))
 
     root = (workspace_root or Path.cwd()).resolve()
     run_id = uuid4().hex
@@ -894,6 +914,7 @@ async def run_agent(
         response_client=response_client,
         model_name=model_name,
         model_api=model_api,
+        reasoning_effort=reasoning_effort,
         # 按调用时的全局名取 execute_tool，测试可以替换它。
         provider=tool_provider or LocalToolProvider(root, execute_tool),
         thread_id=thread_id or uuid4().hex,

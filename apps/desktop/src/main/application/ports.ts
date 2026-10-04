@@ -23,6 +23,7 @@ export interface RuntimePort {
   modelSettings(includeSecret?: boolean): Record<string, string | boolean>;
   saveModelSettings(input: unknown): Promise<Record<string, string | boolean>>;
   testModelSettings(input: unknown): Promise<Record<string, unknown>>;
+  listProviderModels(input: unknown): Promise<string[]>;
   mcpServers(): Record<string, unknown>[];
   saveMcpServers(input: unknown): Promise<Record<string, unknown>[]>;
   testMcpServer(input: unknown): Promise<Record<string, unknown>>;

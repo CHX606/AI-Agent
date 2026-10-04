@@ -1,4 +1,5 @@
 import type { TaskRequestInput } from "../shared/contracts.js";
+import { parseModelList } from "../shared/model-list.js";
 import { type ChoiceMenu, icons } from "./choice-menu.js";
 import "./product-controls.css";
 import { errorText } from "./dom.js";
@@ -402,6 +403,11 @@ export function mountProductControls(current: () => TaskRequestInput,
         <div class="model-field"><label for="model-aux">辅助模型（可选）</label>
           <input id="model-aux" name="auxModel" spellcheck="false" maxlength="200" placeholder="留空则全部使用上面的模型">
           <p>同一接口地址下更便宜的模型，用于只读调查、历史摘要、经验提炼和提交信息；主任务和独立验收仍用主模型。</p></div>
+        <div class="model-field"><label for="model-list">可切换的模型（可选）</label>
+          <textarea id="model-list" name="models" rows="3" spellcheck="false" placeholder="每行一个，例如&#10;gpt-5.5&#10;gpt-5.5-mini"></textarea>
+          <div class="model-list-actions"><button type="button" class="button-secondary" data-fetch-models>从服务获取</button>
+            <span>在输入框右下角切换模型和思考程度；主模型始终可选。</span></div>
+          <div class="model-fetch-result" hidden></div></div>
         <div class="model-field"><label for="model-api">接口类型</label>
           <select id="model-api" name="api">
             <option value="responses">Responses API（OpenAI 官方等）</option>
@@ -426,6 +432,39 @@ export function mountProductControls(current: () => TaskRequestInput,
       (form.elements.namedItem("baseUrl") as HTMLInputElement).value = String(settings.baseUrl ?? "");
       (form.elements.namedItem("model") as HTMLInputElement).value = String(settings.model ?? "");
       (form.elements.namedItem("auxModel") as HTMLInputElement).value = String(settings.auxModel ?? "");
+      const modelList = form.elements.namedItem("models") as HTMLTextAreaElement;
+      modelList.value = String(settings.models ?? "");
+      const fetchButton = form.querySelector<HTMLButtonElement>("[data-fetch-models]")!;
+      const fetched = form.querySelector<HTMLElement>(".model-fetch-result")!;
+      // 从服务获取模型列表，勾选的加进“可切换的模型”，取消勾选的移出。
+      fetchButton.addEventListener("click", async () => {
+        if (!(form.elements.namedItem("baseUrl") as HTMLInputElement).reportValidity()) return;
+        fetchButton.disabled = true;
+        fetchButton.textContent = "正在获取…";
+        try {
+          const models = await window.bitAgent.listModels(Object.fromEntries(new FormData(form).entries()));
+          if (!active(body)) return;
+          const chosen = new Set(parseModelList(modelList.value));
+          fetched.replaceChildren(...models.map((model) => {
+            const label = document.createElement("label");
+            const box = document.createElement("input");
+            box.type = "checkbox";
+            box.value = model;
+            box.checked = chosen.has(model);
+            box.addEventListener("change", () => {
+              const current = parseModelList(modelList.value).filter((name) => name !== model);
+              modelList.value = (box.checked ? [...current, model] : current).join("\n");
+            });
+            const name = document.createElement("span");
+            name.textContent = model;
+            name.title = model;
+            label.append(box, name);
+            return label;
+          }));
+          fetched.hidden = false;
+        } catch (error) { feedback(body, error); }
+        finally { fetchButton.disabled = false; fetchButton.textContent = "从服务获取"; }
+      });
       (form.elements.namedItem("inputPrice") as HTMLInputElement).value = String(settings.inputPrice ?? "");
       (form.elements.namedItem("outputPrice") as HTMLInputElement).value = String(settings.outputPrice ?? "");
       (form.elements.namedItem("currency") as HTMLSelectElement).value = settings.currency === "$" ? "$" : "¥";
@@ -479,6 +518,8 @@ export function mountProductControls(current: () => TaskRequestInput,
         try {
           const values = Object.fromEntries(new FormData(form).entries());
           await window.bitAgent.saveModelSettings(values);
+          // 输入框里的模型菜单随之刷新。
+          window.dispatchEvent(new Event("bit-agent:model-settings-saved"));
           (form.elements.namedItem("apiKey") as HTMLInputElement).value = "";
           form.querySelector(".model-key-state")!.textContent = "已配置";
           feedback(body, testResult.dataset.ok === "true"

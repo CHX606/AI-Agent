@@ -15,6 +15,7 @@ import {
 } from "./session-view";
 
 import { createInteractionView } from "./interaction-view";
+import { mountModelMenu, type ModelMenu } from "./model-menu";
 import { createRepositoryView } from "./repository-view";
 import { loadHistory, saveHistory, type TaskHistoryEntry } from "./task-history";
 
@@ -199,6 +200,7 @@ let searchResults: TaskHistoryEntry[] | null = null;
 const sessionSearch = element<HTMLInputElement>("#session-search");
 let activeView: "tasks" | "repository" = "tasks";
 let interactionView: ReturnType<typeof createInteractionView> | null = null;
+let modelMenu: ModelMenu | null = null;
 let interactionRefreshSequence = 0;
 
 function setTheme(theme: ColorTheme, syncWindow = true): void {
@@ -409,6 +411,7 @@ function setBusy(busy: boolean): void {
   browseButton.disabled = busy;
   gatewayInput.disabled = busy;
   setModeDisabled(busy);
+  modelMenu?.setDisabled(busy);
   for (const button of taskHistory.querySelectorAll<HTMLButtonElement>("button")) {
     button.disabled = submitting;
   }
@@ -431,7 +434,16 @@ function composerMode(): "new" | "supplement" | "answer" | "locked" {
   return supplementStatuses.has(status) ? "supplement" : "locked";
 }
 
+/** 输入框跟着内容长高，空的时候只有一行。 */
+function fitComposer(): void {
+  objectiveInput.style.height = "auto";
+  const limit = Number.parseFloat(getComputedStyle(objectiveInput).maxHeight) || 220;
+  objectiveInput.style.height = `${Math.min(objectiveInput.scrollHeight + 1, limit)}px`;
+}
+objectiveInput.addEventListener("input", fitComposer);
+
 function paintComposer(): void {
+  fitComposer();
   const mode = composerMode();
   const status = statusText.dataset.status;
   document.body.dataset.steering = mode === "answer" ? "WAITING_FOR_INPUT" : mode === "supplement" ? status ?? "" : "";
@@ -784,6 +796,7 @@ async function runAgent(): Promise<void> {
       ...(previousSession ? { sessionId: previousSession } : {}),
       multiAgentMode: mode,
       permissionMode: permissionMode(),
+      ...(modelMenu?.selection() ?? {}),
     });
     if (generation !== viewGeneration) return;
     if (typeof task.task_id !== "string") throw new Error("Gateway 没有返回 task_id");
@@ -1024,6 +1037,8 @@ interactionView = createInteractionView({ current: requestInput, apply: applyInt
 mountProductControls(requestInput, () => ({ gatewayUrl: gatewayInput.value.trim(),
   ...(activeTaskId ? { taskId: activeTaskId } : {}) }),
 () => ({ gatewayUrl: gatewayInput.value.trim(), workspaceRoot: workspaceInput.value.trim() }));
+modelMenu = mountModelMenu(element<HTMLElement>(".composer-actions"), () => element<HTMLButtonElement>("#model-settings").click());
+modelMenu.setDisabled(document.body.dataset.busy === "true");
 window.bitAgent.onTaskEvent(appendEvent);
 
 onAgentModeChange((mode) => {

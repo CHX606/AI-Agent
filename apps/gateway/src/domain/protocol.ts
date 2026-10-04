@@ -32,6 +32,9 @@ export const createTaskBodySchema = z.object({
   multi_agent_mode: z.enum(["off", "on", "auto"]).optional(),
   permission_mode: z.enum(["read_only", "confirm", "edit"]).optional(),
   max_tool_rounds: maxToolRoundsSchema.optional(),
+  // 本轮临时换用的模型和思考程度；不填时用模型设置里的主模型、模型默认档。
+  model: z.string().regex(/^[\w.:/@+-]{1,200}$/u).optional(),
+  reasoning_effort: z.enum(["none", "minimal", "low", "medium", "high", "xhigh", "max"]).optional(),
 }).strict();
 
 export type CreateTaskBody = z.infer<typeof createTaskBodySchema>;

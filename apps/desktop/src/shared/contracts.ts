@@ -7,9 +7,14 @@ export interface CreateTaskInput {
   sessionId?: string;
   multiAgentMode?: MultiAgentMode;
   permissionMode?: "read_only" | "confirm" | "edit";
+  /** 本轮临时换用的模型；不填时用模型设置里的主模型。 */
+  model?: string;
+  /** 思考程度；不填时由模型自己决定。 */
+  reasoningEffort?: ReasoningEffort;
 }
 
 export type MultiAgentMode = "off" | "on" | "auto";
+export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface SessionRequestInput {
   gatewayUrl: string;
@@ -141,6 +146,8 @@ export interface DesktopApi {
   saveModelSettings(input: Record<string, unknown>): Promise<Record<string, unknown>>;
   /** 真实请求一次模型；api 为 auto 时自动检测可用的接口类型。 */
   testModelSettings(input: Record<string, unknown>): Promise<ModelTestResult>;
+  /** 向模型服务要模型列表（只含可以对话的模型）；不保存。 */
+  listModels(input: Record<string, unknown>): Promise<string[]>;
   dockerStatus(): Promise<"ready" | "not_installed" | "not_running">;
   listMcpServers(): Promise<McpServer[]>;
   /** 保存整个列表；条目带 env 时替换环境变量，不带时沿用已保存的值。 */

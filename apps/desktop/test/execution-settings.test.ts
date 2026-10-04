@@ -51,4 +51,13 @@ describe("execution settings", () => {
     expect(second.max_tool_rounds).toBe(250);
     expect(first.max_tool_rounds).toBe(25);
   });
+
+  it("sends the chosen model and thinking level only when they are set", () => {
+    const base = { gatewayUrl: "http://localhost:3000", objective: "fix", workspaceRoot: "D:\\project" };
+    const settings = { maxToolRounds: 100 };
+    expect(taskRequestBody({ ...base, model: " gpt-5.5-mini ", reasoningEffort: "high" }, settings))
+      .toMatchObject({ model: "gpt-5.5-mini", reasoning_effort: "high" });
+    const plain = taskRequestBody(base, settings);
+    expect("model" in plain || "reasoning_effort" in plain).toBe(false);
+  });
 });

@@ -144,6 +144,59 @@ choice-menu {
   line-height: 1.45;
 }
 
+/* 右侧的菜单向左展开，不超出窗口。 */
+.choice-popover[data-align="end"] {
+  right: 0;
+  left: auto;
+}
+
+.choice-divider {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--border);
+}
+
+.choice-empty {
+  margin: 2px 9px 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.choice-item.choice-footer {
+  display: block;
+  padding: 7px 9px;
+  color: var(--text-soft);
+  font-size: 12.5px;
+}
+
+/* 模型菜单：触发按钮显示模型名和思考档位。 */
+.model-menu {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.model-trigger .choice-value {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-effort {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.model-popover {
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+}
+
+.effort-bars rect { stroke: none; }
+.effort-bars .bar-on { fill: currentColor; }
+.effort-bars .bar-off { fill: currentColor; opacity: 0.22; }
+.effort-bars.effort-max .bar-on { fill: var(--brand); }
+
 .choice-item[data-tone="caution"] {
   color: var(--amber);
 }

@@ -230,7 +230,7 @@
               id="objective"
               class="composer-textarea"
               placeholder="交给 Bit Agent 一个代码任务…（Shift+Tab 切换权限）"
-              rows="3"
+              rows="1"
               spellcheck="false"
             ></textarea>
             <div class="composer-toolbar">
@@ -315,26 +315,32 @@
       </aside>
 
       <section id="repository-view" class="repository-view" aria-label="代码仓库浏览器" hidden>
-        <header class="repository-header">
-          <div class="repository-file-heading">
-            <span class="eyebrow">REPOSITORY</span>
-            <h2 id="repository-file-title">选择一个文件</h2>
-          </div>
-          <span id="repository-file-meta" class="repository-file-meta"></span>
-        </header>
+        <!-- VS Code 式编辑区：打开的文件标签、路径、带行号和高亮的只读代码、底部状态栏。 -->
+        <div id="repository-tabs" class="editor-tabs" role="tablist" aria-label="打开的文件"></div>
+        <nav id="repository-breadcrumbs" class="editor-breadcrumbs" aria-label="文件路径"></nav>
         <div class="repository-preview-shell">
           <div id="repository-preview-empty" class="repository-preview-empty">
             <div class="repository-empty-mark" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M3.5 7.5h7l2-2h8v13h-17z" /></svg>
             </div>
-            <h2>浏览当前工作区</h2>
-            <p>从左侧文件树选择一个 UTF-8 文本文件进行预览。</p>
+            <h2 id="repository-file-title">浏览当前工作区</h2>
+            <p>从左侧文件树选择一个 UTF-8 文本文件，可以同时打开多个。</p>
           </div>
           <div id="repository-preview-content" class="repository-preview-content" hidden>
             <div id="repository-preview-notice" class="repository-preview-notice" hidden></div>
-            <pre class="repository-code"><code id="repository-file-content"></code></pre>
+            <div id="repository-editor" class="editor-scroll" tabindex="0" aria-label="文件内容（只读）">
+              <div class="editor-lines">
+                <div class="editor-current-line" hidden></div>
+                <pre class="editor-gutter" aria-hidden="true"></pre>
+                <pre class="editor-code"><code id="repository-file-content"></code></pre>
+              </div>
+            </div>
           </div>
         </div>
+        <footer class="editor-status">
+          <span id="repository-status-left">只读预览</span>
+          <span id="repository-file-meta" class="editor-status-right"></span>
+        </footer>
       </section>
     </main>
     <script type="module" src="../src/renderer/main.ts"></script>

@@ -1,10 +1,11 @@
-import { app, safeStorage } from "electron";
+import { app, net, safeStorage } from "electron";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { createInterface } from "node:readline";
 import { publicError, registerSecret } from "@bit-agent/diagnostics";
+import { chatModels, parseModelList } from "../../../shared/model-list.js";
 import { UserFacingError } from "../../application/errors.js";
 import { desktopDiagnostics } from "../observability/diagnostics.js";
 import { decryptedMcpServers, mcpServerList, resolveMcpServers, writeMcpServers } from "./mcp-settings.js";
@@ -57,6 +58,8 @@ export function modelSettings(includeSecret = false): Record<string, string | bo
   const result: Record<string, string | boolean> = {
     baseUrl: value.baseUrl ?? "", model: value.model ?? "", api: modelApi(value.api),
     auxModel: typeof value.auxModel === "string" ? value.auxModel : "",
+    // 输入框左下角可以切换的模型，换行分隔。
+    models: parseModelList(value.models).join("\n"),
     inputPrice: storedPrice(value.inputPrice), outputPrice: storedPrice(value.outputPrice),
     currency: value.currency === "$" ? "$" : "¥",
     configured: Boolean(value.encryptedKey),
@@ -89,6 +92,7 @@ export async function saveModelSettings(input: unknown): Promise<Record<string, 
   const prices = { inputPrice: price(values.inputPrice), outputPrice: price(values.outputPrice),
     currency: values.currency === "$" ? "$" : "¥" };
   const auxModel = typeof values.auxModel === "string" ? values.auxModel.trim().slice(0, 200) : "";
+  const models = parseModelList(values.models);
   if (!safeStorage.isEncryptionAvailable()) throw new UserFacingError("系统加密不可用，拒绝明文保存密钥");
   const response = await fetch(`${address}/v1/model`, {
     method: "POST", headers: { ...managedHeaders(address), "content-type": "application/json" },
@@ -98,10 +102,36 @@ export async function saveModelSettings(input: unknown): Promise<Record<string, 
   if (!response.ok) throw new UserFacingError(`模型配置被拒绝（HTTP ${response.status}），请检查地址和字段`);
   const path = settingsPath();
   const temporary = `${path}.tmp`;
-  writeFileSync(temporary, JSON.stringify({ baseUrl, model, api, auxModel, ...prices,
+  writeFileSync(temporary, JSON.stringify({ baseUrl, model, api, auxModel, models, ...prices,
     encryptedKey: safeStorage.encryptString(apiKey).toString("base64") }), "utf8");
   renameSync(temporary, path);
   return modelSettings();
+}
+
+/** 向模型服务要一份模型列表（OpenAI 兼容的 GET /models），只留可以对话的模型；不保存。 */
+export async function listProviderModels(input: unknown): Promise<string[]> {
+  const { baseUrl, apiKey } = modelInput(input);
+  let url: URL;
+  try { url = new URL(`${baseUrl.replace(/\/+$/u, "")}/models`); } catch { throw new UserFacingError("接口地址格式不对"); }
+  const local = url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (url.protocol !== "https:" && !local) throw new UserFacingError("远程模型必须使用 HTTPS，本地模型允许 HTTP");
+  let response: Response;
+  try {
+    // 用 Chromium 的网络栈，跟随系统代理设置。
+    response = await net.fetch(url.toString(), {
+      headers: { authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(20_000),
+    });
+  } catch {
+    throw new UserFacingError("无法连接模型服务，请检查接口地址、网络或代理");
+  }
+  if (!response.ok) throw new UserFacingError(`模型服务没有返回模型列表（HTTP ${response.status}），可以手动填写模型名称`);
+  const payload = await response.json().catch(() => ({})) as { data?: unknown };
+  const ids = (Array.isArray(payload.data) ? payload.data : [])
+    .map((item) => item && typeof item === "object" ? (item as { id?: unknown }).id : undefined)
+    .filter((id): id is string => typeof id === "string");
+  const models = chatModels(ids);
+  if (!models.length) throw new UserFacingError("模型服务返回的列表里没有可以对话的模型，可以手动填写模型名称");
+  return models;
 }
 
 /** 用表单当前的值真实请求一次模型；不保存、不改变正在使用的配置。 */

@@ -1182,12 +1182,14 @@ body[data-busy="true"] .composer-card {
   border-color: var(--composer-busy-border);
 }
 
+/* 默认一行多一点，打字时自动长高（最多约 8 行），工具栏紧贴在下面。 */
 .composer-textarea {
   display: block;
   width: 100%;
-  min-height: 84px;
-  max-height: 180px;
-  padding: 13px 14px 7px;
+  min-height: 50px;
+  max-height: 220px;
+  padding: 13px 14px 4px;
+  overflow-y: auto;
   resize: none;
   border: 0;
   outline: 0;
@@ -1201,10 +1203,9 @@ body[data-busy="true"] .composer-card {
   color: var(--text-faint);
 }
 
-/* 等待回答时问答卡片是主角，输入框收成一行，像 Claude Code 提问时那样。 */
+/* 等待回答时问答卡片是主角，输入框保持一行，像 Claude Code 提问时那样。 */
 body[data-steering="WAITING_FOR_INPUT"] .composer-textarea {
-  height: 48px;
-  min-height: 0;
+  max-height: 96px;
 }
 
 .composer-toolbar {
@@ -1511,46 +1512,6 @@ body[data-resizing="true"] .inspector-resize::after {
 
 /* Repository browser */
 
-.repository-view {
-  display: grid;
-  min-width: 0;
-  height: 100vh;
-  grid-column: 2 / -1;
-  grid-row: 1;
-  grid-template-rows: 61px minmax(0, 1fr);
-  overflow: hidden;
-  background: var(--bg-main);
-}
-
-.repository-header {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 9px 22px;
-  border-bottom: 1px solid var(--border);
-}
-
-.repository-file-heading {
-  min-width: 0;
-}
-
-.repository-file-heading h2 {
-  overflow: hidden;
-  margin-top: 1px;
-  font-size: 15px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.repository-file-meta {
-  flex: 0 0 auto;
-  color: var(--text-faint);
-  font: 11px var(--font-mono);
-}
-
 .repository-preview-shell {
   position: relative;
   min-height: 0;
@@ -1595,13 +1556,6 @@ body[data-resizing="true"] .inspector-resize::after {
   font-size: 13px;
 }
 
-.repository-preview-content {
-  display: grid;
-  height: 100%;
-  min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
 .repository-preview-notice {
   padding: 7px 14px;
   border-bottom: 1px solid var(--border);
@@ -1613,20 +1567,6 @@ body[data-resizing="true"] .inspector-resize::after {
 .repository-preview-notice[data-tone="error"] {
   background: var(--red-soft);
   color: var(--red);
-}
-
-.repository-code {
-  min-height: 0;
-  overflow: auto;
-  padding: 18px 22px 42px;
-  background: var(--bg-main);
-  color: var(--text-soft);
-  font: 12px/1.72 var(--font-mono);
-  tab-size: 2;
-}
-
-.repository-code code {
-  white-space: pre;
 }
 
 /* Markdown and diff */

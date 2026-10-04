@@ -85,7 +85,17 @@
   color: var(--text);
   font-size: 13px;
 }
-.model-field input::placeholder { color: var(--text-faint); }
+.model-field input::placeholder, .model-field textarea::placeholder { color: var(--text-faint); }
+.model-field textarea { display: block; width: 100%; min-height: 76px; padding: 8px 11px; resize: vertical; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--bg-main); color: var(--text); font: 12.5px/1.6 var(--font-mono); }
+.model-field textarea:focus { outline: none; border-color: var(--field-focus-border); box-shadow: var(--field-focus-ring); }
+.model-list-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.model-list-actions > button { flex: none; min-height: 29px; padding: 0 10px; font-size: 12px; }
+.model-list-actions > span { color: var(--text-muted); font-size: 12px; }
+/* 从服务获取到的模型：勾选的会加进上面的列表。 */
+.model-fetch-result { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 10px; max-height: 168px; margin-top: 8px; padding: 8px 10px; overflow: auto; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-panel); }
+.model-fetch-result label { display: flex; align-items: center; gap: 7px; min-width: 0; margin: 0; font: 400 12px/1.8 var(--font-mono); cursor: pointer; }
+.model-fetch-result label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-fetch-result input { width: auto; height: auto; flex: none; }
 .model-field input:focus,
 .model-field select:focus { outline: none; border-color: var(--field-focus-border); box-shadow: var(--field-focus-ring); }
 .model-price-row { display: grid; grid-template-columns: 1fr 1fr 64px; gap: 8px; }
