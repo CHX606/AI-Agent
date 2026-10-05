@@ -20,8 +20,9 @@ from bit_agent.runtime.infrastructure.acceptance import AcceptanceWorkspace
 from bit_agent.runtime.infrastructure.changes import ChangeJournal
 from bit_agent.runtime.infrastructure.storage import LocalStorage
 from bit_agent.runtime.infrastructure.verification import verify_project
+from bit_agent.sandbox import OSSandbox
 from bit_agent.sandbox.base import SandboxResult
-from bit_agent.sandbox.docker import DockerSandbox
+from bit_agent.tools.command_runtime import python_executable
 from bit_agent.tools.models import ToolMetadata, ToolResult, ToolStatus
 
 
@@ -44,10 +45,10 @@ def sandbox(monkeypatch):
     commands = []
 
     async def run(self, root, command, timeout):
-        commands.append((root, command, timeout, self.environment_kind))
-        return SandboxResult(container_id="fixture", exit_code=0, stdout="1 passed")
+        commands.append((root, command, timeout))
+        return SandboxResult(exit_code=0, stdout="1 passed")
 
-    monkeypatch.setattr(DockerSandbox, "run", run)
+    monkeypatch.setattr(OSSandbox, "run", run)
     return commands
 
 
@@ -137,7 +138,7 @@ async def test_test_writer_rejects_escape_and_protected_paths(project, tmp_path,
             await workspace.write_test(path, "test_x.py", "content")
 
 
-async def test_docker_command_is_fixed_and_language_explicit(project, tmp_path, sandbox):
+async def test_os_command_is_fixed_and_language_explicit(project, tmp_path, sandbox):
     (project / "package.json").write_text(
         json.dumps({"name": "fixture", "scripts": {"test": "vitest run"}})
     )
@@ -147,9 +148,16 @@ async def test_docker_command_is_fixed_and_language_explicit(project, tmp_path, 
         await workspace.run_test("", "tests/test_example.test.ts", "node", "js")
         with pytest.raises(ValueError):
             await workspace.run_test("", "app.py", "python", "bad")
-    assert sandbox[0][1] == ["python", "-m", "pytest", "-q", "--", "tests/test_existing.py"]
+    assert sandbox[0][1] == [
+        python_executable(project),
+        "-m",
+        "pytest",
+        "-q",
+        "--",
+        "tests/test_existing.py",
+    ]
     assert sandbox[1][1][-2:] == ["--", "./tests/test_example.test.ts"]
-    assert sandbox[1][3] == "node"
+    assert sandbox[1][1][:3] == ["npm", "run", "test"]
 
 
 async def test_plain_python_folder_can_run_acceptance_tests(tmp_path, sandbox):
@@ -163,7 +171,7 @@ async def test_plain_python_folder_can_run_acceptance_tests(tmp_path, sandbox):
     async with AcceptanceWorkspace(project, tmp_path / "artifacts") as workspace:
         await workspace.write_test("", "test_acceptance_todo.py", "def test_x():\n    pass\n")
         await workspace.run_test("", "tests", "python", "plain")
-    assert sandbox[-1][1] == ["python", "-m", "pytest", "-q", "--", "tests"]
+    assert sandbox[-1][1] == [python_executable(project), "-m", "pytest", "-q", "--", "tests"]
 
 
 async def test_tool_set_and_evidence_validation(project, tmp_path, sandbox):
@@ -311,7 +319,7 @@ async def test_real_sdk_tester_must_submit_evidence_report(project, tmp_path, sa
     assert result.output["verdict"] == ("PASSED" if submit else "NOT_VERIFIED"), result
     saved = json.loads(Path(result.output["report_path"]).read_text(encoding="utf-8"))
     assert saved["verdict"] == result.output["verdict"]
-    assert saved["evidence"][0]["command"][0] == "python"
+    assert saved["evidence"][0]["command"][0] == python_executable(project)
     first = client.inputs[0]
     developer = [item["content"] for item in first["input"] if item.get("role") == "developer"]
     assert any("独立验收测试 Agent" in content for content in developer)
@@ -351,7 +359,7 @@ async def test_cancellation_saves_evidence_and_cleans_workspace(project, tmp_pat
         finally:
             cleaned.set()
 
-    monkeypatch.setattr(DockerSandbox, "run", blocked)
+    monkeypatch.setattr(OSSandbox, "run", blocked)
     context = await acceptance_context(project, tmp_path)
     task = asyncio.create_task(
         run_acceptance(
@@ -618,10 +626,10 @@ async def test_desktop_runtime_runs_nested_sdk_and_restores_both_results(
 
 @pytest.mark.skipif(
     os.getenv("BIT_AGENT_LIVE_ACCEPTANCE") != "1",
-    reason="显式开启真实 Docker 验收；模型仍使用本地 fixture",
+    reason="显式开启真实 OS 沙箱验收；模型仍使用本地 fixture",
 )
 @pytest.mark.parametrize("broken", [False, True])
-async def test_real_docker_baseline_and_new_acceptance_tests(project, tmp_path, broken):
+async def test_real_os_baseline_and_new_acceptance_tests(project, tmp_path, broken):
     if broken:
         (project / "app.py").write_text("def add(a, b):\n    return a - b\n")
     baseline = await verify_project(project, ["app.py"], "live-baseline")

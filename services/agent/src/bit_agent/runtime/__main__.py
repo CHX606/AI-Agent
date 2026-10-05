@@ -44,7 +44,7 @@ async def main() -> None:
     runtime = create_runtime(directory)
     await runtime.start()
     # 桌面启动时通过环境变量交来外部工具配置（可能含密钥）；读完就从环境里移除，
-    # 避免 Git、Docker 等子进程继承。
+    # 避免 Git、沙箱等子进程继承。
     configured_mcp = os.environ.pop("BIT_AGENT_MCP_SERVERS", "")
     if configured_mcp:
         try:

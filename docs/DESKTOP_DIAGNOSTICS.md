@@ -79,6 +79,6 @@ ZIP 仅包含经过再次投影/脱敏的日志、manifest.json 和 runtime.json
 
 `scripts/accept-diagnostics.mjs <exe>` 启动真实打包 Electron、Gateway、Python 和 SQLite，使用本机模型夹具检查 HTTP 401、流中断、等待阶段、取消、空会话诊断入口、界面触发的 ZIP 导出及脱敏，保存验收 JSON 和截图。保存对话框的“用户选定路径”通过测试替身提供，未自动操作系统原生文件选择窗口。
 
-尚未验证真实服务商、真实断网/系统断电、OS/native 崩溃与内存转储分析；没有真实 Docker、PostgreSQL 环境的测试会跳过。诊断窗口的阶段是从现有事件推导，旧数据或超出有限事件窗口的历史可能只能显示“正在处理”。同步摘要任务被取消后，线程中的 HTTP 请求仍遵循其原有超时行为，日志功能不改变这一语义。
+尚未验证真实服务商、真实断网/系统断电、OS/native 崩溃与内存转储分析；没有真实 PostgreSQL 环境的测试会跳过。诊断窗口的阶段是从现有事件推导，旧数据或超出有限事件窗口的历史可能只能显示“正在处理”。同步摘要任务被取消后，线程中的 HTTP 请求仍遵循其原有超时行为，日志功能不改变这一语义。
 
 实现时核对了[OpenAI 请求调试说明](https://developers.openai.com/api/reference/overview)及当前安装的 SDK 源码。模型配置和重试策略继续由已有 SDK/调用方管理。

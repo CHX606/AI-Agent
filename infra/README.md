@@ -3,15 +3,14 @@
 日常开发不需要启动这里的任何服务：桌面链路是本地 Python + SQLite，启动方式见 [本地运行](../docs/LOCAL_RUNTIME.md)。
 早期的 Redis 开发与联调配置已随旧链路删除（git 标签 `legacy-redis`）。
 
-这里放服务配置、测试沙箱的 Dockerfile 和辅助脚本。你可以把它理解成“准备工作场地”的部分，Agent 的业务逻辑在 `services/agent`。
+这里放记忆后端测试服务的配置和辅助脚本。你可以把它理解成“准备工作场地”的部分，Agent 的业务逻辑在 `services/agent`。
 
 ## 每个目录做什么
 
 | 目录 | 用途 |
 | --- | --- |
-| `docker` | Windows 下 Docker Desktop 的辅助启动和残留文件处理脚本。 |
+| `docker` | Windows 下 Docker Desktop 的辅助启动和残留文件处理脚本，供记忆集成测试使用。 |
 | `memory` | 记忆模块真实 PostgreSQL/pgvector 测试环境。 |
-| `sandbox/python-web` | 在默认 Python 沙箱基础上加装 Web 相关依赖的可选镜像。 |
 
 ## 记忆集成测试
 
@@ -20,14 +19,10 @@
 `memory/run-integration-tests.ps1` 启动这套服务并运行相应 Python 集成测试。它会启用真实 LLM 测试条件，因此还需要相关模型配置。
 `-StopAfter` 表示结束后关闭测试服务；`-FullSuite` 会改为运行默认 Python 测试集合，不会顺带运行 Node.js 测试。
 
-## 默认 Python 沙箱在哪里
+## 测试沙箱不在这里
 
-默认沙箱的 `Dockerfile` 和 `run_python_build.py` 已移到 `services/agent/src/bit_agent/sandbox/images/python/`，随程序一起分发；本机没有 `bit-agent-python-sandbox:0.1.0` 时，第一次验证会自动构建。
-
-`Dockerfile` 以 Python 3.12 为基础，安装 pytest、Ruff、mypy、build 等检查依赖，并设置普通用户。`run_python_build.py` 是受控构建入口，Agent 不能把任意 Shell 命令塞进构建工具。
-
-Docker 环境与根目录 `.venv` 相互独立。本机 Python 可以导入某个包，不代表目标测试沙箱中也已安装它。
+测试和检查不再使用 Docker 镜像，改由随包的官方 Windows OS 沙箱执行，见 [Windows OS 沙箱](../docs/ENVIRONMENT.md)。以前的沙箱镜像配方已删除。
 
 ## 修改这些文件会影响什么
 
-修改 Compose 会影响服务和端口；修改 Dockerfile 会影响后续准备的沙箱镜像；修改 PowerShell 脚本会影响启动、测试或清理行为。这里只写说明的 README 不会直接启动任何服务。
+修改 Compose 会影响服务和端口；修改 PowerShell 脚本会影响启动、测试或清理行为。这里只写说明的 README 不会直接启动任何服务。

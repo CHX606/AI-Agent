@@ -15,7 +15,7 @@ class ToolContext:
     max_read_lines: int = 500  # 一次调用最多读取多少行。
     max_patch_bytes: int = 256 * 1024  # 单次补丁最大字节数。
     max_patch_files: int = 20  # 单次补丁最多修改多少个文件。
-    task_id: str = "task"  # 由 Worker 提供，用于关联沙箱容器。
+    task_id: str = "task"  # 由 Worker 提供，用于关联本次任务的工具调用。
 
     def __post_init__(self) -> None:
         root = self.workspace_root.resolve()

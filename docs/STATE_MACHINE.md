@@ -86,7 +86,7 @@ stateDiagram-v2
 
 只有结果中的 `tests_passed` 为真，仍不足以替代 `quality_checks_passed`。更早的历史记录可能还没有后者，阅读旧记录时应保留当时的版本背景。
 
-`direct` 普通回复不运行 Docker 或 Ruff，Desktop 应显示“未运行”，不能把缺少验证执行
+`direct` 普通回复不运行测试或 Ruff，Desktop 应显示“未运行”，不能把缺少验证执行
 误写成“未通过”。
 
 ## 对应代码

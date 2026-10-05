@@ -11,7 +11,6 @@ from bit_agent.agent.verification import VerificationState
 from bit_agent.observability import InMemoryEventSink
 from bit_agent.runtime.application.delegation import DelegatingToolProvider
 from bit_agent.runtime.application.interaction import TaskInteraction
-from bit_agent.runtime.infrastructure import verification
 from bit_agent.runtime.infrastructure.changes import ChangeJournal
 from bit_agent.runtime.infrastructure.storage import LocalStorage
 from bit_agent.runtime.infrastructure.verification import (
@@ -19,8 +18,10 @@ from bit_agent.runtime.infrastructure.verification import (
     verification_plan,
     verify_project,
 )
+from bit_agent.runtime.infrastructure.verification_support import execution
+from bit_agent.sandbox import OSSandbox
 from bit_agent.sandbox.base import SandboxResult
-from bit_agent.sandbox.docker import DockerSandbox
+from bit_agent.tools.command_runtime import python_executable
 from bit_agent.tools.models import ToolMetadata, ToolResult, ToolStatus
 
 
@@ -83,22 +84,20 @@ def sandbox(monkeypatch):
             {
                 "root": root,
                 "command": command,
-                "kind": self.environment_kind,
-                "image": self.image,
                 "source": source,
             }
         )
         handler = behaviour.get("handler")
         if handler is None:
-            return SandboxResult(container_id="c", exit_code=0, stdout="1 passed in 0.01s")
+            return SandboxResult(exit_code=0, stdout="1 passed in 0.01s")
         return handler(command, source)
 
-    monkeypatch.setattr(DockerSandbox, "run", run)
+    monkeypatch.setattr(OSSandbox, "run", run)
 
     async def ready():
-        return "ready"
+        return {"available": True, "message": "", "backend": "os"}
 
-    monkeypatch.setattr(verification, "docker_status", ready)
+    monkeypatch.setattr(execution, "sandbox_status", ready)
     return calls, behaviour
 
 
@@ -113,7 +112,6 @@ def pytest_result(failed: list[str], passed: int) -> SandboxResult:
         if part
     )
     return SandboxResult(
-        container_id="c",
         exit_code=1 if failed else 0,
         stdout="\n".join([*lines, f"{summary} in 0.10s"]),
     )
@@ -134,9 +132,9 @@ async def test_python_change_lints_only_changed_files(python_project, sandbox):
     result = await verify_project(python_project, ["app.py"], "call")
     assert result.output["outcome"] == "PASSED"
     assert [call["command"] for call in calls] == [
-        ["python", "-m", "pytest", "-q", "-rfE"],
+        [python_executable(python_project), "-m", "pytest", "-q", "-rfE"],
         [
-            "python",
+            python_executable(python_project),
             "-m",
             "ruff",
             "check",
@@ -144,7 +142,6 @@ async def test_python_change_lints_only_changed_files(python_project, sandbox):
             "--force-exclude",
             "--output-format=concise",
             "--select=E9,F",
-            "--extend-ignore=EXE001,EXE002",
             "app.py",
         ],
     ]
@@ -181,7 +178,7 @@ async def test_preexisting_failures_do_not_block(python_project, sandbox):
         if "pytest" in command:
             # 修改前后都有同一个旧失败；修改后另一个测试照常通过。
             return pytest_result(["tests/test_legacy.py::test_old"], passed=3)
-        return SandboxResult(container_id="c", exit_code=0)
+        return SandboxResult(exit_code=0)
 
     behaviour["handler"] = handler
     (python_project / "app.py").write_text("def add(a, b):\n    return a + b\n")
@@ -208,7 +205,7 @@ async def test_new_failure_is_reported(python_project, sandbox):
         if "pytest" in command:
             failures = ["tests/test_app.py::test_add"] if "+" in source else []
             return pytest_result(failures, passed=2)
-        return SandboxResult(container_id="c", exit_code=0)
+        return SandboxResult(exit_code=0)
 
     behaviour["handler"] = handler
     (python_project / "app.py").write_text("def add(a, b):\n    return a + b\n")
@@ -239,20 +236,20 @@ async def test_partially_known_originals_are_not_compared(python_project, sandbo
     assert len(calls) == 1
 
 
-async def test_docker_unavailable_is_unverified(python_project, sandbox, monkeypatch):
+async def test_os_sandbox_unavailable_is_unverified(python_project, sandbox, monkeypatch):
     calls, behaviour = sandbox
     behaviour["handler"] = lambda command, source: SandboxResult(
-        container_id=None, exit_code=None, start_error="cannot connect to docker"
+        exit_code=None, start_error="OS sandbox unavailable"
     )
 
     async def stopped():
-        return "not_running"
+        return {"available": False, "message": "OS 沙箱不可用", "backend": "os"}
 
-    monkeypatch.setattr(verification, "docker_status", stopped)
+    monkeypatch.setattr(execution, "sandbox_status", stopped)
     result = await verify_project(python_project, ["app.py"], "call", {"app.py": encoded("x\n")})
     assert result.output["outcome"] == "UNVERIFIED"
-    assert "Docker" in result.error.message
-    assert len(calls) == 1, "Docker 不可用时不再尝试其余命令"
+    assert "OS 沙箱不可用" in result.error.message
+    assert len(calls) == 1, "OS 沙箱不可用时不再尝试其余命令"
 
 
 @pytest.mark.parametrize(
@@ -296,7 +293,7 @@ def test_pytest_no_tests_collected():
     assert compare_with_baseline(["pytest"], empty, had)[0] == "FAILED"
 
 
-async def test_project_config_runs_custom_image_and_skips(tmp_path, sandbox):
+async def test_project_config_runs_local_custom_commands_and_skips(tmp_path, sandbox):
     calls, _ = sandbox
     (tmp_path / "server").mkdir()
     (tmp_path / "server" / "main.go").write_text("package main\n")
@@ -307,7 +304,7 @@ async def test_project_config_runs_custom_image_and_skips(tmp_path, sandbox):
                 "projects": [
                     {
                         "path": "server",
-                        "image": "golang:1.23",
+                        "language": "custom",
                         "commands": [["go", "test", "./..."]],
                         "timeout_seconds": 600,
                     }
@@ -319,7 +316,6 @@ async def test_project_config_runs_custom_image_and_skips(tmp_path, sandbox):
     result = await verify_project(tmp_path, ["server/main.go", "scripts/deploy.ps1"], "call", None)
     assert result.output["outcome"] == "PASSED", result
     assert calls[0]["command"] == ["go", "test", "./..."]
-    assert calls[0]["kind"] == "custom" and calls[0]["image"] == "golang:1.23"
     assert calls[0]["root"] == (tmp_path / "server").resolve()
     assert result.output["skipped_paths"] == ["scripts/deploy.ps1"]
 
@@ -629,3 +625,54 @@ async def test_agent_finishes_instead_of_looping_when_nothing_can_be_verified(tm
     assert result.status == "COMPLETED", result.error
     assert result.verification_status == "UNVERIFIED"
     assert provider.calls == ["apply_patch", "verify_project", "verify_task"]
+
+
+async def test_passing_checks_run_in_original_workspace_without_copy(
+    python_project, sandbox, monkeypatch
+):
+    calls, _ = sandbox
+
+    async def unexpected_copy(*args):
+        raise AssertionError("Passing checks must not copy the workspace")
+
+    monkeypatch.setattr(execution, "write_baseline", unexpected_copy)
+    result = await verify_project(python_project, ["app.py"], "call", {"app.py": encoded("old\n")})
+    assert result.output["outcome"] == "PASSED"
+    assert len(calls) == 2
+    assert all(call["root"] == python_project for call in calls)
+
+
+async def test_missing_check_tool_is_unverified_without_baseline_copy(python_project, sandbox):
+    calls, behaviour = sandbox
+    behaviour["handler"] = lambda command, source: (
+        SandboxResult(1, stderr="python: No module named pytest")
+        if "pytest" in command
+        else SandboxResult(0)
+    )
+    result = await verify_project(python_project, ["app.py"], "call", {"app.py": encoded("old\n")})
+    assert result.output["outcome"] == "UNVERIFIED"
+    assert "缺少 pytest" in result.error.message
+    assert all(call["root"] == python_project for call in calls)
+
+
+async def test_baseline_copy_failure_cannot_report_success(python_project, sandbox, monkeypatch):
+    _, behaviour = sandbox
+    behaviour["handler"] = lambda command, source: pytest_result(["tests/t.py::x"], passed=1)
+
+    async def denied(*args):
+        raise OSError("copy denied")
+
+    monkeypatch.setattr(execution, "write_baseline", denied)
+    result = await verify_project(python_project, ["app.py"], "call", {"app.py": encoded("old\n")})
+    assert result.output["outcome"] == "UNVERIFIED"
+    assert "copy denied" in result.error.message
+    assert result.output["verified"] is False
+
+
+def test_verification_plan_selects_local_python_and_drops_image(python_project):
+    interpreter = python_project / ".venv" / "Scripts" / "python.exe"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.write_bytes(b"fixture")
+    plan = verification_plan(python_project, ["app.py"])
+    assert all(command[0] == str(interpreter) for command in plan["projects"][0]["commands"])
+    assert "image" not in plan["projects"][0]

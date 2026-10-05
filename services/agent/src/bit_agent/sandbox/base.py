@@ -9,7 +9,6 @@ from typing import Protocol
 class SandboxResult:
     """一次沙箱命令执行的完整结果。"""
 
-    container_id: str | None
     exit_code: int | None
     stdout: str = ""
     stderr: str = ""

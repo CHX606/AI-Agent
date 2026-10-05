@@ -27,7 +27,7 @@ pnpm desktop:dev
 如果已经手动启动 Gateway，使用 `pnpm desktop:only` 打开界面，避免重复占用端口。
 单独开发 Gateway 可以用 `pnpm gateway:dev`。
 
-以上是源码开发启动。独立便携版由 `pnpm desktop:package` 生成，双击发布目录内的 `Bit Agent.exe`；随包附带运行时，不需要系统 Node/Python。它不是单文件或已签名安装包，隔离测试仍需要 Docker。
+以上是源码开发启动。独立便携版由 `pnpm desktop:package` 生成，双击发布目录内的 `Bit Agent.exe`；随包附带运行时，不需要系统 Node/Python。它不是单文件或已签名安装包，隔离测试使用随包官方 Windows OS 沙箱，首次执行可能需要系统授权；项目依赖需预先准备，见 [沙箱说明](ENVIRONMENT.md)。
 
 ## 怎样使用
 

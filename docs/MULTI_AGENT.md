@@ -67,7 +67,7 @@ Multi-Agent V1 使用“并发调查、单点修改”模型：
 → repo：生成任务 DAG
   → TaskDispatcher 并发运行隔离的只读子 Agent
   → ResultAggregator 检测冲突并压缩证据（默认单项 4,000 字符、总计 12,000 字符）
-  → 主 Agent 在真实工作区验证、修改和运行 Docker 测试
+  → 主 Agent 在真实工作区验证、修改，并在 OS 沙箱里运行测试
 → MultiAgentRunResult
 ```
 

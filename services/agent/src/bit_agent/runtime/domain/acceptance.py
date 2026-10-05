@@ -70,7 +70,7 @@ TESTER_SCHEMAS = [
     ),
     tester_schema(
         "run_acceptance_test",
-        "在断网隔离容器中执行指定测试。project 是项目相对目录；target 是相对于该项目的"
+        "在禁网的 OS 沙箱中执行指定测试。project 是项目相对目录；target 是相对于该项目的"
         "测试文件/目录，空字符串运行项目测试集。Python 用 pytest，Node 用现有 test 脚本。"
         "只接受路径，不接受 shell 命令。Node 脚本须支持透传测试路径，否则报告未验证。",
         {

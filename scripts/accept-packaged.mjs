@@ -12,6 +12,8 @@ const root = resolve(import.meta.dirname, "..");
 const directory = mkdtempSync(join(root, "tmp", "packaged-acceptance-"));
 console.log("PACKAGED_ACCEPTANCE_DIRECTORY", directory);
 const workspace = join(directory, "workspace"); mkdirSync(workspace);
+const otherWorkspace = join(directory, "workspace-b"); mkdirSync(otherWorkspace);
+writeFileSync(join(otherWorkspace, "README.md"), "second workspace\n");
 // 验收工作区是一个 Git 仓库，用来检查“提交到 Git”。本地配置避免依赖用户的全局 Git 设置。
 const gitSetup = (...args) => {
   const result = spawnSync("git", ["-C", workspace, ...args], { encoding: "utf8" });
@@ -27,6 +29,8 @@ gitSetup("add", "README.md");
 gitSetup("commit", "-q", "-m", "initial");
 const requests = [];
 const probes = [];
+const responseGates = new Map();
+function releaseResponse(goal) { responseGates.get(goal)?.(); responseGates.delete(goal); }
 const model = createServer(async (request, response) => {
   if (request.method === "GET" && request.url?.endsWith("/models")) {
     // “从服务获取”：向量模型应被过滤掉。
@@ -47,6 +51,8 @@ const model = createServer(async (request, response) => {
   }
   requests.push(body);
   const users = body.input.filter((item) => item.role === "user").map((item) => String(item.content));
+  const held = ["QUEUE-TEST", "STOP-QUEUE"].includes(users.at(-1))
+    ? new Promise(done => responseGates.set(users.at(-1), done)) : null;
   const text = `PACKAGED_STREAM_START ${users.join(" | ")} PACKAGED_STREAM_END`;
   const id = `resp-${requests.length}`;
   const message = { type: "message", id: `msg-${requests.length}`, status: "completed", role: "assistant",
@@ -71,7 +77,9 @@ const model = createServer(async (request, response) => {
   event({ type: "response.created", response: { ...complete, status: "in_progress", output: [] } });
   await new Promise((done) => setTimeout(done, 120));
   if (output[0].type === "message") event({ type: "response.output_text.delta", delta: "PACKAGED_STREAM_START ", item_id: message.id, output_index: 0, content_index: 0 });
-  await new Promise((done) => setTimeout(done, 1800));
+  if (held) await held;
+  else await new Promise((done) => setTimeout(done, 1800));
+  if (response.destroyed) return;
   if (output[0].type === "message") event({ type: "response.output_text.delta", delta: text.slice("PACKAGED_STREAM_START ".length), item_id: message.id, output_index: 0, content_index: 0 });
   event({ type: "response.completed", response: complete }); response.end();
 });
@@ -90,6 +98,37 @@ const check = async (operation, message, attempts = 250) => {
   }
   throw new Error(`${message}\n${diagnostic.slice(-6000)}`);
 };
+async function chooseWorkspace(evaluate, workspaceRoot) {
+  await evaluate(`(() => { const menu=document.querySelector('#workspace-chooser');menu.querySelector('.choice-trigger').click();const item=[...menu.querySelectorAll('.choice-item')].find(i=>i.dataset.value===${JSON.stringify(workspaceRoot)});if(!item) throw new Error('工作区菜单缺少指定目录');item.click(); })()`);
+  assert.equal(await evaluate("document.querySelector('#workspace').value"), workspaceRoot);
+}
+
+async function verifyWorkspaceBinding(evaluate) {
+  const sessionsBefore = (await evaluate("window.bitAgent.listSessions(window.bitAgent.runtimeConfig.gatewayUrl, 0)")).sessions;
+  await evaluate(`localStorage.setItem('bit-agent.workspaces.v1',${JSON.stringify(JSON.stringify([workspace, otherWorkspace]))});document.querySelector('#nav-tasks').click();document.querySelector('#new-task').click()`);
+  assert(await evaluate("document.querySelector('#workspace').value==='' && document.querySelector('#workspace-chooser .choice-value').textContent==='选择工作区'"), "普通新聊天隐式沿用了上一目录");
+  await evaluate("document.querySelector('#objective').value='PACKAGE-WORKSPACE-A';document.querySelector('#objective').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#run').click()");
+  assert(await evaluate("document.querySelector('#objective').value==='PACKAGE-WORKSPACE-A' && document.querySelector('#status').dataset.status==='ERROR'"), "未选目录时任务提交没有被阻止");
+  assert.equal((await evaluate("window.bitAgent.listSessions(window.bitAgent.runtimeConfig.gatewayUrl, 0)")).sessions.length, sessionsBefore.length);
+  const bindings = [];
+  for (const [selected, objective] of [[workspace, "PACKAGE-WORKSPACE-A"], [otherWorkspace, "PACKAGE-WORKSPACE-B"]]) {
+    await evaluate("document.querySelector('#new-task').click()");
+    await chooseWorkspace(evaluate, selected);
+    await evaluate(`document.querySelector('#objective').value=${JSON.stringify(objective)};document.querySelector('#objective').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#run').click()`);
+    await check(() => evaluate(`document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && document.querySelector('#objective-display').textContent===${JSON.stringify(objective)}`), "新工作区的对话没有完成");
+    assert(await evaluate("document.querySelector('#workspace-chooser .choice-trigger').disabled"), "已有会话仍能改选工作区");
+    const latest = await evaluate("JSON.parse(localStorage.getItem('bit-agent.task-history.v1'))[0]");
+    const saved = await evaluate(`window.bitAgent.getSession(${JSON.stringify({gatewayUrl:latest.gatewayUrl,sessionId:latest.sessionId})})`);
+    assert.equal(resolve(saved.session.workspace_root), resolve(selected), "后端会话没有绑定所选工作区");
+    bindings.push({sessionId:latest.sessionId, workspaceRoot:latest.workspaceRoot});
+  }
+  assert.notEqual(bindings[0].sessionId,bindings[1].sessionId,"不同工作区复用了同一个会话");
+  assert.deepEqual(bindings.map(item=>resolve(item.workspaceRoot)),[resolve(workspace),resolve(otherWorkspace)]);
+  await evaluate("document.querySelector('.workspace-group[data-active=true] .workspace-group-action[data-action=new]').click()");
+  assert.equal(await evaluate("document.querySelector('#workspace').value"),otherWorkspace,"工作区分组 + 没有预选目录");
+  return bindings;
+}
+
 async function launch() {
   mainInspectorUrl = undefined;
   let launchOutput = "";
@@ -148,6 +187,16 @@ async function launch() {
   await check(() => evaluate("Boolean(window.bitAgent && document.querySelector('#model-settings'))"), "页面初始化失败");
   return { command, evaluate };
 }
+function inspectWindowsIcon() {
+  const output = join(directory, "windows-executable-icon.png");
+  const result = spawnSync(join(process.env.ProgramFiles, "PowerShell", "7", "pwsh.exe"),
+    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+      join(root, "scripts", "desktop-package", "windows-shell-icon.ps1"), "-Executable", executable, "-Output", output],
+    {encoding:"utf8",windowsHide:true});
+  assert.equal(result.status, 0, `Windows Shell 图标读取失败: ${result.stderr}`);
+  return JSON.parse(result.stdout);
+}
+
 async function captureScreenshot() {
   await check(async () => mainInspectorUrl, "验收专用的主进程调试端口没有就绪");
   // Electron 自己的截图接口支持隐藏窗口，不依赖 Chromium 的窗口可见性判断。
@@ -166,7 +215,8 @@ async function captureScreenshot() {
         const window = BrowserWindow.getAllWindows().find(item => item.webContents.getURL().includes('index.html'));
         window.webContents.setBackgroundThrottling(false);
         const sample = await window.webContents.executeJavaScript("(() => { const element = ['.product-dialog[open]', '.composer-card', '.editor-scroll', '.repository-view'].map((selector) => document.querySelector(selector)).find((item) => item && item.getBoundingClientRect().width > 0); const rect = element.getBoundingClientRect(); return { x:rect.right-16, y:rect.top+16, width:innerWidth, height:innerHeight, color:getComputedStyle(element).backgroundColor.match(/\\\\d+/g).slice(0,3).map(Number) }; })()");
-        // 隐藏窗口的第一张截图可能仍是上一帧。实际像素必须与当前主题一致。
+        const frame = await window.webContents.executeJavaScript("(() => { let marker=document.querySelector('#acceptance-frame'); if(!marker){marker=document.createElement('canvas');marker.id='acceptance-frame';marker.width=3;marker.height=3;document.body.append(marker);document.styleSheets[0].insertRule('#acceptance-frame{position:fixed;left:16px;top:16px;width:3px;height:3px;z-index:2147483647}',0)} (document.querySelector('.product-dialog[open]')||document.body).append(marker);const count=Number(window.acceptanceFrameCount||0)+1;window.acceptanceFrameCount=count;const color=[count,31,219];marker.getContext('2d').fillStyle='rgb('+color.join(',')+')';marker.getContext('2d').fillRect(0,0,3,3);const rect=marker.getBoundingClientRect();return {color,x:rect.left+1,y:rect.top+1}; })()");
+        // 主题和唯一帧标记都匹配才接收截图，避免同一主题下仍取到旧菜单画面。
         for (let attempt = 0; attempt < 8; attempt++) {
           const image = await window.webContents.capturePage(undefined, {stayHidden:true, stayAwake:true});
           if (image.isEmpty()) throw new Error('截图为空');
@@ -179,7 +229,12 @@ async function captureScreenshot() {
           const y = Math.min(height - 1, Math.max(0, Math.floor(sample.y * height / sample.height)));
           const offset = (y * width + x) * 4;
           const color = [bitmap[offset + 2], bitmap[offset + 1], bitmap[offset]];
-          if (color.every((value, index) => Math.abs(value - sample.color[index]) < 12)) {
+          const markerX = Math.floor(frame.x * width / sample.width);
+          const markerY = Math.floor(frame.y * height / sample.height);
+          const markerOffset = (markerY * width + markerX) * 4;
+          const frameColor = [bitmap[markerOffset + 2], bitmap[markerOffset + 1], bitmap[markerOffset]];
+          if (color.every((value, index) => Math.abs(value - sample.color[index]) < 12)
+            && frameColor.every((value, index) => value === frame.color[index])) {
             return { data:image.toPNG().toString('base64'), pixelThemeChecked:true };
           }
           await new Promise(resolve => setTimeout(resolve, 150));
@@ -207,7 +262,7 @@ async function close() {
   socket?.close(); child = null;
 }
 async function captureLayouts(command, evaluate, stage) {
-  if (process.env.BIT_AGENT_LAYOUT_STAGE && process.env.BIT_AGENT_LAYOUT_STAGE !== stage) return;
+  if (process.env.BIT_AGENT_LAYOUT_STAGE && !process.env.BIT_AGENT_LAYOUT_STAGE.split(",").includes(stage)) return;
   for (const width of [1280, 920]) {
     const height = width === 920 ? 680 : 820;
     await command("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
@@ -295,7 +350,16 @@ asyncio.run(main())
 try {
   seedMemories();
   let { command, evaluate } = await launch();
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='IDLE' && document.querySelector('#run').dataset.state==='send' && Boolean(document.querySelector('#run svg path')) && document.querySelector('#run').disabled && document.querySelector('#run').dataset.empty==='true'"), "首次进入未显示灰色发送图标");
+  assert(await evaluate("document.querySelector('#profile-theme')===null"), "个人中心还保留重复主题入口");
+  assert(await evaluate("Boolean(document.querySelector('#theme-toggle'))"), "侧栏主题按钮丢失");
+  await evaluate("document.querySelector('#objective').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))");
+  assert(await evaluate("document.querySelector('#status').dataset.status==='IDLE' && document.querySelector('.error-actions').hidden"), "空 Enter 不应触发任务或错误");
+  await captureLayouts(command, evaluate, "startup");
+  const windowsIcon = inspectWindowsIcon();
+  assert(windowsIcon.orange > 25 && windowsIcon.white > 3, `Windows 读取到的 EXE 图标不是橙色 B 标识: ${JSON.stringify({size:windowsIcon.size,orange:windowsIcon.orange,white:windowsIcon.white})}`);
   const configuration = await evaluate("window.bitAgent.runtimeConfig");
+  await check(() => evaluate("document.querySelector('#connection-dot').dataset.connected==='true' && document.querySelector('#connection-dot').title==='本地服务已就绪'"), "本地服务没有自动连接");
   assert.equal(configuration.managed, true);
   assert.equal((await fetch(configuration.gatewayUrl + "/health")).status, 401);
   await evaluate(`window.bitAgent.saveModelSettings(${JSON.stringify({ baseUrl: modelUrl, model: "local-fixture", apiKey: "LOCAL-PACKAGE-SECRET-ONLY" })})`);
@@ -309,10 +373,13 @@ try {
   assert.equal(probe.ok, true, JSON.stringify(probe));
   assert.equal(probe.api, "responses");
   assert.deepEqual(probes, [{ path: "/v1/responses", tools: ["noop"] }]);
-  await evaluate(`document.querySelector('#workspace').value=${JSON.stringify(workspace)}; document.querySelector('#workspace').dispatchEvent(new Event('change')); document.querySelector('#objective').value='PACKAGE-CANARY-73'; document.querySelector('#run').click();`);
+  assert(await evaluate("document.querySelector('#connection')===null && document.querySelector('#workspace').value==='' && document.querySelector('#workspace-chooser .choice-value').textContent==='选择工作区'"), "启动新聊天没有显示空工作区选择");
+  await evaluate(`localStorage.setItem('bit-agent.workspaces.v1',${JSON.stringify(JSON.stringify([workspace,otherWorkspace]))});document.querySelector('#new-task').click()`);
+  await chooseWorkspace(evaluate, workspace);
+  await evaluate("document.querySelector('#objective').value='PACKAGE-CANARY-73'; document.querySelector('#objective').dispatchEvent(new Event('input',{bubbles:true})); document.querySelector('#run').click();");
   await check(() => evaluate("document.body.dataset.busy==='true' && document.querySelector('#current-turn').textContent.includes('PACKAGED_STREAM_START')"), "最终完成之前没有收到流式文字");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && !document.querySelector('#run').disabled"), "独立包未完成第一轮");
-  const state = await evaluate("({ status:document.querySelector('#status').dataset.status, answer:document.querySelector('#current-turn').textContent, gateway:document.querySelector('#gateway').value })");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && document.querySelector('#run').dataset.state==='send'"), "独立包未完成第一轮");
+  const state = await evaluate("({ status:document.querySelector('#status').dataset.status, answer:document.querySelector('#current-turn').textContent, gateway:window.bitAgent.runtimeConfig.gatewayUrl })");
   assert(state.answer.includes("PACKAGE-CANARY-73"));
   const screenshot = await captureScreenshot();
   writeFileSync(join(directory, "packaged-desktop.png"), Buffer.from(screenshot.data, "base64"));
@@ -324,7 +391,9 @@ try {
   await evaluate("document.querySelector('.workspace-group[data-active=true] .workspace-group-toggle').click()");
   assert(await evaluate("!document.body.innerText.includes('Local harness') && document.querySelector('#profile-button').textContent.includes('Bit Agent 1.0')"), "个人中心没有显示版本号 1.0");
   await evaluate("document.querySelector('#profile-button').click()");
-  await check(() => evaluate("!document.querySelector('#profile-menu').hidden && ['#model-settings','#execution-settings','#mcp-settings','#memory-settings','#diagnostics-settings','#settings-panel','#profile-theme'].every(s=>document.querySelector('#profile-menu').contains(document.querySelector(s)))"), "个人中心菜单没有包含全部设置");
+  await check(() => evaluate("!document.querySelector('#profile-menu').hidden && ['#model-settings','#execution-settings','#mcp-settings','#memory-settings','#diagnostics-settings'].every(s=>document.querySelector('#profile-menu').contains(document.querySelector(s)))"), "个人中心菜单没有包含全部设置");
+  assert(await evaluate("document.querySelector('#gateway')===null && document.querySelector('#health')===null && !document.querySelector('#profile-menu').textContent.includes('连接设置')"), "个人中心仍显示 Gateway 连接设置");
+  assert(await evaluate("[...document.querySelectorAll('.profile-menu-items button')].length===5"), "个人中心设置项数量不正确");
   await captureLayouts(command, evaluate, "profile-menu");
   await evaluate("document.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))");
   await check(() => evaluate("document.querySelector('#profile-menu').hidden"), "点击别处没有收起个人中心菜单");
@@ -359,13 +428,16 @@ try {
   await check(() => evaluate("!document.querySelector('#model-menu .choice-popover').hidden"), "模型菜单没有再次打开");
   await evaluate("[...document.querySelectorAll('#model-menu .choice-item')].find(e=>e.querySelector('strong')?.textContent==='高').click()");
   await check(() => evaluate("document.querySelector('#model-menu .choice-value').textContent==='local-fixture-mini' && document.querySelector('#model-menu .model-effort')?.textContent==='高'"), "模型菜单的选择没有生效");
+  // 旧版地址配置和历史地址不能把当前本地服务改为过期端口。
+  await evaluate("localStorage.setItem('bit-agent.gateway-url.v1','http://127.0.0.1:1');const h=JSON.parse(localStorage.getItem('bit-agent.task-history.v1')||'[]');localStorage.setItem('bit-agent.task-history.v1',JSON.stringify(h.map(e=>({...e,gatewayUrl:'http://127.0.0.1:1'}))))");
   await close();
   ({ command, evaluate } = await launch());
+  await check(() => evaluate("document.querySelector('#connection-dot').dataset.connected==='true' && window.bitAgent.runtimeConfig.gatewayUrl!=='http://127.0.0.1:1'"), "重启被旧 Gateway 配置覆盖");
   await check(() => evaluate("Array.from(document.querySelectorAll('.history-item')).some(button=>button.title==='PACKAGE-CANARY-73')"), "重启后没有恢复已存会话");
   await evaluate("Array.from(document.querySelectorAll('.history-item')).find(button=>button.title==='PACKAGE-CANARY-73').click()");
-  await check(() => evaluate("document.body.dataset.busy === 'false' && !document.querySelector('#run').disabled && document.querySelector('#current-turn').textContent.includes('PACKAGE-CANARY-73')"), "历史回答没有恢复");
-  await evaluate("document.querySelector('#objective').value='PACKAGE-FOLLOWUP';document.querySelector('#run').click()");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && !document.querySelector('#run').disabled && document.querySelector('#current-turn').textContent.includes('PACKAGE-FOLLOWUP')"), "重启后不能继续对话");
+  await check(() => evaluate("document.body.dataset.busy === 'false' && document.querySelector('#run').dataset.state==='send' && document.querySelector('#current-turn').textContent.includes('PACKAGE-CANARY-73')"), "历史回答没有恢复");
+  await evaluate("document.querySelector('#objective').value='PACKAGE-FOLLOWUP';document.querySelector('#objective').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#run').click()");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && document.querySelector('#run').dataset.state==='send' && document.querySelector('#current-turn').textContent.includes('PACKAGE-FOLLOWUP')"), "重启后不能继续对话");
   const followup = await evaluate("document.querySelector('#current-turn').textContent");
   assert(followup.includes("PACKAGE-CANARY-73"), `继续对话的回答没有带上前一轮：${followup}`);
   // 重启后仍记得模型菜单的选择，请求里带着所选模型和思考程度。
@@ -373,45 +445,45 @@ try {
   assert(chosen, "没有找到这一轮主 Agent 的模型请求");
   assert.equal(chosen.model, "local-fixture-mini", `请求没有使用所选模型：${chosen.model}`);
   assert.equal(chosen.reasoning?.effort, "high", `请求没有带上思考程度：${JSON.stringify(chosen.reasoning)}`);
-  await evaluate("document.querySelector('#objective').value='PAUSE-TEST';document.querySelector('#run').click()");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && document.querySelector('#run').dataset.state==='running' && !document.querySelector('#run').disabled"), "主按钮没有变成运行中图标");
-  await evaluate("document.querySelector('#run').click()");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='PAUSED'"), "暂停未在安全位置生效");
-  await captureLayouts(command, evaluate, "paused");
-  await evaluate("document.querySelector('#intent-input').value='CHANGED-INTENT';document.querySelector('#apply-intent').click()");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && !document.querySelector('#run').disabled && document.querySelector('#current-turn').textContent.includes('CHANGED-INTENT')"), "修改意图后没有重新执行");
-  // “暂停”和“停止”合成一个按钮：正在暂停时变成“立即停止”，点了直接结束这一轮。
-  await evaluate("document.querySelector('#objective').value='STOP-NOW';document.querySelector('#run').click()");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && document.querySelector('#run').dataset.state==='running'"), "STOP-NOW 没有开始运行");
-  assert(await evaluate("document.querySelector('#cancel').hidden"), "仍然单独显示了“停止”按钮");
-  await evaluate("document.querySelector('#run').click()");
-  await check(() => evaluate("document.querySelector('#run').dataset.state==='pausing' || document.querySelector('#status').dataset.status==='PAUSED'"), "暂停请求没有生效");
-  const stopMode = await evaluate("document.querySelector('#run').dataset.state==='pausing'");
-  await evaluate(stopMode ? "document.querySelector('#run').click()" : "document.querySelector('#end-task').click()");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='CANCELLED' && document.body.dataset.busy==='false'"), "“立即停止”没有结束这一轮");
-  // 像 Claude Code 一样：暂停后直接在主输入框写补充要求，按 Enter 继续。
+  // 点击一次即显示已停止；后台取消不能让界面回退为等待/暂停。
+  await evaluate("document.querySelector('#objective').value='STOP-NOW';document.querySelector('#objective').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#run').click()");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && document.querySelector('#run').dataset.state==='running'"), "停止测试没有开始运行");
+  assert(await evaluate("document.querySelector('#cancel').hidden"), "仍然单独显示停止按钮");
+  const stopped = await evaluate("document.querySelector('#run').click();({status:document.querySelector('#status').textContent,line:document.querySelector('#status-line').textContent,interaction:document.querySelector('#task-interaction').hidden,spinner:document.querySelector('#run .run-spinner')!==null})");
+  assert.equal(stopped.status, "已停止"); assert(stopped.line.includes("已停止")); assert(stopped.interaction); assert.equal(stopped.spinner,false);
+  await captureLayouts(command, evaluate, "stopped");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='CANCELLED' && document.body.dataset.busy==='false'"), "停止后的后台取消未完成");
+  assert(await evaluate("![...document.querySelectorAll('#stream .stream-note')].some(e=>/正在暂停|等待当前|任务已暂停/.test(e.textContent)) && !document.querySelector('#status-line').textContent.includes('正在')"), "停止后还有内部过程提示");
+  const border = await evaluate("({top:document.querySelector('.shell').getBoundingClientRect().top,bottom:document.querySelector('.window-titlebar').getBoundingClientRect().bottom,width:document.querySelector('.shell').getBoundingClientRect().width,border:getComputedStyle(document.querySelector('.shell')).borderTopWidth,viewport:innerWidth})");
+  assert.equal(border.top,border.bottom); assert(Math.abs(border.width-border.viewport)<1,"分隔线没有覆盖整个窗口宽度"); assert(Number.parseFloat(border.border)>0 && Number.parseFloat(border.border)<=1,"分隔线没有实际渲染");
   // 运行中直接在输入框补充要求：先排队，Agent 下一步读取，最终回答里能看到。
-  await evaluate("document.querySelector('#objective').value='RUN-NOTE-TEST';document.querySelector('#run').click()");
+  await evaluate("document.querySelector('#objective').value='RUN-NOTE-TEST';document.querySelector('#objective').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#run').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && !document.querySelector('#objective').disabled"), "运行中输入框不能补充要求");
   await evaluate("const r=document.querySelector('#objective');r.value='RUNNING-NOTE';r.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && document.querySelector('#stream .stream-user')?.textContent.includes('RUNNING-NOTE') && [...document.querySelectorAll('#stream .stream-text')].some(e=>e.textContent.includes('RUNNING-NOTE'))"), "运行中补充的要求没有被 Agent 读到");
-  assert(await evaluate("[...document.querySelectorAll('.saved-turn .stream-note')].some(e=>e.textContent.includes('暂停'))"), "继续对话后上一轮的执行过程不见了");
+  assert(await evaluate("[...document.querySelectorAll('.saved-turn .stream-note')].some(e=>e.textContent.includes('已停止'))"), "继续对话后上一轮的执行过程不见了");
   // 运行中写字：工具栏出现“引导 / 排队”；按 Tab 排队，这一轮结束后自动作为下一条消息发送。
-  await evaluate("document.querySelector('#objective').value='QUEUE-TEST';document.querySelector('#run').click()");
+  await evaluate("document.querySelector('#objective').value='QUEUE-TEST';document.querySelector('#objective').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#run').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && document.querySelector('#run').dataset.state==='running'"), "QUEUE-TEST 没有开始运行");
-  await evaluate("const q=document.querySelector('#objective');q.value='QUEUED-NOTE';q.dispatchEvent(new Event('input'))");
+  const queueSnapshot = await evaluate("const q=document.querySelector('#objective');q.value='QUEUED-NOTE';q.dispatchEvent(new Event('input'));({status:document.querySelector('#status').dataset.status,busy:document.body.dataset.busy,mode:document.body.dataset.steering,choiceHidden:document.querySelector('#steer-choice').hidden,state:document.querySelector('#run').dataset.state,value:q.value,stream:document.querySelector('#stream').textContent.slice(-300)})");
+  assert.equal(queueSnapshot.state,"send"); assert.equal(queueSnapshot.choiceHidden,false);
   await check(() => evaluate("!document.querySelector('#steer-choice').hidden && document.querySelector('#run').dataset.state==='send'"), "运行中写字后没有出现“引导 / 排队”");
   writeFileSync(join(directory, "running-steer.png"), Buffer.from((await captureScreenshot()).data, "base64"));
   await evaluate("document.querySelector('#objective').dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true}))");
   assert(await evaluate("document.querySelector('#objective').value==='' && document.querySelector('#queued-messages .queued-text')?.textContent==='QUEUED-NOTE'"), "按 Tab 没有把消息排进队列");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.querySelector('#objective-display').textContent==='QUEUED-NOTE' && document.querySelector('#queued-messages').hidden"), "这一轮结束后排队的消息没有自动发送");
-  await evaluate("document.querySelector('#objective').value='PAUSE-AGAIN';document.querySelector('#run').click()");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING'"), "第二次暂停测试没有开始运行");
-  await evaluate("document.querySelector('#run').click()");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='PAUSED' && !document.querySelector('#objective').disabled && !document.querySelector('#run').disabled"), "暂停后输入框不能写补充要求");
-  await evaluate("const o=document.querySelector('#objective');o.value='COMPOSER-NOTE';o.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))");
-  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && document.querySelector('#stream .stream-user')?.textContent.includes('COMPOSER-NOTE') && document.querySelector('#objective').value===''"), "输入框补充要求没有提交并继续");
-  await evaluate("document.querySelector('#objective').value='PACKAGE-EDIT';document.querySelector('#run').click()");
+  await check(async () => responseGates.has("QUEUE-TEST"), "本地模型未进入排队测试");
+  releaseResponse("QUEUE-TEST");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && document.querySelector('#run').dataset.state==='send' && document.querySelector('#objective-display').textContent==='QUEUED-NOTE' && document.querySelector('#queued-messages').hidden"), "这一轮结束后排队的消息没有自动发送");
+  // 主动停止后，已有排队消息不会自动发送。
+  await evaluate("document.querySelector('#objective').value='STOP-QUEUE';document.querySelector('#objective').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#run').click()");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING'"), "排队停止测试没有开始");
+  await evaluate("const o=document.querySelector('#objective');o.value='DO-NOT-AUTO-SEND';o.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true}));document.querySelector('#run').click()");
+  releaseResponse("STOP-QUEUE");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='CANCELLED' && document.body.dataset.busy==='false'"), "排队停止没有完成");
+  assert.equal(await evaluate("document.querySelector('#objective-display').textContent"),"STOP-QUEUE");
+  assert(await evaluate("document.querySelector('#queued-messages .queued-text')?.textContent==='DO-NOT-AUTO-SEND'"),"主动停止后排队消息意外发出");
+  await evaluate("document.querySelector('#queued-messages .queued-remove').click()");
+  await evaluate("document.querySelector('#objective').value='PACKAGE-EDIT';document.querySelector('#objective').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#run').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='WAITING_FOR_INPUT' && !document.querySelector('.operation-details').hidden"), "文件修改没有要求用户授权");
   const { existsSync } = await import("node:fs");
   assert(!existsSync(join(workspace, "package-demo.py")));
@@ -452,7 +524,7 @@ try {
   // 用工作区标题右侧的 + 在同一工作区新开对话。
   await evaluate("document.querySelector('.workspace-group[data-active=true] .workspace-group-action[data-action=new]').click()");
   await check(() => evaluate("document.querySelector('#task-id').textContent==='新任务' && !document.querySelector('#empty-state').hidden"), "工作区的 + 没有新开对话");
-  await evaluate("document.querySelector('#objective').value='PACKAGE-MCP';document.querySelector('#run').click()");
+  await evaluate("document.querySelector('#objective').value='PACKAGE-MCP';document.querySelector('#objective').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#run').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='WAITING_FOR_INPUT' && document.querySelector('.question-title').textContent.includes('调用外部工具 self · list_files')"), "调用外部工具前没有要求确认");
   await evaluate("document.querySelector('input[name=agent-question-option][value=approve]').click();document.querySelector('#submit-question-answer').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false'"), "批准后外部工具任务没有完成");
@@ -474,7 +546,7 @@ try {
   await evaluate("document.querySelector('.product-dialog-header button').click()");
   // 对话搜索（后续轮次修改后的要求也能搜到）、重命名和删除。
   const search = (text) => evaluate(`{const s=document.querySelector('#session-search');s.value=${JSON.stringify(text)};s.dispatchEvent(new Event('input'))}`);
-  await search("CHANGED-INTENT");
+  await search("PACKAGE-FOLLOWUP");
   await check(() => evaluate("document.querySelectorAll('.history-item').length===1 && document.querySelector('.history-item').title==='PACKAGE-CANARY-73'"), "按后续轮次的要求搜索不到对话");
   await search("NO-SUCH-CONVERSATION");
   await check(() => evaluate("document.querySelectorAll('.history-item').length===0 && !document.querySelector('#history-empty').hidden"), "搜索不到时没有显示空结果");
@@ -508,14 +580,22 @@ try {
   await check(() => evaluate("document.querySelectorAll('.editor-tab').length===2 && document.querySelector('.editor-tab[aria-selected=true]').title==='README.md' && document.querySelector('#repository-breadcrumbs').textContent.includes('README.md')"), "第二个文件没有在新标签打开");
   await evaluate("document.querySelector('.editor-tab[aria-selected=true] .editor-tab-close').click()");
   await check(() => evaluate("document.querySelectorAll('.editor-tab').length===1 && document.querySelector('.editor-tab[aria-selected=true]').title==='src/app.py'"), "关闭标签后没有切回上一个文件");
+  await check(() => evaluate("[...document.querySelectorAll('.repository-entry .file-icon img,.editor-tab .file-icon img,.editor-crumb .file-icon img')].every(i=>i.complete&&i.naturalWidth>0) && document.querySelectorAll('.file-icon img').length>3"), "文件图标没有实际载入");
+  const openedIcon = await evaluate("document.querySelector('.repository-entry[data-path=src] .file-icon').dataset.icon");
+  await evaluate("document.querySelector('.repository-entry[data-path=src]').click()");
+  assert.notEqual(await evaluate("document.querySelector('.repository-entry[data-path=src] .file-icon').dataset.icon"),openedIcon,"目录开闭没有切换图标");
+  await evaluate("document.querySelector('.repository-entry[data-path=src]').click()");
   await captureLayouts(command, evaluate, "repository");
+  const workspaceBindings = await verifyWorkspaceBinding(evaluate);
+  await captureLayouts(command, evaluate, "workspace-chooser");
   await close();
   writeFileSync(join(directory, "result.json"), JSON.stringify({ passed: true, executable,
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,
-    unauthorizedGatewayRejected: true, restartAndContinue: true, pauseAndSteer: true, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, gitCommit: true, sessionSearchRenameDelete: true, externalMcpTools: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
+    unauthorizedGatewayRejected: true, automaticLocalGateway: true, connectionStatusDotOnly: true, explicitNewChatWorkspace: true, workspaceBindings, noGatewayConnectionSettings: true, staleGatewayAddressIgnored: true, restartAndContinue: true, stopAndSteer: true, immediateStop: true, titlebarBorder: true, offlineRepositoryIcons: true, startupComposer: true, noDuplicateProfileTheme: true, windowsExecutableIcon: { orangePixels:windowsIcon.orange, whitePixels:windowsIcon.white, size:windowsIcon.size }, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, gitCommit: true, sessionSearchRenameDelete: true, externalMcpTools: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
   }, null, 2));
   console.log(`PACKAGED_ACCEPTANCE_PASSED ${directory}`);
 } finally {
+  for (const release of responseGates.values()) release();
   if (child) { try { await close(); } catch { child?.kill(); } }
   model.closeAllConnections(); await new Promise((done) => model.close(done));
 }

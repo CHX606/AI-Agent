@@ -1,34 +1,14 @@
 import json
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 from bit_agent.agent.result import AgentRunResult, AgentRunStatus
 from bit_agent.evals import EvalCase, EvalRunner, path_matches, snapshot_workspace
-from bit_agent.sandbox import DEFAULT_IMAGE
+from bit_agent.sandbox import sandbox_status
 from bit_agent.tools.context import ToolContext
 from bit_agent.tools.models import ToolError, ToolMetadata, ToolResult, ToolStatus
 
 FIXTURE = Path(__file__).resolve().parents[1] / "evals" / "fixtures" / "bug_fix_calculator"
-
-
-def docker_image_ready() -> bool:
-    if shutil.which("docker") is None:
-        return False
-    try:
-        completed = subprocess.run(
-            ["docker", "image", "inspect", DEFAULT_IMAGE],
-            check=False,
-            capture_output=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return completed.returncode == 0
-
-
-DOCKER_IMAGE_READY = docker_image_ready()
 
 
 def bug_fix_case() -> EvalCase:
@@ -207,9 +187,14 @@ async def test_eval_runner_does_not_trust_agent_test_claim(tmp_path: Path) -> No
     assert any(violation.code == "INDEPENDENT_TESTS_FAILED" for violation in result.violations)
 
 
-@pytest.mark.skipif(not DOCKER_IMAGE_READY, reason="Docker 或 Bit Agent 沙箱镜像不可用")
 @pytest.mark.asyncio
-async def test_eval_runner_performs_real_independent_docker_verification(tmp_path: Path) -> None:
+async def test_eval_runner_performs_real_independent_os_sandbox_verification(
+    tmp_path: Path,
+) -> None:
+    availability = await sandbox_status()
+    if not availability["available"]:
+        pytest.skip(availability["message"])
+
     async def fake_agent(
         prompt: str,
         *,

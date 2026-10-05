@@ -27,7 +27,7 @@
 | 当前任务记忆 | 记录目标、读过的文件、改动和验证状态 | `memory/working.py` |
 | 长期记忆和向量检索 | 保存并召回通过审核的经验 | `memory`，需要配置和接入 |
 | 上下文压缩 | 避免历史内容不断膨胀 | `context/manager.py` |
-| Docker 沙箱 | 在隔离环境中执行测试和检查 | `sandbox`、`infra/sandbox` |
+| Windows OS 沙箱 | 用独立的沙箱账户、禁网执行测试和检查 | `sandbox`、`scripts/sandbox-runner` |
 | 独立评测与执行事件 | 保存证据，检查 Agent 是否真把题做对 | `evals`、`observability` |
 | 桌面与命令行入口 | 让用户不必直接写 Python 调用代码 | `apps/desktop`、`cli.py` |
 | 前后对比的验证 | 只追究本轮新问题，没法验证时如实说明 | `runtime/infrastructure/verification.py` |

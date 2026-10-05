@@ -9,23 +9,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 
-from bit_agent.sandbox.docker import DockerSandbox
-from bit_agent.sandbox.node_environment import node_manifest
+from bit_agent.sandbox import OSSandbox
 from bit_agent.security.paths import resolve_workspace_path
-from bit_agent.tools.run_tests import _is_allowed_test_target
 
-from .verification import PYTHON_MARKERS
-
-
-def _looks_like_python(directory: Path) -> bool:
-    """和基础检查同一套规则：有 Python 项目配置、requirements*.txt，或者就是一个放着 .py 的文件夹
-    （例如只有 todo.py 和 tests/）。以前这里只认 pyproject.toml / pytest.ini，基础检查能跑、
-    验收却拒绝运行，验收结论永远是“没能验证”。"""
-    if any((directory / marker).is_file() for marker in PYTHON_MARKERS):
-        return True
-    if any(item.is_file() for item in directory.glob("requirements*.txt")):
-        return True
-    return any(item.is_file() for pattern in ("*.py", "*/*.py") for item in directory.glob(pattern))
+from .acceptance_commands import acceptance_command
+from .verification_support.baseline import copy_workspace
 
 
 async def _finish_io(function, *args):
@@ -61,9 +49,7 @@ class AcceptanceWorkspace:
         self._temporary: TemporaryDirectory | None = None
 
     def _stage(self, destination: Path) -> None:
-        DockerSandbox(task_id="acceptance", tool_call_id=self.identifier)._stage_workspace(
-            self.source, destination, excluded_roots=self.excluded_roots
-        )
+        copy_workspace(self.source, destination, excluded_roots=self.excluded_roots)
 
     async def __aenter__(self):
         self._temporary = TemporaryDirectory(prefix="bit-agent-acceptance-")
@@ -119,29 +105,8 @@ class AcceptanceWorkspace:
 
     async def run_test(self, project: str, target: str, language: str, call_id: str) -> dict:
         directory = self._project(project)
-        test_path = resolve_workspace_path(directory, target, allow_root=True)
-        if not test_path.exists():
-            raise ValueError("测试目标不存在")
-        if target and not _is_allowed_test_target(test_path, directory):
-            # The existing predicate is Python-specific for files.
-            if not test_path.is_file() or not re.search(r"\.test\.(?:[cm]?js|tsx?)$", target):
-                raise ValueError("只允许运行测试文件或测试目录")
-        relative = test_path.relative_to(directory).as_posix()
-        if language == "python" and _looks_like_python(directory):
-            command = ["python", "-m", "pytest", "-q"]
-            if target:
-                command += ["--", relative]
-        elif language == "node" and (directory / "package.json").is_file():
-            manifest, manager, _ = node_manifest(directory)
-            if not isinstance(manifest.get("scripts"), dict) or not manifest["scripts"].get("test"):
-                raise ValueError("项目没有 test 脚本")
-            command = [manager, "run", "test"]
-            if target:
-                command += ["--", "./" + relative]
-        else:
-            raise ValueError("目前只支持配置了 pytest 或 Node test 脚本的项目")
-        sandbox = DockerSandbox(task_id="acceptance", tool_call_id=call_id)
-        sandbox.environment_kind = language
+        command = acceptance_command(directory, self.source / project, target, language)
+        sandbox = OSSandbox(task_id="acceptance", tool_call_id=call_id)
         result = await sandbox.run(directory, command, 300)
         return {
             "project": project,
@@ -155,7 +120,7 @@ class AcceptanceWorkspace:
             "timed_out": result.timed_out,
             "truncated": result.truncated,
             "passed": not result.start_error and not result.timed_out and result.exit_code == 0,
-            "dependency_note": "沿用项目隔离环境；Node 安装公开依赖，不重放锁文件。",
+            "dependency_note": "使用本机项目工具链，在禁网 OS 沙箱内执行；不自动安装依赖。",
         }
 
     async def unchanged(self) -> bool:

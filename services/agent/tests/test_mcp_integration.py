@@ -1,8 +1,6 @@
 """Bit Agent MCP Server、Client Provider 与 Agent 运行时集成测试。"""
 
 import json
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,29 +9,11 @@ import pytest
 from bit_agent.agent.result import AgentRunStatus
 from bit_agent.agent.runtime import run_agent
 from bit_agent.mcp_server import create_mcp_server
-from bit_agent.sandbox import DEFAULT_IMAGE
+from bit_agent.sandbox import sandbox_status
 from bit_agent.tool_provider import MCPToolProvider
 from bit_agent.tools.models import ToolResult, ToolStatus
 from mcp import Client, StdioServerParameters
 from mcp.server import MCPServer
-
-
-def docker_image_ready() -> bool:
-    if shutil.which("docker") is None:
-        return False
-    try:
-        completed = subprocess.run(
-            ["docker", "image", "inspect", DEFAULT_IMAGE],
-            check=False,
-            capture_output=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return completed.returncode == 0
-
-
-DOCKER_IMAGE_READY = docker_image_ready()
 
 
 def function_call(name: str, call_id: str, arguments: dict[str, object]) -> SimpleNamespace:
@@ -227,9 +207,12 @@ async def test_stdio_mcp_transport_is_real_protocol_boundary(tmp_path: Path) -> 
     assert result.output == "     1 | hello from stdio"
 
 
-@pytest.mark.skipif(not DOCKER_IMAGE_READY, reason="Docker 或 Bit Agent 沙箱镜像不可用")
 @pytest.mark.asyncio
-async def test_mcp_can_patch_and_verify_in_docker(tmp_path: Path) -> None:
+async def test_mcp_can_patch_and_verify_in_os_sandbox(tmp_path: Path) -> None:
+    availability = await sandbox_status()
+    if not availability["available"]:
+        pytest.skip(availability["message"])
+
     calculator = tmp_path / "calculator.py"
     calculator.write_text(
         "def add(left: int, right: int) -> int:\n    return left - right\n",

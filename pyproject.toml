@@ -21,6 +21,14 @@ dependencies = [
 bit-agent = "bit_agent.cli:main"
 
 [project.optional-dependencies]
+verification = [
+    "pytest>=8",
+    "ruff>=0.9",
+    "mypy>=1.15,<2",
+    "build>=1.2,<2",
+    "setuptools>=75",
+    "wheel>=0.45",
+]
 memory = [
     "psycopg[binary]>=3.2,<4",
 ]
@@ -39,10 +47,6 @@ package-dir = {"" = "services/agent/src"}
 
 [tool.setuptools.packages.find]
 where = ["services/agent/src"]
-
-# 默认沙箱镜像的构建上下文随包分发，缺少镜像时自动构建。
-[tool.setuptools.package-data]
-bit_agent = ["sandbox/images/python/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["services/agent/tests"]

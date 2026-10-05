@@ -27,13 +27,13 @@
 | 模型怎么读文件、改文件和运行检查 | [TOOLS.md](TOOLS.md) |
 | 改完代码怎样验证、“无法验证”是什么意思、怎样给其他语言配置检查 | [VERIFICATION.md](VERIFICATION.md) |
 | 怎样用 AGENTS.md 告诉 Agent 项目约定、怎样把改动提交到 Git | [PROJECT_CONFIG.md](PROJECT_CONFIG.md) |
-| 项目依赖怎样自动下载、环境怎样缓存 | [ENVIRONMENT.md](ENVIRONMENT.md) |
+| 测试和检查在什么沙箱里运行、能碰到哪些文件 | [Windows OS 沙箱](ENVIRONMENT.md) |
 | 多个 Agent 怎样分工 | [MULTI_AGENT.md](MULTI_AGENT.md) |
 | 当前任务记忆和长期记忆有什么区别 | [MEMORY.md](MEMORY.md) |
 | 历史太长时怎样处理 | [CONTEXT.md](CONTEXT.md) |
 | 怎样把工具提供给其他客户端 | [MCP.md](MCP.md) |
 | 出错以后在哪里找过程和结果 | [OBSERVABILITY.md](OBSERVABILITY.md) |
-| Docker、数据库配置做什么 | [infra 说明](../infra/README.md) |
+| 记忆数据库测试环境做什么 | [infra 说明](../infra/README.md) |
 | 评测原题和完成后的副本有什么区别 | [evals 说明](../evals/README.md)、[.test-runs 说明](../.test-runs/README.md) |
 
 说明文档只写"现在是什么样"；某次验收跑了什么、结果如何，统一记录在 `docs/validation/` 的报告里，报告保留当时的事实，不随后续修改更新。临时工作区、日志、测试用户配置和 EXE 发布包只保留在本机，不随源码提交。

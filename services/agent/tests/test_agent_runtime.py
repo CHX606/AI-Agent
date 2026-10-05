@@ -1,8 +1,7 @@
-"""动态 Agent 运行时的工具循环与 Docker 验证测试。"""
+"""动态 Agent 运行时的工具循环与 OS 沙箱验证测试。"""
 
 import json
 import shutil
-import subprocess
 from collections.abc import Iterable
 from pathlib import Path
 from types import SimpleNamespace
@@ -19,26 +18,8 @@ from bit_agent.context import (
     FileContextArtifactStore,
 )
 from bit_agent.memory import InMemoryWorkingMemoryStore
-from bit_agent.sandbox import DEFAULT_IMAGE
+from bit_agent.sandbox import sandbox_status
 from bit_agent.tools.models import ToolError, ToolMetadata, ToolResult, ToolStatus
-
-
-def docker_image_ready() -> bool:
-    if shutil.which("docker") is None:
-        return False
-    try:
-        completed = subprocess.run(
-            ["docker", "image", "inspect", DEFAULT_IMAGE],
-            check=False,
-            capture_output=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return completed.returncode == 0
-
-
-DOCKER_IMAGE_READY = docker_image_ready()
 
 
 class FakeResponses:
@@ -688,11 +669,14 @@ async def test_stops_when_model_repeatedly_avoids_required_tests(
     assert result.tests_passed is False
 
 
-@pytest.mark.skipif(not DOCKER_IMAGE_READY, reason="Docker 或 Bit Agent 沙箱镜像不可用")
 @pytest.mark.asyncio
-async def test_real_tools_require_successful_docker_test_before_finishing(
+async def test_real_tools_require_successful_os_sandbox_test_before_finishing(
     tmp_path: Path,
 ) -> None:
+    availability = await sandbox_status()
+    if not availability["available"]:
+        pytest.skip(availability["message"])
+
     calculator = tmp_path / "calculator.py"
     calculator.write_text(
         "def add(left: int, right: int) -> int:\n    return left - right\n",
@@ -737,7 +721,7 @@ async def test_real_tools_require_successful_docker_test_before_finishing(
                     json.dumps({"check": "lint", "paths": ["calculator.py"]}),
                 )
             ),
-            response(final_message("Docker 验证通过"), text="Docker 验证通过"),
+            response(final_message("OS 沙箱验证通过"), text="OS 沙箱验证通过"),
         ]
     )
 
@@ -749,7 +733,7 @@ async def test_real_tools_require_successful_docker_test_before_finishing(
     )
 
     assert result.status is AgentRunStatus.COMPLETED
-    assert result.final_answer == "Docker 验证通过"
+    assert result.final_answer == "OS 沙箱验证通过"
     assert result.tests_passed is True
     assert result.quality_checks_passed is True
     assert calculator.read_text(encoding="utf-8").endswith("return left + right\n")

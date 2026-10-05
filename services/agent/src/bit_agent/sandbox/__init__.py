@@ -1,6 +1,6 @@
-"""Bit Agent 命令执行沙箱。"""
+"""Public native OS sandbox contract."""
 
-from bit_agent.sandbox.base import Sandbox, SandboxResult
-from bit_agent.sandbox.docker import DEFAULT_IMAGE, DockerSandbox, docker_status
+from .base import Sandbox, SandboxResult
+from .native import OSSandbox, sandbox_status
 
-__all__ = ["DEFAULT_IMAGE", "DockerSandbox", "Sandbox", "SandboxResult", "docker_status"]
+__all__ = ["OSSandbox", "Sandbox", "SandboxResult", "sandbox_status"]

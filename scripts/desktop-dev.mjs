@@ -3,8 +3,11 @@ import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { developmentSandbox } from "./desktop-package/sandbox.mjs";
+
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const env = { ...process.env, BIT_AGENT_PROJECT_ROOT: root };
+const sandbox = await developmentSandbox(join(root, "tmp", "development-resources"));
+const env = { ...process.env, ...sandbox, BIT_AGENT_PROJECT_ROOT: root };
 delete env.ELECTRON_RUN_AS_NODE;
 const gateway = spawn(process.execPath, [
   join(root, "apps/gateway/node_modules/tsx/dist/cli.mjs"),

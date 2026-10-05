@@ -3,13 +3,14 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { userInfo } from "node:os";
 import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { publicError, registerSecret } from "@bit-agent/diagnostics";
 import { chatModels, parseModelList } from "../../../shared/model-list.js";
 import { UserFacingError } from "../../application/errors.js";
 import { desktopDiagnostics } from "../observability/diagnostics.js";
 import { decryptedMcpServers, mcpServerList, resolveMcpServers, writeMcpServers } from "./mcp-settings.js";
+import { createGatewayEnvironment } from "./gateway-environment.js";
 
 let child: ChildProcessWithoutNullStreams | null = null;
 let address = "";
@@ -195,15 +196,9 @@ export async function startManagedRuntime(): Promise<void> {
   try { mcp = decryptedMcpServers(); } catch (error) {
     diagnostics.failure("mcp_settings_decryption_failed", error);
   }
-  const env = { ...process.env, ELECTRON_RUN_AS_NODE: "1",
-    ...(mcp.length ? { BIT_AGENT_MCP_SERVERS: JSON.stringify(mcp) } : {}),
-    BIT_AGENT_GATEWAY_TOKEN: token, BIT_AGENT_PROJECT_ROOT: join(resources, "backend"),
-    BIT_AGENT_PYTHON: join(resources, "python", "python.exe"), BIT_AGENT_DATA_DIR: data,
-    PATH: [join(resources, "tools"), process.env.PATH ?? ""].join(delimiter),
-    ...(settings.apiKey ? { API_KEY: String(settings.apiKey), BASE_URL: String(settings.baseUrl),
-      MODEL_NAME: String(settings.model), MODEL_API: modelApi(settings.api),
-      AUX_MODEL_NAME: String(settings.auxModel ?? "") } : {}),
-  };
+  const env = await createGatewayEnvironment({
+    resources, data, userData: app.getPath("userData"), token, settings, mcp,
+  });
   child = spawn(process.execPath, [join(resources, "gateway", "index.mjs")], {
     env, cwd: data, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
   });
@@ -211,6 +206,11 @@ export async function startManagedRuntime(): Promise<void> {
   current.stderr.on("data", (chunk: Buffer) => diagnostics.record("warn", "gateway_stderr", {
     bytes: chunk.length, error_type: chunk.toString().match(/\b([A-Za-z]+(?:Error|Exception)):/u)?.[1],
   }));
+  await waitForGateway(current);
+}
+
+async function waitForGateway(current: ChildProcessWithoutNullStreams): Promise<void> {
+  const diagnostics = desktopDiagnostics();
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("本地运行服务启动超时")), 30_000);
     const lines = createInterface({ input: current.stdout });

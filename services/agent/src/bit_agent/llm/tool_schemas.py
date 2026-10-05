@@ -105,12 +105,9 @@ TOOL_SCHEMAS = [
         "type": "function",
         "name": "run_tests",
         "description": (
-            "在受控沙箱中运行指定的 pytest 测试文件或测试目录，返回退出码、标准输出和错误输出"
-            "。Harness 自动安装根目录 pyproject.toml 的 dependencies、dev/test extras，"
-            "以及 requirements.txt、requirements-dev.txt 中的命名 Python 依赖。"
-            "只支持 wheel，不支持 URL、本地路径或源码安装。OCR 系统包可在 "
-            "[tool.bit-agent.environment] 的 system-packages 列表声明 "
-            "tesseract-ocr、tesseract-ocr-chi-sim、tesseract-ocr-eng"
+            "在受控 OS 沙箱中运行指定的 pytest 测试文件或测试目录，返回退出码、标准输出和错误输出。"
+            "使用项目 .venv 的 Python（没有时用 Agent 自带的 Python）；沙箱禁网，"
+            "不会自动安装依赖，缺少依赖时如实报告"
         ),
         "parameters": {
             "type": "object",
@@ -132,7 +129,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "name": "run_checks",
         "description": (
-            "在受控 Docker 沙箱中对指定路径运行白名单检查。"
+            "在受控 OS 沙箱中对指定路径运行白名单检查。"
             "修改代码后必须对本轮所有修改文件运行 lint；项目提供类型配置或构建配置时，"
             "还应按需运行 typecheck 或 build。不能执行任意 Shell 命令"
         ),

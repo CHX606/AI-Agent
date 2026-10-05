@@ -25,7 +25,7 @@ Bit Agent 是一个帮你处理代码项目的 AI 助手。你告诉它“修复
 | Desktop | 已有实现 | 用窗口选项目、发任务、看结果，也能浏览目录和预览文本文件。 |
 | CLI | 已有实现 | 不开窗口，直接在终端提交和查询任务。 |
 | Gateway + 本地运行库 | 已有实现，已通过本地验收 | Gateway 通过进程管道交给 Python，SQLite 保存任务和会话。 |
-| 代码工具和 Docker 沙箱 | 已有实现 | 能列目录、读文件、搜索、打补丁、运行测试和白名单检查。 |
+| 代码工具和 OS 沙箱 | 已有实现 | 能列目录、读文件、搜索、打补丁、运行测试和白名单检查。 |
 | Multi-Agent | 三档模式已有实现，已通过本地验收 | 关闭、开启、智能；主 Agent 按模式调用只读调查工具，自己统一修改。 |
 | Working Memory / 会话 | 本地持久化已有实现，已通过本地验收 | 保存历史、摘要和任务进度，没有 24 小时自动过期。 |
 | 长期记忆 | 已接入桌面端，默认开启 | 独立验收通过的任务会提炼经验，存在本机 SQLite；新任务开始时按关键词召回本项目的相关经验，不需要数据库或向量服务；侧栏“长期记忆”可查看和删除。 |
@@ -38,7 +38,7 @@ Bit Agent 是一个帮你处理代码项目的 AI 助手。你告诉它“修复
 | 评测和事件记录 | 已有实现 | 保存做题过程、修改内容和验证结果，方便回头查问题。 |
 | 独立 Web 管理后台、生产级认证与配额 | 尚未提供完整方案 | 当前主要面向本地开发和验证。 |
 
-“已通过本地验收”指用本地假模型实际启动 Gateway、Python 执行进程和桌面程序走通了对应流程；真实在线模型和 Docker 沙箱不在其范围内。每次验收做了什么、没做什么，见 [docs/validation](docs/validation/)。
+“已通过本地验收”指用本地假模型实际启动 Gateway、Python 执行进程和桌面程序走通了对应流程；真实在线模型不在其范围内；OS 沙箱的独立验收另行记录。每次验收做了什么、没做什么，见 [docs/validation](docs/validation/)。
 
 ## 一次任务怎么流转
 
@@ -73,7 +73,7 @@ AI Agent/
 |-- packages/diagnostics/ Gateway 与桌面共用的诊断日志
 |-- docs/             项目文档
 |-- evals/fixtures/    给 Agent 使用的示例题目
-|-- infra/            Docker 和配套服务配置
+|-- infra/            记忆集成测试的配套服务配置
 |-- workspaces/       实际操作的演示项目
 |-- .test-runs/       某次运行的工作区副本和记录
 |-- artifacts/        事件、上下文和评测产物
@@ -85,7 +85,7 @@ AI Agent/
 
 ## 本地启动
 
-以下命令在项目根目录的 PowerShell 中执行。需要 Python 3.12+、Node.js 24+、pnpm、Git、ripgrep 和可用的 Docker Engine。项目 `package.json` 指定的包管理器是 `pnpm@11.19.0`，与当前使用版本一致。Node.js 和 Python 的具体版本分别写在根目录 `.node-version` 和 `.python-version`，CI 读取同样的文件。
+以下命令在项目根目录的 PowerShell 中执行。需要 Python 3.12+、Node.js 24+、pnpm、Git、ripgrep；Windows 沙箱首次执行需要系统授权，说明见 [沙箱说明](docs/ENVIRONMENT.md)。项目 `package.json` 指定的包管理器是 `pnpm@11.19.0`，与当前使用版本一致。Node.js 和 Python 的具体版本分别写在根目录 `.node-version` 和 `.python-version`，CI 读取同样的文件。
 
 ### 0. 准备 Node、Python 和 uv（推荐 mise）
 

@@ -39,9 +39,8 @@ AI Agent/
 |-- docs/                     项目文档
 |-- evals/fixtures/           独立示例题目
 |-- infra/
-|   |-- docker/               Docker Desktop 辅助启动脚本
-|   |-- memory/               记忆后端测试服务配置
-|   `-- sandbox/python-web/  可选的 Web 依赖沙箱镜像配方
+|   |-- docker/               Docker Desktop 辅助启动脚本（记忆集成测试用）
+|   `-- memory/               记忆后端测试服务配置
 |-- workspaces/               实际演示工作区
 |-- .test-runs/               运行副本和相应记录
 |-- artifacts/
@@ -106,7 +105,7 @@ AI Agent/
 | `context` | 查找相关代码，组织输入材料，压缩过长历史。 |
 | `memory` | 保存任务进度、审核长期经验、对接存储和向量检索。 |
 | `mcp_server` | 把同一套工具用 MCP 协议开放出来。 |
-| `sandbox` | 在 Docker 中执行受限测试和检查。 |
+| `sandbox` | 通过官方 Windows OS 沙箱执行测试和检查（执行器在 `scripts/sandbox-runner`）。 |
 | `security` | 检查文件路径是否越过工作区边界。 |
 | `observability` | 记录执行过程中发生的事件。 |
 | `evals` | 独立评测器，比较文件变动并执行验收。 |
@@ -184,9 +183,7 @@ Gateway 与 Python 之间的任务字段和状态没有单独的共享包，Type
 
 ## infra：帮项目准备运行环境
 
-`memory` 提供记忆后端测试环境；`sandbox/python-web` 是在默认沙箱上加装 Web 依赖的可选镜像（默认 Python 沙箱的配方在 `services/agent/src/bit_agent/sandbox/images/python/`，缺少时自动构建）；`docker` 放 Windows 辅助启动脚本。
-
-Dockerfile 像“环境配方”；镜像是按配方准备好的环境；容器是实际启动起来的一次运行。Dockerfile 文件本身不是一个正在运行的服务。
+`memory` 提供记忆后端测试环境（PostgreSQL 容器）；`docker` 放 Windows 辅助启动脚本。测试和检查不再使用 Docker，见 [Windows OS 沙箱](ENVIRONMENT.md)。
 
 目录中的 Compose 配置只会启动文件里声明的服务，不会因为放在本项目里就自动启动全部组件。详见 [infra 说明](../infra/README.md)。
 

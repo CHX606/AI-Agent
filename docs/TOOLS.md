@@ -25,11 +25,7 @@
 
 用户通过桌面的改动审阅查看真实差异并有条件撤销；没有向模型提供 `git_diff` 工具。评测器可以通过文件快照生成 Diff；这与模型能不能调用某个工具是两回事。
 
-测试沙盒默认使用 `bit-agent-python-sandbox:0.1.0`，本机没有时用随程序附带的 Dockerfile 自动构建一次。Harness 会在测试或检查前自动读取项目依赖，构建并缓存依赖镜像；测试容器保持无网络、只读工作区和资源限制。支持范围和 OCR 系统包声明见 [自动环境准备](ENVIRONMENT.md)。也可通过 `BIT_AGENT_SANDBOX_IMAGE` 选择预置基础镜像，例如：
-
-```powershell
-docker build -t bit-agent-python-web-sandbox:0.1.0 infra/sandbox/python-web
-```
+测试和检查在随包的官方 Windows OS 沙箱里运行，见下文“测试与检查在哪里运行”。
 
 ## 常见调用例子
 
@@ -72,7 +68,7 @@ docker build -t bit-agent-python-web-sandbox:0.1.0 infra/sandbox/python-web
 | `lint` | Ruff 静态检查 | 例如没使用的导入、不合理写法等。 |
 | `format` | Ruff 的 `format --check` | 看格式是否符合要求，不会自动重排源文件。 |
 | `typecheck` | mypy | 看类型使用是否符合声明和配置。 |
-| `build` | 受控 Python 包构建脚本 | 看项目能否按构建配置生成分发包。 |
+| `build` | `python -m build` | 看项目能否按构建配置生成分发包；产物写在工作区的 `dist/`。 |
 
 `paths` 必须提供检查范围。构建只能指定一个项目目录；根目录使用空字符串，例如：
 
@@ -92,9 +88,9 @@ docker build -t bit-agent-python-web-sandbox:0.1.0 infra/sandbox/python-web
 
 ## 测试与检查在哪里运行
 
-默认代码工具使用 Docker 沙箱。它为执行准备工作区快照，限制网络、用户权限、内存、CPU 和运行时间，避免把目标代码当作无限制的本机程序运行。
+`run_tests`、`run_checks` 和 `verify_project` 都通过官方 Windows OS 沙箱（`@anthropic-ai/sandbox-runtime@0.0.78`）运行：命令以独立的 `srt-sandbox` 账户执行，禁网，可以写选定的工作区，但不能改 `.git`、依赖目录和 `.bit-agent` 等配置；整台电脑同一时间只跑一个沙箱命令。
 
-容器中的 Python 环境由 `services/agent/src/bit_agent/sandbox/images/python/Dockerfile` 定义，与项目根目录的 `.venv` 是两个环境。本机安装了某个依赖，不代表沙箱里也已经有它。
+命令直接在你的工作区里运行，用的是项目自己的 `.venv`（没有时用 Agent 自带的 Python）和本机工具链，验证时不自动安装依赖。命令自己写出的文件不进入改动审阅。完整边界和 Windows 自身权限带来的限制见 [Windows OS 沙箱](ENVIRONMENT.md)。
 
 ## 修改后什么时候允许结束
 
@@ -142,5 +138,5 @@ docker build -t bit-agent-python-web-sandbox:0.1.0 infra/sandbox/python-web
 - `services/agent/src/bit_agent/tools`：具体执行逻辑。
 - `services/agent/src/bit_agent/tools/context.py`：超时、读取行数和输出量等限制。
 - `services/agent/src/bit_agent/security`：工作区路径边界。
-- `services/agent/src/bit_agent/sandbox`：Docker 执行环境。
+- `services/agent/src/bit_agent/sandbox` 和 `scripts/sandbox-runner`：Windows OS 沙箱的调用方和执行器。
 - `services/agent/src/bit_agent/tool_provider`：本地调用、MCP 调用和工具权限限制。

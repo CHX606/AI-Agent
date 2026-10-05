@@ -1,8 +1,11 @@
+import importlib
+import sys
 from pathlib import Path
 
 import pytest
 from bit_agent.sandbox import SandboxResult
 from bit_agent.tools import run_tests
+from bit_agent.tools.command_runtime import python_executable
 from bit_agent.tools.context import ToolContext
 from bit_agent.tools.models import ToolStatus
 from bit_agent.tools.run_tests import TestRunner
@@ -39,7 +42,7 @@ def fake_runner(outcome: SandboxResult) -> tuple[TestRunner, FakeSandbox]:
 @pytest.mark.asyncio
 async def test_runs_fixed_pytest_command_for_passing_test(tmp_path: Path) -> None:
     write_test(tmp_path, "test_pass.py")
-    runner, sandbox = fake_runner(SandboxResult("container-1", 0, stdout="1 passed"))
+    runner, sandbox = fake_runner(SandboxResult(0, stdout="1 passed"))
 
     outcome = await run_tests(
         ToolContext(tmp_path, "call_1", timeout_seconds=10),
@@ -54,7 +57,7 @@ async def test_runs_fixed_pytest_command_for_passing_test(tmp_path: Path) -> Non
     assert sandbox.calls == [
         (
             tmp_path.resolve(),
-            ["python", "-m", "pytest", "-q", "--", "tests/test_pass.py"],
+            [sys.executable, "-m", "pytest", "-q", "--", "tests/test_pass.py"],
             10,
         )
     ]
@@ -63,7 +66,7 @@ async def test_runs_fixed_pytest_command_for_passing_test(tmp_path: Path) -> Non
 @pytest.mark.asyncio
 async def test_reports_failing_test(tmp_path: Path) -> None:
     write_test(tmp_path, "test_fail.py")
-    runner, _ = fake_runner(SandboxResult("container-1", 1, stdout="1 failed"))
+    runner, _ = fake_runner(SandboxResult(1, stdout="1 failed"))
 
     outcome = await run_tests(
         ToolContext(tmp_path, "call_1", timeout_seconds=10),
@@ -87,7 +90,7 @@ async def test_missing_test_target_is_error(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_test_execution_timeout(tmp_path: Path) -> None:
     write_test(tmp_path, "test_slow.py")
-    runner, _ = fake_runner(SandboxResult("container-1", 137, stdout="started", timed_out=True))
+    runner, _ = fake_runner(SandboxResult(137, stdout="started", timed_out=True))
 
     outcome = await run_tests(
         ToolContext(tmp_path, "call_1", timeout_seconds=1),
@@ -106,7 +109,6 @@ async def test_sandbox_truncation_is_preserved(tmp_path: Path) -> None:
     write_test(tmp_path, "test_output.py")
     runner, _ = fake_runner(
         SandboxResult(
-            "container-1",
             1,
             stdout="HEAD\n... output truncated ...\nTAIL",
             truncated=True,
@@ -154,7 +156,7 @@ async def test_rejects_timeout_above_worker_limit(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_no_collected_tests_is_reported(tmp_path: Path) -> None:
     (tmp_path / "tests").mkdir()
-    runner, _ = fake_runner(SandboxResult("container-1", 5))
+    runner, _ = fake_runner(SandboxResult(5))
 
     outcome = await run_tests(
         ToolContext(tmp_path, "call_1", timeout_seconds=10),
@@ -170,9 +172,7 @@ async def test_no_collected_tests_is_reported(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_reports_sandbox_start_error(tmp_path: Path) -> None:
     write_test(tmp_path, "test_pass.py")
-    runner, _ = fake_runner(
-        SandboxResult(None, None, start_error="docker executable was not found")
-    )
+    runner, _ = fake_runner(SandboxResult(None, start_error="OS sandbox executable was not found"))
 
     outcome = await run_tests(
         ToolContext(tmp_path, "call_1"),
@@ -183,3 +183,95 @@ async def test_reports_sandbox_start_error(tmp_path: Path) -> None:
     assert outcome.status is ToolStatus.ERROR
     assert outcome.error and outcome.error.code == "SANDBOX_UNAVAILABLE"
     assert outcome.error.retryable
+
+
+@pytest.mark.parametrize("relative", [".venv/Scripts/python.exe", ".venv/bin/python"])
+def test_selects_workspace_python(tmp_path: Path, relative: str) -> None:
+    executable = tmp_path / relative
+    executable.parent.mkdir(parents=True)
+    executable.write_bytes(b"")
+
+    assert python_executable(tmp_path) == str(executable)
+
+
+def test_python_selection_prefers_windows_file_and_ignores_directories(tmp_path: Path) -> None:
+    windows = tmp_path / ".venv" / "Scripts" / "python.exe"
+    posix = tmp_path / ".venv" / "bin" / "python"
+    windows.mkdir(parents=True)
+    posix.parent.mkdir(parents=True)
+    posix.write_bytes(b"")
+    assert python_executable(tmp_path) == str(posix)
+    windows.rmdir()
+    windows.write_bytes(b"")
+    assert python_executable(tmp_path) == str(windows)
+
+
+def test_python_selection_falls_back_to_current_process(tmp_path: Path) -> None:
+    assert python_executable(tmp_path) == sys.executable
+
+
+@pytest.mark.asyncio
+async def test_runner_uses_workspace_virtual_environment(tmp_path: Path) -> None:
+    executable = tmp_path / ".venv" / "Scripts" / "python.exe"
+    executable.parent.mkdir(parents=True)
+    executable.write_bytes(b"")
+    write_test(tmp_path, "test_pass.py")
+    runner, sandbox = fake_runner(SandboxResult(0))
+
+    outcome = await run_tests(ToolContext(tmp_path, "venv"), "tests", runner=runner)
+
+    assert outcome.status is ToolStatus.SUCCESS
+    assert sandbox.calls[0][1][0] == str(executable)
+
+
+@pytest.mark.asyncio
+async def test_default_runner_passes_context_to_os_sandbox(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_test(tmp_path, "test_pass.py")
+    sandbox = FakeSandbox(SandboxResult(0, stdout="1 passed"))
+    arguments: dict[str, object] = {}
+
+    def factory(**kwargs: object) -> FakeSandbox:
+        arguments.update(kwargs)
+        return sandbox
+
+    module = importlib.import_module("bit_agent.tools.run_tests")
+    monkeypatch.setattr(module, "OSSandbox", factory)
+    context = ToolContext(tmp_path, "default-run", task_id="task-42", max_output_bytes=512)
+
+    outcome = await run_tests(context, "tests")
+
+    assert outcome.status is ToolStatus.SUCCESS
+    assert arguments == {
+        "task_id": "task-42",
+        "tool_call_id": "default-run",
+        "max_output_bytes": 512,
+    }
+    assert sandbox.calls[0][1] == [sys.executable, "-m", "pytest", "-q", "--", "tests"]
+
+
+@pytest.mark.parametrize("timeout", [True, 0, -1, "1", float("nan"), float("inf")])
+@pytest.mark.asyncio
+async def test_invalid_timeout_never_runs_process(tmp_path: Path, timeout: object) -> None:
+    write_test(tmp_path, "test_pass.py")
+    runner, sandbox = fake_runner(SandboxResult(0))
+
+    outcome = await run_tests(
+        ToolContext(tmp_path, "invalid-timeout"), "tests", timeout_seconds=timeout, runner=runner
+    )
+
+    assert outcome.status is ToolStatus.ERROR
+    assert outcome.error and outcome.error.code == "INVALID_ARGUMENT"
+    assert sandbox.calls == []
+
+
+@pytest.mark.parametrize("target", ["../tests", ".venv/test_hidden.py", "C:/outside/test.py"])
+@pytest.mark.asyncio
+async def test_rejected_path_never_runs_process(tmp_path: Path, target: str) -> None:
+    runner, sandbox = fake_runner(SandboxResult(0))
+
+    outcome = await run_tests(ToolContext(tmp_path, "bad-path"), target, runner=runner)
+
+    assert outcome.status is ToolStatus.REJECTED
+    assert sandbox.calls == []

@@ -256,8 +256,9 @@ class DelegatingToolProvider(LocalToolProvider):
             return tool_error_result(
                 tool_call_id, tool_name, "PERMISSION_DENIED", "本轮只读：不能修改文件或运行项目代码"
             )
-        # 测试、检查和独立验收都在隔离容器里运行（不联网、不改原工作区），隔离就是安全边界，
-        # “逐次确认”模式也不再为它们弹审批；需要确认的是写文件、删除和外部工具。
+        # 测试、检查和独立验收在 OS 沙箱里运行：禁网，只能写工作区且不能改 .git、.bit-agent 等。
+        # 与 Claude Code（沙箱 auto-allow）和 Codex（Auto 模式）一致，沙箱内的命令不弹审批；
+        # 命令自己写出的文件不进入改动审阅。需要确认的是写文件、删除和外部工具。
         if tool_name in {"run_tests", "run_checks"} and self.changed_paths:
             return tool_error_result(
                 tool_call_id,

@@ -5,6 +5,8 @@ import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { bundleSandbox } from "./desktop-package/sandbox.mjs";
+import { applyWindowsBranding } from "./desktop-package/windows-branding.mjs";
 
 if (process.platform !== "win32") throw new Error("当前打包脚本只构建 Windows 便携版");
 const root = resolve(import.meta.dirname, "..");
@@ -16,8 +18,6 @@ const desktop = join(root, "apps", "desktop");
 const require = createRequire(join(desktop, "package.json"));
 const electron = dirname(require("electron"));
 cpSync(electron, output, { recursive: true });
-// Electron 原始可执行程序可直接作为入口；额外提供明确的产品名称。
-cpSync(join(output, "electron.exe"), join(output, "Bit Agent.exe"));
 const resources = join(output, "resources");
 const app = join(resources, "app");
 mkdirSync(app, { recursive: true });
@@ -25,6 +25,7 @@ cpSync(join(desktop, "dist"), join(app, "dist"), { recursive: true });
 // 版本号以桌面端 package.json 为准，界面“个人中心”里显示的就是它（app.getVersion）。
 const { version } = JSON.parse(readFileSync(join(desktop, "package.json"), "utf8"));
 writeFileSync(join(app, "package.json"), JSON.stringify({ name: "bit-agent", version, type: "module", main: "dist/main/main/main.js" }));
+const branding = applyWindowsBranding(output, { version });
 
 const esbuildDirectory = readdirSync(join(root, "node_modules", ".pnpm")).find((name) => /^esbuild@/u.test(name));
 if (!esbuildDirectory) throw new Error("缺少 esbuild，请先安装项目依赖");
@@ -40,6 +41,8 @@ await esbuild.build({ entryPoints: [join(root, "scripts", "gateway-entry.ts")], 
   banner: { js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);' },
 });
 
+await bundleSandbox(resources);
+
 const sourcePython = join(root, ".venv", "Scripts", "python.exe");
 const basePython = execFileSync(sourcePython, ["-c", "import sys; print(sys.base_prefix)"], { encoding: "utf8" }).trim();
 const python = join(resources, "python");
@@ -50,14 +53,14 @@ for (const file of readdirSync(basePython)) {
 for (const directory of ["Lib", "DLLs"]) cpSync(join(basePython, directory), join(python, directory), {
   recursive: true, filter: (path) => !["site-packages", "__pycache__", "test", "tests", "idlelib", "tkinter", "turtledemo", "ensurepip"].includes(path.split(/[\\/]/u).at(-1)),
 });
-// Python 依赖只装运行时需要的部分，版本完全按 uv.lock；pytest、ruff 等开发工具不进安装包。
-// 项目测试和检查都在 Docker 沙箱中执行，打包后的程序不会在本机调用它们。
+// 同时携带锁定版本的Python验证工具；项目自己的依赖仍使用项目环境。
+// 测试和检查通过官方Windows OS沙箱执行。
 const lockExport = mkdtempSync(join(tmpdir(), "bit-agent-package-"));
 try {
   const requirements = join(lockExport, "runtime-requirements.txt");
   const uv = (args) => execFileSync("uv", args, { cwd: root, stdio: ["ignore", "inherit", "inherit"],
     env: { ...process.env, UV_LINK_MODE: "copy" } });
-  uv(["export", "--frozen", "--no-dev", "--extra", "memory", "--no-emit-project",
+  uv(["export", "--frozen", "--no-dev", "--extra", "memory", "--extra", "verification", "--no-emit-project",
     "--format", "requirements-txt", "--output-file", requirements]);
   uv(["pip", "install", "--no-deps", "--python", join(basePython, "python.exe"),
     "--target", join(python, "Lib", "site-packages"), "--requirement", requirements]);
@@ -83,17 +86,21 @@ const rg = configuredRg && existsSync(configuredRg)
   ? configuredRg
   : execFileSync("where.exe", ["rg"], { encoding: "utf8" }).trim().split(/\r?\n/u)[0];
 cpSync(rg, join(tools, "rg.exe"));
+// 沙箱加固脚本放在发布目录根部，只用便携包的人也能运行（说明见 docs/ENVIRONMENT.md）。
+cpSync(join(root, "scripts", "harden-sandbox.ps1"), join(output, "harden-sandbox.ps1"));
 writeFileSync(join(output, "README.txt"), [
   "Bit Agent Windows portable", "Run Bit Agent.exe. Keep the entire folder together.",
   "Node, Python, Gateway, Git apply and ripgrep are bundled. No system Python/Node required.",
   "Configure your model in the application. Keys are encrypted by Windows.",
-  "Docker Desktop is required for isolated project verification; the default sandbox image is built automatically on first use.",
+  "Official Anthropic Windows OS sandbox SDK 0.0.78 (alpha) is bundled. First verification may request Windows elevation to install its dedicated sandbox account and network fence. Project dependencies/toolchains must already be installed.",
+  "Folders Windows opens to all users (e.g. D:\\ by default) stay writable by the sandbox account until hardened: run harden-sandbox.ps1 as administrator with -Apply (preview without it, undo with -Remove).",
   "This is an unsigned development build, not a signed installer. Windows may show a warning.",
   "User data is stored outside this folder; replacing this release does not delete sessions.",
   "Dependency license files are retained with their installed packages. Git is GPLv2; Electron includes LICENSE and LICENSES.chromium.html.",
 ].join("\r\n"));
 writeFileSync(join(output, "build-info.json"), JSON.stringify({ createdAt: new Date().toISOString(),
   platform: process.platform, arch: process.arch, python: basePython, independentRuntime: true,
-  externalRequirements: ["model API", "Docker for isolated verification"],
+  externalRequirements: ["model API", "project dependencies/toolchains", "first-use Windows sandbox setup"], sandbox: { engine: "@anthropic-ai/sandbox-runtime", version: "0.0.78", windowsSupport: "alpha" },
+  applicationIcon: "resources/app/assets/icon.ico", appUserModelId: "BitAgent.Desktop",
 }, null, 2));
-console.log(JSON.stringify({ output, executable: join(output, "Bit Agent.exe") }));
+console.log(JSON.stringify({ output, executable: branding.executable }));
