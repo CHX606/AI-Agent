@@ -1,0 +1,61 @@
+/* 仓库页面的 VS Code 式编辑区和资源管理器。颜色参照 VS Code Light+ / Dark+。 */
+
+:root {
+  --tok-comment: #008000;
+  --tok-string: #a31515;
+  --tok-number: #098658;
+  --tok-keyword: #0000ff;
+  --tok-control: #af00db;
+  --tok-constant: #0000ff;
+  --tok-function: #795e26;
+  --tok-type: #267f99;
+  --tok-property: #0451a5;
+  --tok-decorator: #795e26;
+  --tok-variable: #001080;
+  --tok-tag: #800000;
+  --tok-attribute: #e50000;
+  --tok-heading: #0000ff;
+  --tok-punctuation: #800000;
+  --editor-gutter: #6e7681;
+  --editor-current-line: rgb(0 0 0 / 4%);
+  --editor-tab-bg: var(--bg-panel);
+  --editor-guide: #e2e2dd;
+}
+
+:root[data-theme="dark"] {
+  --tok-comment: #6a9955;
+  --tok-string: #ce9178;
+  --tok-number: #b5cea8;
+  --tok-keyword: #569cd6;
+  --tok-control: #c586c0;
+  --tok-constant: #569cd6;
+  --tok-function: #dcdcaa;
+  --tok-type: #4ec9b0;
+  --tok-property: #9cdcfe;
+  --tok-decorator: #dcdcaa;
+  --tok-variable: #9cdcfe;
+  --tok-tag: #569cd6;
+  --tok-attribute: #9cdcfe;
+  --tok-heading: #569cd6;
+  --tok-punctuation: #808080;
+  --editor-gutter: #6e6b64;
+  --editor-current-line: rgb(255 255 255 / 4%);
+  --editor-tab-bg: #20201e;
+  --editor-guide: #33332f;
+}
+
+.tok-comment { color: var(--tok-comment); font-style: italic; }
+.tok-string { color: var(--tok-string); }
+.tok-number { color: var(--tok-number); }
+.tok-keyword { color: var(--tok-keyword); }
+.tok-control { color: var(--tok-control); }
+.tok-constant { color: var(--tok-constant); }
+.tok-function { color: var(--tok-function); }
+.tok-type { color: var(--tok-type); }
+.tok-property { color: var(--tok-property); }
+.tok-decorator { color: var(--tok-decorator); }
+.tok-variable { color: var(--tok-variable); }
+.tok-tag { color: var(--tok-tag); }
+.tok-attribute { color: var(--tok-attribute); }
+.tok-heading { color: var(--tok-heading); font-weight: 600; }
+.tok-punctuation { color: var(--tok-punctuation); }

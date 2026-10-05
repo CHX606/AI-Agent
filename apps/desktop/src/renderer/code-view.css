@@ -1,64 +1,6 @@
-/* 仓库页面的 VS Code 式编辑区和资源管理器。颜色参照 VS Code Light+ / Dark+。 */
-
-:root {
-  --tok-comment: #008000;
-  --tok-string: #a31515;
-  --tok-number: #098658;
-  --tok-keyword: #0000ff;
-  --tok-control: #af00db;
-  --tok-constant: #0000ff;
-  --tok-function: #795e26;
-  --tok-type: #267f99;
-  --tok-property: #0451a5;
-  --tok-decorator: #795e26;
-  --tok-variable: #001080;
-  --tok-tag: #800000;
-  --tok-attribute: #e50000;
-  --tok-heading: #0000ff;
-  --tok-punctuation: #800000;
-  --editor-gutter: #6e7681;
-  --editor-current-line: rgb(0 0 0 / 4%);
-  --editor-tab-bg: var(--bg-panel);
-  --editor-guide: #e2e2dd;
-}
-
-:root[data-theme="dark"] {
-  --tok-comment: #6a9955;
-  --tok-string: #ce9178;
-  --tok-number: #b5cea8;
-  --tok-keyword: #569cd6;
-  --tok-control: #c586c0;
-  --tok-constant: #569cd6;
-  --tok-function: #dcdcaa;
-  --tok-type: #4ec9b0;
-  --tok-property: #9cdcfe;
-  --tok-decorator: #dcdcaa;
-  --tok-variable: #9cdcfe;
-  --tok-tag: #569cd6;
-  --tok-attribute: #9cdcfe;
-  --tok-heading: #569cd6;
-  --tok-punctuation: #808080;
-  --editor-gutter: #6e6b64;
-  --editor-current-line: rgb(255 255 255 / 4%);
-  --editor-tab-bg: #20201e;
-  --editor-guide: #33332f;
-}
-
-.tok-comment { color: var(--tok-comment); font-style: italic; }
-.tok-string { color: var(--tok-string); }
-.tok-number { color: var(--tok-number); }
-.tok-keyword { color: var(--tok-keyword); }
-.tok-control { color: var(--tok-control); }
-.tok-constant { color: var(--tok-constant); }
-.tok-function { color: var(--tok-function); }
-.tok-type { color: var(--tok-type); }
-.tok-property { color: var(--tok-property); }
-.tok-decorator { color: var(--tok-decorator); }
-.tok-variable { color: var(--tok-variable); }
-.tok-tag { color: var(--tok-tag); }
-.tok-attribute { color: var(--tok-attribute); }
-.tok-heading { color: var(--tok-heading); font-weight: 600; }
-.tok-punctuation { color: var(--tok-punctuation); }
+@import "./repository/syntax.css";
+@import "./repository/tree.css";
+@import "./repository/icons.css";
 
 /* 编辑区：标签 35px、路径 24px、代码、状态栏 24px */
 
@@ -148,8 +90,7 @@
 
 .editor-tab-close svg,
 .editor-crumb-separator svg,
-.repository-entry-arrow svg,
-.repository-entry-icon svg {
+.repository-entry-arrow svg {
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -186,16 +127,6 @@
 
 .editor-crumb-separator svg { width: 12px; height: 12px; stroke-width: 1.5; }
 
-.file-icon {
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  width: 16px;
-  font: 700 9px/1 var(--font-mono);
-  letter-spacing: -0.04em;
-}
-
-.editor-crumb .file-icon { width: 14px; }
 
 .repository-preview-content {
   display: grid;
@@ -274,41 +205,3 @@
 }
 
 .editor-status-right { overflow: hidden; text-overflow: ellipsis; }
-
-/* 资源管理器：22px 一行、彩色文件图标、缩进参考线。 */
-
-.repository-tree { padding: 2px 0 8px; }
-
-.repository-entry {
-  height: 22px;
-  grid-template-columns: 16px 18px minmax(0, 1fr);
-  gap: 3px;
-  padding: 0 8px 0 2px;
-  border-radius: 4px;
-  color: var(--text-soft);
-  font-size: 13px;
-}
-
-.repository-entry-children {
-  margin-left: 9px;
-  padding-left: 7px;
-  border-left: 1px solid var(--editor-guide);
-}
-
-.repository-entry-arrow {
-  width: 16px;
-  color: var(--text-muted);
-  font-size: 0;
-}
-
-.repository-entry-arrow svg { width: 14px; height: 14px; stroke-width: 1.5; }
-
-.repository-entry-icon { width: 18px; }
-.repository-entry-icon svg { width: 15px; height: 15px; stroke-width: 1.3; }
-.repository-entry[data-kind="directory"] .repository-entry-icon { color: #c09553; }
-.repository-entry-name { font-size: 13px; }
-
-.repository-entry[data-selected="true"] {
-  background: color-mix(in srgb, var(--brand) 14%, transparent);
-  color: var(--text);
-}

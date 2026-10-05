@@ -1,0 +1,139 @@
+.profile-button svg {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 个人中心：左下角头像和名字，点开向上弹出设置菜单。 */
+
+.sidebar-bottom {
+  position: relative;
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.profile-button {
+  display: flex;
+  width: 100%;
+  height: 46px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+  border-radius: 9px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+
+.profile-button:hover,
+.profile-button[aria-expanded="true"] {
+  background: var(--bg-hover);
+}
+
+.profile-avatar {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  font: 600 13px var(--font-sans);
+}
+
+.profile-copy,
+.profile-menu-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.profile-copy strong,
+.profile-menu-copy strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-copy small,
+.profile-menu-copy small {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.profile-button .settings-status {
+  flex: none;
+}
+
+.profile-chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  stroke-width: 1.8;
+}
+
+.profile-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  max-height: calc(100vh - 120px);
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--bg-main);
+  box-shadow: var(--shadow-composer);
+}
+
+.profile-menu[hidden] {
+  display: none;
+}
+
+.profile-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  padding: 6px 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-menu-items {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 各模块插入按钮的先后不固定，这里统一排序。 */
+#model-settings { order: 1; }
+#execution-settings { order: 2; }
+#mcp-settings { order: 3; }
+#memory-settings { order: 4; }
+#diagnostics-settings { order: 5; }
+
+.profile-menu .sidebar-model-settings {
+  min-height: 32px;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.profile-menu-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+.profile-version {
+  padding: 4px 8px 2px;
+  color: var(--text-faint);
+  font: 11px var(--font-mono);
+}

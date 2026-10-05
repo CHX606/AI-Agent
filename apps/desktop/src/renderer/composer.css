@@ -28,6 +28,7 @@
 .run-button:active:not(:disabled) { transform: scale(0.95); }
 .run-button:focus-visible { outline: none; box-shadow: var(--field-focus-ring); }
 .run-button:disabled { cursor: default; opacity: 0.45; }
+.run-button[data-state="send"][data-empty="true"]:disabled { opacity: 1; }
 
 /* 空闲且没写字：按钮变淡，写了字才是醒目的橙色。 */
 .run-button[data-state="send"][data-empty="true"] {
@@ -35,17 +36,15 @@
   color: var(--text-muted);
 }
 
-/* 运行中：转动的弧线 + 中间的小方块（点击暂停）。 */
+/* 运行中：点击方块立即停止界面。 */
 .run-button[data-state="running"],
-.run-button[data-state="pausing"],
 .run-button[data-state="stopping"] {
   border-color: var(--border-strong);
   background: var(--bg-panel);
   color: var(--text);
 }
 
-.run-button[data-state="running"]:hover:not(:disabled),
-.run-button[data-state="pausing"]:hover:not(:disabled) {
+.run-button[data-state="running"]:hover:not(:disabled) {
   background: var(--bg-hover);
 }
 
@@ -70,14 +69,6 @@
   fill: currentColor;
   stroke: none;
 }
-
-/* 正在暂停：弧线变慢、变成琥珀色，方块变红，提示再点就是立即停止。 */
-.run-button[data-state="pausing"] .run-arc {
-  stroke: var(--amber);
-  animation-duration: 2.2s;
-}
-
-.run-button[data-state="pausing"] .run-stop { fill: var(--red); }
 
 /* 已暂停：▶ 继续。 */
 .run-button[data-state="paused"] {

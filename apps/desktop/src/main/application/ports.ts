@@ -27,7 +27,6 @@ export interface RuntimePort {
   mcpServers(): Record<string, unknown>[];
   saveMcpServers(input: unknown): Promise<Record<string, unknown>[]>;
   testMcpServer(input: unknown): Promise<Record<string, unknown>>;
-  dockerStatus(): Promise<"ready" | "not_installed" | "not_running">;
   startManagedRuntime(): Promise<void>;
   stopManagedRuntime(): Promise<void>;
 }

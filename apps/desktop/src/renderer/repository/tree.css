@@ -1,0 +1,35 @@
+/* 资源管理器：22px 一行、彩色文件图标、缩进参考线。 */
+
+.repository-tree { padding: 2px 0 8px; }
+
+.repository-entry {
+  height: 22px;
+  grid-template-columns: 16px 18px minmax(0, 1fr);
+  gap: 3px;
+  padding: 0 8px 0 2px;
+  border-radius: 4px;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.repository-entry-children {
+  margin-left: 9px;
+  padding-left: 7px;
+  border-left: 1px solid var(--editor-guide);
+}
+
+.repository-entry-arrow {
+  width: 16px;
+  color: var(--text-muted);
+  font-size: 0;
+}
+
+.repository-entry-arrow svg { width: 14px; height: 14px; stroke-width: 1.5; }
+
+.repository-entry-icon { width: 18px; }
+.repository-entry-name { font-size: 13px; }
+
+.repository-entry[data-selected="true"] {
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+  color: var(--text);
+}

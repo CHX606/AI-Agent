@@ -1,0 +1,61 @@
+      <aside class="sidebar-right" aria-label="任务检查器">
+        <div id="inspector-resize" class="inspector-resize" aria-hidden="true"></div>
+        <header class="right-header">
+          <div>
+            <span class="eyebrow">INSPECTOR</span>
+            <h2>任务详情</h2>
+          </div>
+          <button id="inspector-close" class="icon-button" type="button" aria-label="关闭检查器">×</button>
+        </header>
+
+        <div class="right-scroll-container">
+          <section class="inspector-section quality-section">
+            <header class="inspector-heading">
+              <h3>验证</h3>
+            </header>
+            <div class="metrics-grid" aria-label="质量检查">
+              <div class="metric-card">
+                <span class="metric-icon" aria-hidden="true">◉</span>
+                <span class="metric-label">基础测试</span>
+                <strong id="tests-state" class="metric-value">-</strong>
+              </div>
+              <div class="metric-card">
+                <span class="metric-icon" aria-hidden="true">◇</span>
+                <span class="metric-label">质量检查</span>
+                <strong id="lint-state" class="metric-value">-</strong>
+              </div>
+              <div class="metric-card">
+                <span class="metric-icon" aria-hidden="true">◎</span>
+                <span class="metric-label">独立验收</span>
+                <strong id="acceptance-state" class="metric-value">-</strong>
+              </div>
+              <div class="metric-card">
+                <span class="metric-icon" aria-hidden="true">↻</span>
+                <span class="metric-label">工具轮数</span>
+                <strong id="rounds" class="metric-value">-</strong>
+              </div>
+              <div class="metric-card" id="usage-card">
+                <span class="metric-icon" aria-hidden="true">≈</span>
+                <span class="metric-label">模型用量</span>
+                <strong id="usage-state" class="metric-value">-</strong>
+              </div>
+            </div>
+            <ul id="verification-notes" class="verification-notes" aria-label="验证说明" hidden></ul>
+          </section>
+
+          <section class="inspector-section">
+            <header class="inspector-heading">
+              <h3>修改文件</h3>
+            </header>
+            <div id="changed-files" class="changed-files empty-copy">无文件修改</div>
+          </section>
+
+          <details class="inspector-section raw-section">
+            <summary class="inspector-heading">
+              <h3>原始结果</h3>
+              <span aria-hidden="true">⌄</span>
+            </summary>
+            <pre id="raw-result" class="raw">尚无结果</pre>
+          </details>
+        </div>
+      </aside>

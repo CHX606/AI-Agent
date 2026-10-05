@@ -1,0 +1,15 @@
+/* Material Icon Theme SVGs retain their original artwork and colors. */
+.file-icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+
+.file-icon img { grid-area: 1 / 1; width: 16px; height: 16px; object-fit: contain; }
+.file-icon-light { display: none; }
+:root:not([data-theme="dark"]) .has-light-icon .file-icon-default { display: none; }
+:root:not([data-theme="dark"]) .has-light-icon .file-icon-light { display: block; }
+.editor-crumb .file-icon,
+.editor-crumb .file-icon img { width: 14px; height: 14px; }

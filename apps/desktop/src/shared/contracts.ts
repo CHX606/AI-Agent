@@ -148,7 +148,6 @@ export interface DesktopApi {
   testModelSettings(input: Record<string, unknown>): Promise<ModelTestResult>;
   /** 向模型服务要模型列表（只含可以对话的模型）；不保存。 */
   listModels(input: Record<string, unknown>): Promise<string[]>;
-  dockerStatus(): Promise<"ready" | "not_installed" | "not_running">;
   listMcpServers(): Promise<McpServer[]>;
   /** 保存整个列表；条目带 env 时替换环境变量，不带时沿用已保存的值。 */
   saveMcpServers(input: McpServer[]): Promise<McpServer[]>;

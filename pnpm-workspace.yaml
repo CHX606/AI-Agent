@@ -13,3 +13,5 @@ packageExtensions:
 
 # One store for this workspace and every package, independent of the shell cwd.
 storeDir: 'D:/myproject/AI Agent.pnpm-store'
+overrides:
+  '@anthropic-ai/sandbox-runtime>zod': '3.25.76'

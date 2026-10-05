@@ -1,24 +1,22 @@
-/**
- * Claude Code 风格的对话流：Agent 的文字和工具调用按发生顺序排在一起。
- * 工具是一行“● 动作 目标”，下面一行“⎿ 结果”；点开看技术详情，修改文件直接显示差异。
- * 底部的状态行代替加载卡片：“✻ 思考中… 12s”。
- */
+/** 连续对话流：按事件顺序渲染文字、工具和流程说明。 */
 import type { TaskEvent } from "../shared/contracts";
 import { object } from "./dom";
 import { renderMarkdown } from "./markdown";
 import { eventPresentation, isMainAgentText } from "./presentation";
+import { StreamStatusLine } from "./stream/status-line";
+import { stopEvents } from "./stream/run-status";
+import { StreamToolRows, streamBullet } from "./stream/tool-row";
+import type { FileDiff } from "./stream/tool-diff";
 import "./transcript.css";
 
-export interface FileDiff { path: string; diff: string; truncated?: boolean }
+export type { FileDiff } from "./stream/tool-diff";
+export { formatElapsed } from "./stream/run-status";
 
 export interface StreamViewOptions {
   stream: HTMLOListElement;
-  /** 底部状态行；回放旧轮次过程时不需要，可以省略。 */
   statusLine?: HTMLElement;
   scroller: HTMLElement;
-  /** 新内容出现时是否“粘在底部”跟随；回放旧轮次时为 false，不打扰当前的阅读位置。 */
   follow?: boolean;
-  /** 取某次 apply_patch 调用写入的差异；取不到时返回空数组。 */
   loadDiff(callId: string): Promise<FileDiff[]>;
 }
 
@@ -28,90 +26,69 @@ export interface FinishInput {
   cancelled: boolean;
 }
 
-const GLYPHS = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
-const DIFF_PREVIEW_LINES = 14;
-const RUNNING = new Set(["SUBMITTING", "QUEUED", "RUNNING", "CANCELLATION_REQUESTED", "PAUSE_REQUESTED"]);
+class StreamRenderer {
+  private readonly follow: boolean;
+  private readonly status: StreamStatusLine;
+  private readonly tools: StreamToolRows;
+  private text: { body: HTMLElement; raw: string } | null = null;
+  private renderScheduled = false;
+  private stoppedNote = false;
+  private stuck: boolean;
 
-export function formatElapsed(milliseconds: number): string {
-  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
-  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
-}
-
-export function createStreamView(options: StreamViewOptions) {
-  const { stream, scroller } = options;
-  const follow = options.follow ?? true;
-  const statusLine = options.statusLine ?? document.createElement("div");
-  if (!options.statusLine) {
-    statusLine.hidden = true;
-    statusLine.innerHTML = '<span class="status-glyph"></span><span class="status-verb"></span><span class="status-meta"></span>';
-  }
-  const glyph = statusLine.querySelector<HTMLElement>(".status-glyph")!;
-  const verb = statusLine.querySelector<HTMLElement>(".status-verb")!;
-  const meta = statusLine.querySelector<HTMLElement>(".status-meta")!;
-  const tools = new Map<string, HTMLLIElement>();
-  let text: { body: HTMLElement; raw: string } | null = null;
-  let renderScheduled = false;
-  let startedAt = Date.now();
-  let phase = "思考中";
-  let status = "IDLE";
-  let frame = 0;
-  let operations = 0;
-  let loading: string | null = null;
-
-  const nearBottom = () => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 140;
-  const toBottom = () => scroller.scrollTo({ top: scroller.scrollHeight, behavior: "instant" });
-  // 和终端一样“粘在底部”：用户停在底部时新内容自动跟随；往上翻看时不打扰。
-  let stuck = follow;
-  if (follow) {
-    scroller.addEventListener("scroll", () => { stuck = nearBottom(); }, { passive: true });
-    // 下方的问答卡片、暂停面板出现时可视区域变矮，最新内容不能被挤出视野。
-    new ResizeObserver(() => { if (stuck) toBottom(); }).observe(scroller);
+  constructor(private readonly options: StreamViewOptions) {
+    this.follow = options.follow ?? true;
+    this.stuck = this.follow;
+    this.status = new StreamStatusLine(options.statusLine, () => this.followBottom());
+    this.tools = new StreamToolRows({
+      append: item => { this.text = null; this.append(item); },
+      loadDiff: options.loadDiff,
+      setPhase: phase => this.status.setPhase(phase),
+    });
+    if (this.follow) {
+      options.scroller.addEventListener("scroll", () => {
+        const scroller = this.options.scroller;
+        this.stuck = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 140;
+      }, { passive: true });
+      new ResizeObserver(() => this.followBottom()).observe(options.scroller);
+    }
   }
 
-  function append(item: HTMLElement): void {
-    stream.append(item);
-    if (stuck) toBottom();
+  private toBottom(): void {
+    this.options.scroller.scrollTo({ top: this.options.scroller.scrollHeight, behavior: "instant" });
   }
+  private followBottom(): void { if (this.stuck) this.toBottom(); }
+  private append(item: HTMLElement): void { this.options.stream.append(item); this.followBottom(); }
 
-  function bullet(): HTMLSpanElement {
-    const mark = document.createElement("span");
-    mark.className = "stream-bullet";
-    mark.setAttribute("aria-hidden", "true");
-    mark.textContent = "●";
-    return mark;
-  }
-
-  function scheduleRender(): void {
-    if (renderScheduled) return;
-    renderScheduled = true;
-    // 流式文字按帧合并渲染：回放上千个片段时也不会每个片段都重排一次。
+  private scheduleRender(): void {
+    if (this.renderScheduled) return;
+    this.renderScheduled = true;
     requestAnimationFrame(() => {
-      renderScheduled = false;
-      if (!text) return;
-      renderMarkdown(text.body, text.raw);
-      if (stuck) toBottom();
+      this.renderScheduled = false;
+      if (!this.text) return;
+      renderMarkdown(this.text.body, this.text.raw);
+      this.followBottom();
     });
   }
 
-  function textBlock(): { body: HTMLElement; raw: string } {
+  private textBlock(): { body: HTMLElement; raw: string } {
     const item = document.createElement("li");
     item.className = "stream-item stream-text";
     const body = document.createElement("div");
     body.className = "markdown-body";
-    item.append(bullet(), body);
-    append(item);
+    item.append(streamBullet(), body);
+    this.append(item);
     return { body, raw: "" };
   }
 
-  function appendText(delta: string): void {
-    text ??= textBlock();
-    text.raw += delta;
-    scheduleRender();
+  private appendText(delta: string): void {
+    this.text ??= this.textBlock();
+    this.text.raw += delta;
+    this.scheduleRender();
   }
 
-  function note(title: string, tone: string, nested: boolean): void {
+  private note(title: string, tone: string, nested: boolean): void {
     if (!title) return;
-    text = null;
+    this.text = null;
     const item = document.createElement("li");
     item.className = "stream-item stream-note";
     item.dataset.tone = tone;
@@ -123,258 +100,141 @@ export function createStreamView(options: StreamViewOptions) {
     const copy = document.createElement("span");
     copy.textContent = title;
     item.append(mark, copy);
-    append(item);
+    this.append(item);
   }
 
-  function renderDiff(container: HTMLElement, files: FileDiff[]): void {
-    container.replaceChildren();
-    let shown = 0;
-    const hidden: HTMLElement[] = [];
-    for (const file of files) {
-      const header = document.createElement("div");
-      header.className = "diff-file";
-      header.textContent = file.path;
-      container.append(header);
-      for (const line of file.diff.split("\n")) {
-        if (line.startsWith("---") || line.startsWith("+++") || !line) continue;
-        const row = document.createElement("div");
-        row.className = line.startsWith("+") ? "diff-add" : line.startsWith("-") ? "diff-remove"
-          : line.startsWith("@@") ? "diff-hunk" : "diff-context";
-        row.textContent = line;
-        if (shown >= DIFF_PREVIEW_LINES) { row.hidden = true; hidden.push(row); }
-        shown += 1;
-        container.append(row);
-      }
-    }
-    if (hidden.length) {
-      const more = document.createElement("button");
-      more.type = "button";
-      more.className = "diff-more";
-      more.textContent = `… 展开其余 ${hidden.length} 行`;
-      more.addEventListener("click", () => { for (const row of hidden) row.hidden = false; more.remove(); });
-      container.append(more);
-    }
-    container.hidden = shown === 0;
+  private preserveStopped(): void {
+    if (!this.status.stopped || this.stoppedNote) return;
+    this.stoppedNote = true;
+    this.note("已停止", "neutral", false);
   }
 
-  function toolRow(event: TaskEvent, agent: string): void {
-    const presentation = eventPresentation(event);
-    if (!presentation) return;
+  reset(): void {
+    this.options.stream.replaceChildren();
+    this.tools.reset();
+    this.text = null;
+    this.stoppedNote = false;
+    this.stuck = this.follow;
+    this.status.reset();
+    this.status.paint();
+    if (this.follow) requestAnimationFrame(() => this.toBottom());
+  }
+
+  detach(): Node[] {
+    this.preserveStopped();
+    const nodes = [...this.options.stream.childNodes];
+    this.options.stream.replaceChildren();
+    this.tools.clear();
+    this.text = null;
+    return nodes;
+  }
+
+  dispose(): void { this.status.dispose(); }
+  scrollToEnd(): void { this.stuck = true; requestAnimationFrame(() => this.toBottom()); }
+
+  userNote(message: string): void {
+    this.text = null;
+    const item = document.createElement("li");
+    item.className = "stream-item stream-user";
+    const mark = document.createElement("span");
+    mark.className = "turn-prompt";
+    mark.setAttribute("aria-hidden", "true");
+    mark.textContent = "›";
+    const copy = document.createElement("p");
+    copy.textContent = message;
+    item.append(mark, copy);
+    this.stuck = true;
+    this.append(item);
+  }
+
+  setStartedAt(value: string | null | undefined): void { this.status.setStartedAt(value); }
+  setLoading(message: string | null): void { this.status.setLoading(message); this.status.paint(); }
+
+  setStatus(value: string): void {
+    this.status.setStatus(value);
+    this.tools.setStatus(value, this.status.stopped);
+    this.status.paint();
+    if (!this.options.statusLine) this.preserveStopped();
+    this.followBottom();
+  }
+
+  operations(): number { return this.tools.operations(); }
+
+  private handleControl(event: TaskEvent, data: Record<string, unknown> | null): boolean {
+    if (stopEvents.has(event.event_type)) {
+      this.setStatus(event.event_type.includes("PAUSE") ? "PAUSED" : "CANCELLED");
+      return true;
+    }
+    if (event.event_type === "TASK_FINISHED" && data?.status === "CANCELLED") {
+      this.setStatus("CANCELLED");
+      return true;
+    }
+    if (event.event_type !== "TASK_RESUMED" || !this.status.resume()) return false;
+    this.tools.setStatus("RUNNING", false);
+    this.status.paint();
+    return true;
+  }
+
+  handle(event: TaskEvent): void {
     const data = object(event.data);
+    if (this.handleControl(event, data)) return;
     const payload = object(data?.payload) ?? data ?? {};
-    const operation = object(payload.operation);
-    const external = /^mcp__/u.test(presentation.toolName ?? "");
-    const label = external ? "外部工具" : typeof operation?.label === "string" ? operation.label : presentation.toolName ?? "操作";
-    let item = tools.get(presentation.key);
-    if (!item) {
-      text = null;
-      operations += 1;
-      item = document.createElement("li");
-      item.className = "stream-item stream-tool";
-      if (agent !== "main") item.dataset.nested = "true";
-      item.innerHTML = `<button class="tool-head" type="button" aria-expanded="false"></button>
-        <div class="tool-result"><span class="tool-branch" aria-hidden="true">⎿</span><span class="tool-summary"></span></div>
-        <div class="tool-diff" hidden></div><div class="tool-detail" hidden></div>`;
-      const head = item.querySelector<HTMLButtonElement>(".tool-head")!;
-      const name = document.createElement("span");
-      name.className = "tool-label";
-      name.textContent = label;
-      const target = document.createElement("span");
-      target.className = "tool-target";
-      target.textContent = presentation.target ?? "";
-      head.append(bullet(), name, target);
-      head.addEventListener("click", () => {
-        const detail = item!.querySelector<HTMLElement>(".tool-detail")!;
-        detail.hidden = !detail.hidden;
-        head.setAttribute("aria-expanded", String(!detail.hidden));
-      });
-      tools.set(presentation.key, item);
-      append(item);
-    }
-    item.dataset.tone = presentation.tone;
-    const finished = event.event_type === "TOOL_COMPLETED";
-    const summary = typeof payload.summary === "string" ? payload.summary : "";
-    const duration = typeof payload.duration_ms === "number" && payload.duration_ms >= 1000
-      ? ` · ${(payload.duration_ms / 1000).toFixed(1)}s` : "";
-    const result = finished
-      ? `${presentation.tone === "neutral" ? presentation.title : summary || presentation.status || ""}${duration}`
-      : "运行中…";
-    item.querySelector<HTMLElement>(".tool-summary")!.textContent = result || "完成";
-    const detail = item.querySelector<HTMLElement>(".tool-detail")!;
-    detail.replaceChildren();
-    const facts = document.createElement("dl");
-    const rows: [string, string | undefined][] = [
-      ["状态", presentation.status], ["工具", presentation.toolName], ["错误码", presentation.errorCode],
-    ];
-    for (const [term, value] of rows) {
-      if (!value) continue;
-      const dt = document.createElement("dt");
-      const dd = document.createElement("dd");
-      dt.textContent = term;
-      dd.textContent = value;
-      facts.append(dt, dd);
-    }
-    const raw = document.createElement("pre");
-    raw.className = "event-payload";
-    raw.textContent = JSON.stringify(event.data, null, 2);
-    detail.append(facts, raw);
-    // 修改文件成功后，把这次写入的差异直接显示在这一行下面。
-    const callId = typeof payload.tool_call_id === "string" ? payload.tool_call_id : "";
-    if (finished && presentation.toolName === "apply_patch" && presentation.tone === "success" && callId) {
-      const container = item.querySelector<HTMLElement>(".tool-diff")!;
-      void options.loadDiff(callId).then((files) => { if (files.length) renderDiff(container, files); }).catch(() => {});
-    }
-    if (!finished) phase = agent === "main" ? `${label}…` : phase;
-    else if (agent === "main") phase = "思考中";
-  }
-
-  function paintStatus(): void {
-    const active = RUNNING.has(status) || loading !== null;
-    const waiting = status === "PAUSED" || status === "WAITING_FOR_INPUT";
-    const wasHidden = statusLine.hidden;
-    statusLine.hidden = !active && !waiting;
-    if (wasHidden && !statusLine.hidden && stuck) requestAnimationFrame(toBottom);
-    statusLine.dataset.state = waiting ? "waiting" : "running";
-    if (loading !== null) {
-      glyph.textContent = GLYPHS[frame % GLYPHS.length]!;
-      verb.textContent = loading;
-      meta.textContent = "";
+    const agent = typeof data?.agent_id === "string" ? data.agent_id : "main";
+    const nested = agent !== "main";
+    if (this.status.stopped) {
+      if (event.event_type === "TOOL_COMPLETED") this.tools.handle(event, agent);
       return;
     }
-    if (status === "PAUSED") { glyph.textContent = "‖"; verb.textContent = "已暂停"; meta.textContent = "可以补充要求、修改目标或继续执行"; return; }
-    if (status === "WAITING_FOR_INPUT") { glyph.textContent = "?"; verb.textContent = "等待你的回答"; meta.textContent = "在下方选择或填写"; return; }
-    glyph.textContent = GLYPHS[frame % GLYPHS.length]!;
-    verb.textContent = status === "PAUSE_REQUESTED" ? "正在暂停…" : status === "CANCELLATION_REQUESTED" ? "正在停止…"
-      : status === "QUEUED" || status === "SUBMITTING" ? "等待执行…" : `${phase.replace(/…$/u, "")}…`;
-    meta.textContent = `${formatElapsed(Date.now() - startedAt)}${status === "RUNNING" ? " · 点右下角 ■ 可暂停" : ""}`;
+    switch (event.event_type) {
+      case "MODEL_TEXT_DELTA":
+        if (isMainAgentText(data) && typeof payload.text === "string") {
+          this.status.setPhase("回答中");
+          this.appendText(payload.text);
+        }
+        return;
+      case "MODEL_REQUESTED":
+        this.status.setPhase(nested ? (agent.startsWith("acceptance-") ? "独立验收中" : "子 Agent 调查中") : "思考中");
+        if (!nested) this.text = null;
+        return;
+      case "MODEL_RESPONDED": return;
+      case "TOOL_REQUESTED":
+      case "TOOL_COMPLETED": this.tools.handle(event, agent); return;
+      case "AGENT_COMPLETED":
+      case "AGENT_FAILED": if (!nested) return;
+    }
+    const presentation = eventPresentation(event);
+    if (presentation && !presentation.remove) this.note(presentation.title, presentation.tone, nested);
   }
 
-  const timer = options.statusLine ? window.setInterval(() => {
-    if (statusLine.hidden) return;
-    frame += 1;
-    paintStatus();
-  }, 150) : 0;
-  if (timer) window.addEventListener("beforeunload", () => window.clearInterval(timer), { once: true });
+  finish(input: FinishInput): void {
+    this.status.setLoading(null);
+    if (input.cancelled || this.status.stopped) { this.setStatus("CANCELLED"); return; }
+    if (input.answer) {
+      if (!this.text || !this.options.stream.lastElementChild?.classList.contains("stream-text")) this.text = this.textBlock();
+      this.text.raw = input.answer;
+      renderMarkdown(this.text.body, this.text.raw);
+      this.followBottom();
+    }
+    if (input.failure) this.showError(input.failure);
+    this.setStatus("IDLE");
+  }
 
-  return {
-    reset(): void {
-      stream.replaceChildren();
-      tools.clear();
-      text = null;
-      operations = 0;
-      phase = "思考中";
-      loading = null;
-      startedAt = Date.now();
-      stuck = follow;
-      paintStatus();
-      if (follow) requestAnimationFrame(toBottom);
-    },
-    /** 交出这一轮已经画好的过程（节点连同点击展开等行为一起移走），用于保留到旧轮次里。 */
-    detach(): Node[] {
-      const nodes = [...stream.childNodes];
-      stream.replaceChildren();
-      tools.clear();
-      text = null;
-      return nodes;
-    },
-    /** 回放旧轮次用完后释放计时器。 */
-    dispose(): void { if (timer) window.clearInterval(timer); },
-    /** 载入历史轮次后回到底部，显示最新的一轮。 */
-    scrollToEnd(): void { stuck = true; requestAnimationFrame(toBottom); },
-    /** 任务进行中你补充的要求，像终端里那样显示成一行“› …”。 */
-    userNote(message: string): void {
-      text = null;
-      const item = document.createElement("li");
-      item.className = "stream-item stream-user";
-      const mark = document.createElement("span");
-      mark.className = "turn-prompt";
-      mark.setAttribute("aria-hidden", "true");
-      mark.textContent = "›";
-      const copy = document.createElement("p");
-      copy.textContent = message;
-      item.append(mark, copy);
-      stuck = true;
-      append(item);
-    },
-    /** 恢复运行中的任务时用任务开始时间计时。 */
-    setStartedAt(value: string | null | undefined): void {
-      const parsed = value ? Date.parse(value) : NaN;
-      if (Number.isFinite(parsed)) startedAt = parsed;
-    },
-    setLoading(message: string | null): void { loading = message; paintStatus(); },
-    setStatus(value: string): void {
-      status = value;
-      // 等你批准或回答时，正在申请的工具行写“等待你回应”，而不是“运行中”。
-      for (const item of tools.values()) {
-        if (item.dataset.tone !== "running") continue;
-        item.querySelector<HTMLElement>(".tool-summary")!.textContent =
-          value === "WAITING_FOR_INPUT" ? "等待你回应…" : value === "PAUSED" ? "已暂停" : "运行中…";
-      }
-      paintStatus();
-      // 问答卡片和暂停面板随状态出现，同步滚到底，不依赖下一帧的尺寸回调。
-      if (stuck) toBottom();
-    },
-    operations: () => operations,
-    handle(event: TaskEvent): void {
-      const data = object(event.data);
-      const payload = object(data?.payload) ?? data ?? {};
-      const agent = typeof data?.agent_id === "string" ? data.agent_id : "main";
-      const nested = agent !== "main";
-      switch (event.event_type) {
-        case "MODEL_TEXT_DELTA":
-          if (isMainAgentText(data) && typeof payload.text === "string") { phase = "回答中"; appendText(payload.text); }
-          return;
-        case "MODEL_REQUESTED":
-          phase = nested ? (agent.startsWith("acceptance-") ? "独立验收中" : "子 Agent 调查中") : "思考中";
-          // 主 Agent 每次新的回答另起一段，不接在上一次回答的末尾。
-          if (!nested) text = null;
-          return;
-        case "MODEL_RESPONDED":
-          return;
-        case "TOOL_REQUESTED":
-        case "TOOL_COMPLETED":
-          toolRow(event, agent);
-          return;
-        case "AGENT_COMPLETED":
-        case "AGENT_FAILED":
-          if (!nested) return;
-          break;
-      }
-      const presentation = eventPresentation(event);
-      if (presentation && !presentation.remove) note(presentation.title, presentation.tone, nested);
-    },
-    /** 任务结束：以服务端保存的最终回答为准，失败时追加一条错误。 */
-    finish(input: FinishInput): void {
-      loading = null;
-      if (input.answer) {
-        const last = stream.lastElementChild;
-        if (!text || !last?.classList.contains("stream-text")) text = textBlock();
-        text.raw = input.answer;
-        // 最终回答立即渲染，不等下一帧：窗口在后台时动画帧会暂停。
-        renderMarkdown(text.body, text.raw);
-        if (stuck) toBottom();
-      }
-      if (input.cancelled) note("已停止。记录已保存，可以在同一对话继续。", "neutral", false);
-      else if (input.failure) this.showError(input.failure);
-      status = "IDLE";
-      paintStatus();
-    },
-    showError(message: string): void {
-      text = null;
-      loading = null;
-      const item = document.createElement("li");
-      item.className = "stream-item stream-error";
-      const body = document.createElement("div");
-      const title = document.createElement("strong");
-      title.textContent = "任务未完成";
-      const copy = document.createElement("p");
-      copy.textContent = message;
-      body.append(title, copy);
-      item.append(bullet(), body);
-      append(item);
-      paintStatus();
-    },
-  };
+  showError(message: string): void {
+    this.text = null;
+    this.status.setLoading(null);
+    const item = document.createElement("li");
+    item.className = "stream-item stream-error";
+    const body = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = "任务未完成";
+    const copy = document.createElement("p");
+    copy.textContent = message;
+    body.append(title, copy);
+    item.append(streamBullet(), body);
+    this.append(item);
+    this.status.paint();
+  }
 }
 
+export function createStreamView(options: StreamViewOptions) { return new StreamRenderer(options); }
 export type StreamView = ReturnType<typeof createStreamView>;

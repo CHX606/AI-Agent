@@ -1,0 +1,25 @@
+.workspace-chooser .choice-trigger .choice-value {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-chooser .choice-popover {
+  max-height: min(340px, calc(100vh - 160px));
+  overflow-y: auto;
+}
+
+.workspace-chooser .choice-item .choice-text small {
+  overflow-wrap: anywhere;
+}
+
+.composer-context:has(> .workspace-chooser) {
+  position: relative;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+/* 加入工作区后，权限菜单以整组控件定位，避免从靠右的按钮展开时撑宽输入框。 */
+.composer-context:has(> .workspace-chooser) #permission-mode {
+  position: static;
+}

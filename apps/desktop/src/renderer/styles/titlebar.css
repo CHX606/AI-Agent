@@ -1,0 +1,29 @@
+.window-titlebar {
+  display: flex;
+  height: var(--titlebar-height);
+  align-items: center;
+  gap: 8px;
+  /* 右侧约 140px 是系统的最小化、最大化、关闭按钮。 */
+  padding: 0 150px 0 12px;
+  background: var(--bg-app);
+  color: var(--text-muted);
+  font-size: 12px;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.window-titlebar-mark {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--brand);
+  color: #fff;
+  font: 700 10px/1 var(--font-sans);
+}
+
+.window-titlebar-title {
+  color: var(--text-soft);
+  font-weight: 500;
+}

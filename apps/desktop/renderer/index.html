@@ -101,60 +101,7 @@
             <button id="more-sessions" class="button-secondary" type="button" hidden>加载更早对话</button>
           </section>
 
-          <!-- 个人中心：左下角头像，点开向上弹出设置菜单（参照 Claude 桌面版）。 -->
-          <div class="sidebar-bottom">
-            <div id="profile-menu" class="profile-menu" role="menu" aria-label="个人中心" hidden>
-              <div class="profile-menu-head">
-                <span class="profile-avatar" aria-hidden="true">B</span>
-                <span class="profile-menu-copy">
-                  <strong class="profile-name">本机用户</strong>
-                  <small title="对话记录和设置只保存在这台电脑">本地运行</small>
-                </span>
-              </div>
-              <div class="profile-menu-items">
-                <details id="settings-panel" class="settings-panel">
-                  <summary>
-                    <span class="settings-summary-copy">
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zM19 12a7 7 0 0 0-.12-1.28l2-1.55-2-3.46-2.45 1a7 7 0 0 0-2.2-1.28L13.88 3h-4l-.35 2.43a7 7 0 0 0-2.2 1.28l-2.45-1-2 3.46 2 1.55A7 7 0 0 0 4.76 12c0 .44.04.87.12 1.28l-2 1.55 2 3.46 2.45-1a7 7 0 0 0 2.2 1.28L9.88 21h4l.35-2.43a7 7 0 0 0 2.2-1.28l2.45 1 2-3.46-2-1.55c.08-.41.12-.84.12-1.28z" />
-                      </svg>
-                      连接设置
-                    </span>
-                    <span id="connection-state-label" class="settings-status-label"></span>
-                  </summary>
-                  <div class="settings-content">
-                    <label for="gateway" class="section-label">Gateway</label>
-                    <div class="field-row">
-                      <input
-                        id="gateway"
-                        value="http://127.0.0.1:3000"
-                        spellcheck="false"
-                        autocomplete="off"
-                      />
-                      <button id="health" class="button-secondary secondary" type="button">检查</button>
-                    </div>
-                    <span id="connection" class="connection-text">尚未连接</span>
-                  </div>
-                </details>
-              </div>
-              <div class="profile-menu-divider"></div>
-              <button id="profile-theme" class="sidebar-model-settings" type="button">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.4 8.4 0 0 1 8.8 4 8.4 8.4 0 1 0 20 15.2z" /></svg>
-                <span>切换为暗色主题</span>
-              </button>
-              <div class="profile-menu-divider"></div>
-              <p class="profile-version">Bit Agent <span id="app-version">1.0</span></p>
-            </div>
-            <button id="profile-button" class="profile-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">
-              <span class="profile-avatar" aria-hidden="true">B</span>
-              <span class="profile-copy">
-                <strong class="profile-name">本机用户</strong>
-                <small>Bit Agent <span class="app-version">1.0</span></small>
-              </span>
-              <span id="connection-dot" class="settings-status" title="本地服务连接状态" aria-hidden="true"></span>
-              <svg class="profile-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 14 5-5 5 5" /></svg>
-            </button>
-          </div>
+          <!-- bit-agent:profile -->
         </div>
 
         <div id="repository-sidebar-pane" class="sidebar-pane repository-sidebar-pane" hidden>
@@ -269,75 +216,17 @@
               <div class="composer-actions">
                 <!-- 取消任务的内部按钮，不显示；“立即停止”和“结束这一轮”都通过它取消。 -->
                 <button id="cancel" class="button-danger danger" type="button" disabled hidden>停止</button>
-                <!-- 唯一的主按钮（参照 Codex / Claude Code）：发送 ⏎ → 运行中（点击暂停）→ 已暂停 ▶（点击继续）。 -->
-                <button id="run" class="run-button" type="button" data-state="send" aria-label="发送"></button>
+                <!-- 唯一主按钮：发送 → 运行中点击停止。 -->
+                <button id="run" class="run-button" type="button" data-state="send" data-empty="true" aria-label="发送" disabled>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 5v6a3 3 0 0 1-3 3H6"/><path d="m10 10-4 4 4 4"/></svg>
+                </button>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <aside class="sidebar-right" aria-label="任务检查器">
-        <div id="inspector-resize" class="inspector-resize" aria-hidden="true"></div>
-        <header class="right-header">
-          <div>
-            <span class="eyebrow">INSPECTOR</span>
-            <h2>任务详情</h2>
-          </div>
-          <button id="inspector-close" class="icon-button" type="button" aria-label="关闭检查器">×</button>
-        </header>
-
-        <div class="right-scroll-container">
-          <section class="inspector-section quality-section">
-            <header class="inspector-heading">
-              <h3>验证</h3>
-            </header>
-            <div class="metrics-grid" aria-label="质量检查">
-              <div class="metric-card">
-                <span class="metric-icon" aria-hidden="true">◉</span>
-                <span class="metric-label">基础测试</span>
-                <strong id="tests-state" class="metric-value">-</strong>
-              </div>
-              <div class="metric-card">
-                <span class="metric-icon" aria-hidden="true">◇</span>
-                <span class="metric-label">质量检查</span>
-                <strong id="lint-state" class="metric-value">-</strong>
-              </div>
-              <div class="metric-card">
-                <span class="metric-icon" aria-hidden="true">◎</span>
-                <span class="metric-label">独立验收</span>
-                <strong id="acceptance-state" class="metric-value">-</strong>
-              </div>
-              <div class="metric-card">
-                <span class="metric-icon" aria-hidden="true">↻</span>
-                <span class="metric-label">工具轮数</span>
-                <strong id="rounds" class="metric-value">-</strong>
-              </div>
-              <div class="metric-card" id="usage-card">
-                <span class="metric-icon" aria-hidden="true">≈</span>
-                <span class="metric-label">模型用量</span>
-                <strong id="usage-state" class="metric-value">-</strong>
-              </div>
-            </div>
-            <ul id="verification-notes" class="verification-notes" aria-label="验证说明" hidden></ul>
-          </section>
-
-          <section class="inspector-section">
-            <header class="inspector-heading">
-              <h3>修改文件</h3>
-            </header>
-            <div id="changed-files" class="changed-files empty-copy">无文件修改</div>
-          </section>
-
-          <details class="inspector-section raw-section">
-            <summary class="inspector-heading">
-              <h3>原始结果</h3>
-              <span aria-hidden="true">⌄</span>
-            </summary>
-            <pre id="raw-result" class="raw">尚无结果</pre>
-          </details>
-        </div>
-      </aside>
+      <!-- bit-agent:inspector -->
 
       <section id="repository-view" class="repository-view" aria-label="代码仓库浏览器" hidden>
         <!-- VS Code 式编辑区：打开的文件标签、路径、带行号和高亮的只读代码、底部状态栏。 -->

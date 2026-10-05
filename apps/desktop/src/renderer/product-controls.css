@@ -26,7 +26,6 @@
 .diagnostic-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .sidebar-model-settings > svg { width: 15px; height: 15px; flex: none; }
 .sidebar-model-settings .settings-chevron { width: 12px; height: 12px; margin-left: auto; color: var(--text-muted); }
-.rail-model-settings { display: none; }
 .review-changes-button {
   flex: none;
   min-height: 25px;
@@ -135,12 +134,6 @@
 .mcp-form { display: grid; gap: 14px; margin-top: 12px; }
 .mcp-form textarea { width: 100%; padding: 8px 11px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--bg-main); color: var(--text); font: 12px/1.6 var(--font-mono); resize: vertical; }
 .mcp-form-actions { display: flex; justify-content: flex-end; }
-.docker-notice { display: flex; align-items: center; gap: 8px; width: min(820px, 100%); margin: 0 auto 8px; padding: 5px 6px 5px 12px; border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border)); border-radius: 8px; background: var(--amber-soft); color: var(--text-soft); font-size: 12px; line-height: 1.55; }
-.docker-notice[hidden] { display: none; }
-.docker-notice > span { flex: 1; min-width: 0; }
-.docker-dismiss { display: grid; flex: none; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-muted); cursor: pointer; }
-.docker-dismiss:hover { background: color-mix(in srgb, var(--amber) 18%, transparent); color: var(--text); }
-.docker-dismiss svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .model-field p { margin-top: 6px; color: var(--text-muted); font-size: 12px; line-height: 1.65; }
 .model-key-state { padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-size: 10px; font-weight: 400; }
 .model-settings-footer { display: flex; align-items: center; gap: 8px; padding-top: 18px; border-top: 1px solid var(--border); }
@@ -185,7 +178,6 @@
 }
 body[data-busy="true"] .composer-context:has(.permission-control) .composer-tip { display: none; }
 @media (max-width: 720px) {
-  .rail-model-settings { display: grid; }
   .product-dialog, .product-dialog[data-view="review"] { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); }
   .product-dialog-header { padding: 18px 16px 14px; }
   .product-dialog-body { padding: 16px; }

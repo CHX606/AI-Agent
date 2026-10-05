@@ -1,46 +1,90 @@
-/** 文件树和标签页用的文件类型图标：参照 VS Code Seti 主题，用彩色小字标出类型。 */
+/// <reference types="vite/client" />
+/** Offline SVG assets and associations from Material Icon Theme 5.39.0 (MIT). */
+import themeText from "./repository/material-icons/theme.json?raw";
 
-interface FileIcon { glyph: string; color: string }
+interface Associations {
+  fileNames: Record<string, string>;
+  fileExtensions: Record<string, string>;
+  folderNames: Record<string, string>;
+  folderNamesExpanded: Record<string, string>;
+  file: string;
+  folder: string;
+  folderExpanded: string;
+}
+interface IconTheme {
+  manifest: Associations & { light: Partial<Associations> };
+  icons: Record<string, string>;
+}
+export interface FileIcon { id: string; svg: string }
+const theme = JSON.parse(themeText) as IconTheme;
 
-const ICONS: Record<string, FileIcon> = {
-  py: { glyph: "py", color: "#4b8bbe" }, pyi: { glyph: "py", color: "#4b8bbe" },
-  ts: { glyph: "TS", color: "#3178c6" }, tsx: { glyph: "TS", color: "#3178c6" }, mts: { glyph: "TS", color: "#3178c6" }, cts: { glyph: "TS", color: "#3178c6" },
-  js: { glyph: "JS", color: "#c9a906" }, mjs: { glyph: "JS", color: "#c9a906" }, cjs: { glyph: "JS", color: "#c9a906" }, jsx: { glyph: "JS", color: "#c9a906" },
-  json: { glyph: "{}", color: "#c49a1a" }, jsonc: { glyph: "{}", color: "#c49a1a" },
-  md: { glyph: "M↓", color: "#519aba" }, markdown: { glyph: "M↓", color: "#519aba" },
-  html: { glyph: "<>", color: "#e37933" }, htm: { glyph: "<>", color: "#e37933" }, vue: { glyph: "V", color: "#41b883" },
-  xml: { glyph: "<>", color: "#8dc149" }, svg: { glyph: "<>", color: "#a074c4" },
-  css: { glyph: "#", color: "#519aba" }, scss: { glyph: "#", color: "#f55385" }, less: { glyph: "#", color: "#519aba" },
-  go: { glyph: "go", color: "#00add8" }, rs: { glyph: "rs", color: "#dea584" }, java: { glyph: "J", color: "#cc3e44" },
-  kt: { glyph: "K", color: "#a97bff" }, c: { glyph: "C", color: "#519aba" }, h: { glyph: "h", color: "#a074c4" },
-  cpp: { glyph: "C+", color: "#519aba" }, cc: { glyph: "C+", color: "#519aba" }, hpp: { glyph: "h", color: "#a074c4" },
-  cs: { glyph: "C#", color: "#7e57c2" }, sql: { glyph: "db", color: "#f55385" },
-  sh: { glyph: ">_", color: "#6a9955" }, bash: { glyph: ">_", color: "#6a9955" }, ps1: { glyph: ">_", color: "#3e8ed0" },
-  yml: { glyph: "≡", color: "#a074c4" }, yaml: { glyph: "≡", color: "#a074c4" },
-  toml: { glyph: "⚙", color: "#7f8c8d" }, ini: { glyph: "⚙", color: "#7f8c8d" }, cfg: { glyph: "⚙", color: "#7f8c8d" },
-  env: { glyph: "⚙", color: "#c9a906" }, lock: { glyph: "≡", color: "#7f8c8d" },
-  txt: { glyph: "≡", color: "#8b8b8b" }, log: { glyph: "≡", color: "#8b8b8b" },
-  png: { glyph: "▣", color: "#a074c4" }, jpg: { glyph: "▣", color: "#a074c4" }, jpeg: { glyph: "▣", color: "#a074c4" }, gif: { glyph: "▣", color: "#a074c4" },
-};
-const DEFAULT_ICON: FileIcon = { glyph: "≡", color: "#8b8b8b" };
-
-export function fileIcon(name: string): FileIcon {
-  const lower = name.toLowerCase();
-  if (lower === "dockerfile" || lower.startsWith("dockerfile.")) return { glyph: "D", color: "#0db7ed" };
-  if (lower.startsWith(".git")) return { glyph: "⎇", color: "#e44d26" };
-  if (lower.startsWith(".env")) return ICONS.env!;
-  if (lower.startsWith("readme")) return { glyph: "ⓘ", color: "#519aba" };
-  const extension = lower.includes(".") ? lower.split(".").pop()! : "";
-  return ICONS[extension] ?? DEFAULT_ICON;
+function basename(path: string): string {
+  return path.split(/[\\/]/u).at(-1)?.toLowerCase() ?? "";
 }
 
-/** 生成图标元素：彩色小字，宽度固定，文件树和标签页共用。 */
-export function fileIconElement(name: string): HTMLSpanElement {
-  const { glyph, color } = fileIcon(name);
+function association(name: string, light: boolean): string {
+  const { manifest } = theme;
+  const named = (light ? manifest.light.fileNames?.[name] : undefined) ?? manifest.fileNames[name];
+  if (named) return named;
+  const parts = name.split(".");
+  for (let index = 1; index < parts.length; index += 1) {
+    const extension = parts.slice(index).join(".");
+    const found = (light ? manifest.light.fileExtensions?.[extension] : undefined) ?? manifest.fileExtensions[extension];
+    if (found) return found;
+  }
+  if (name.startsWith(".env.")) return manifest.fileExtensions.env ?? manifest.file;
+  return manifest.file;
+}
+
+function asset(id: string, fallback: string): FileIcon {
+  const resolved = theme.icons[id] ? id : fallback;
+  return { id: resolved, svg: theme.icons[resolved]! };
+}
+
+export function fileIcon(name: string): FileIcon {
+  return asset(association(basename(name), false), theme.manifest.file);
+}
+
+function directoryIcon(name: string, expanded: boolean, light: boolean): FileIcon {
+  const { manifest } = theme;
+  const key = expanded ? "folderNamesExpanded" : "folderNames";
+  const directory = basename(name);
+  const selected = (light ? manifest.light[key]?.[directory] : undefined) ?? manifest[key][directory];
+  const fallback = expanded ? manifest.folderExpanded : manifest.folder;
+  return asset(selected ?? fallback, fallback);
+}
+
+export function folderIcon(name: string, expanded = false): FileIcon {
+  return directoryIcon(name, expanded, false);
+}
+
+function imageFor(icon: FileIcon, className: string): HTMLImageElement {
+  const image = document.createElement("img");
+  image.className = className;
+  image.src = `data:image/svg+xml,${encodeURIComponent(icon.svg)}`;
+  image.alt = "";
+  image.draggable = false;
+  image.width = image.height = 16;
+  return image;
+}
+
+function iconElement(primary: FileIcon, light: FileIcon): HTMLSpanElement {
   const icon = document.createElement("span");
   icon.className = "file-icon";
+  icon.dataset.icon = primary.id;
   icon.setAttribute("aria-hidden", "true");
-  icon.style.color = color;
-  icon.textContent = glyph;
+  icon.append(imageFor(primary, "file-icon-default"));
+  if (light.id !== primary.id) {
+    icon.classList.add("has-light-icon");
+    icon.append(imageFor(light, "file-icon-light"));
+  }
   return icon;
+}
+
+export function fileIconElement(name: string): HTMLSpanElement {
+  return iconElement(fileIcon(name), asset(association(basename(name), true), theme.manifest.file));
+}
+
+export function folderIconElement(name: string, expanded = false): HTMLSpanElement {
+  return iconElement(folderIcon(name, expanded), directoryIcon(name, expanded, true));
 }

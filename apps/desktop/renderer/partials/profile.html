@@ -1,0 +1,26 @@
+          <!-- 个人中心：左下角头像，点开向上弹出设置菜单（参照 Claude 桌面版）。 -->
+          <div class="sidebar-bottom">
+            <div id="profile-menu" class="profile-menu" role="menu" aria-label="个人中心" hidden>
+              <div class="profile-menu-head">
+                <span class="profile-avatar" aria-hidden="true">B</span>
+                <span class="profile-menu-copy">
+                  <strong class="profile-name">本机用户</strong>
+                </span>
+              </div>
+              <div class="profile-menu-items">
+                <!-- 模型、执行、外部工具、记忆与诊断设置在此锚点前动态插入。 -->
+                <span id="settings-panel" hidden></span>
+              </div>
+              <div class="profile-menu-divider"></div>
+              <p class="profile-version">Bit Agent <span id="app-version">1.0</span></p>
+            </div>
+            <button id="profile-button" class="profile-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">
+              <span class="profile-avatar" aria-hidden="true">B</span>
+              <span class="profile-copy">
+                <strong class="profile-name">本机用户</strong>
+                <small>Bit Agent <span class="app-version">1.0</span></small>
+              </span>
+              <span id="connection-dot" class="settings-status" title="本地服务连接状态" aria-hidden="true"></span>
+              <svg class="profile-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 14 5-5 5 5" /></svg>
+            </button>
+          </div>

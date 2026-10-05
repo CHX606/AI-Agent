@@ -1,0 +1,110 @@
+.markdown-body > * + * {
+  margin-top: 10px;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+}
+
+.markdown-body h1 {
+  font-size: 20px;
+}
+
+.markdown-body h2 {
+  font-size: 17px;
+}
+
+.markdown-body h3 {
+  font-size: 15px;
+}
+
+.markdown-body p,
+.markdown-body li {
+  color: var(--text-soft);
+  line-height: 1.72;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 21px;
+}
+
+.markdown-body li + li {
+  margin-top: 3px;
+}
+
+.markdown-body code:not(.code-block code) {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bg-code);
+  color: var(--inline-code-text);
+  font: 0.9em var(--font-mono);
+}
+
+.markdown-body blockquote {
+  padding-left: 11px;
+  border-left: 2px solid var(--blockquote-border);
+  color: var(--text-muted);
+}
+
+.code-block {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-code);
+}
+
+.code-language {
+  display: block;
+  padding: 5px 9px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font: 11px var(--font-mono);
+  text-transform: uppercase;
+}
+
+.code-block pre {
+  max-height: 460px;
+  overflow: auto;
+  padding: 10px 11px;
+}
+
+.code-block code {
+  color: var(--text-soft);
+  font: 12px/1.65 var(--font-mono);
+  white-space: pre;
+}
+
+.diff-add {
+  margin: 0 -10px;
+  padding: 0 10px;
+  background: var(--diff-add-bg);
+  color: var(--diff-add-text);
+}
+
+.diff-remove {
+  margin: 0 -10px;
+  padding: 0 10px;
+  background: var(--diff-remove-bg);
+  color: var(--diff-remove-text);
+}
+
+.diff-hunk {
+  margin: 0 -10px;
+  padding: 0 10px;
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.diff-context,
+.payload-line {
+  color: inherit;
+}
+
+/* Scrollbars and responsive layout */

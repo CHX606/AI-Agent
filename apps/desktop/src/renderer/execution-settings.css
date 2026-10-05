@@ -1,9 +1,4 @@
 /* 使用 Web Awesome 的交互、焦点管理和响应式弹窗，仅映射现有产品主题。 */
-.execution-settings-compact svg {
-  display: block; width: 15px; height: 15px; fill: none; stroke: currentColor;
-  stroke-width: 1.7; stroke-linecap: round;
-}
-.execution-settings-compact { display: none; }
 .execution-settings-dialog { --width: 540px; --spacing: 24px; --backdrop-filter: blur(3px); }
 .execution-settings-dialog::part(dialog) {
   border: 1px solid var(--border-strong); border-radius: 12px;
@@ -27,7 +22,5 @@
 .execution-settings-footer { display: flex; width: 100%; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 #execution-settings-reset { margin-right: auto; }
 @media (max-width: 720px) {
-  .execution-settings-compact { display: block; }
-  .execution-settings-compact::part(base) { width: 32px; min-height: 34px; padding: 0; color: var(--text-soft); }
   .execution-settings-dialog { --spacing: 16px; }
 }

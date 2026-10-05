@@ -1,0 +1,136 @@
+.repository-brand-text {
+  min-width: 0;
+}
+
+.repository-brand-text p {
+  max-width: 155px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repository-tree-section {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  margin-top: 17px;
+}
+
+.repository-tree-state {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 10px;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.65;
+  text-align: center;
+}
+
+.repository-tree-state[data-tone="error"] {
+  color: var(--red);
+}
+
+.repository-tree {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 1px 0 8px;
+}
+
+.repository-entry-group {
+  width: max-content;
+  min-width: 100%;
+}
+
+.repository-entry-children {
+  padding-left: 13px;
+}
+
+.repository-entry-loading,
+.repository-tree-notice {
+  padding: 6px 8px 6px 31px;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.repository-entry-loading.is-error {
+  color: var(--red);
+}
+
+.repository-tree-notice {
+  padding: 9px 8px;
+  text-align: center;
+}
+
+.repository-entry {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  height: 29px;
+  grid-template-columns: 12px 16px minmax(0, 1fr);
+  gap: 5px;
+  align-items: center;
+  padding: 0 7px 0 5px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-soft);
+  text-align: left;
+}
+
+.repository-entry:hover,
+.repository-entry:focus-visible {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.repository-entry[data-selected="true"] {
+  background: var(--bg-pressed);
+  color: var(--text);
+}
+
+.repository-entry-arrow {
+  display: grid;
+  width: 12px;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.repository-entry[data-open="true"] .repository-entry-arrow {
+  transform: rotate(90deg);
+}
+
+.repository-entry[data-kind="file"] .repository-entry-arrow {
+  visibility: hidden;
+}
+
+.repository-entry-icon {
+  display: grid;
+  width: 16px;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.repository-entry-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.repository-entry[data-kind="directory"] .repository-entry-icon {
+  color: var(--brand);
+}
+
+.repository-entry-name {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
