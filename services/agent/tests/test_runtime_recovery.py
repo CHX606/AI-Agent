@@ -3,6 +3,7 @@
 import asyncio
 import json
 import sys
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -18,6 +19,7 @@ from bit_agent.runtime.application.interaction import (
     UserQuestion,
 )
 from bit_agent.runtime.bootstrap import create_runtime
+from bit_agent.runtime.domain.clock import AcceptedClock, accepted_at
 from bit_agent.runtime.infrastructure.storage import LocalStorage
 
 
@@ -358,7 +360,10 @@ async def test_answer_acknowledgement_rolls_back_with_context(tmp_path, monkeypa
         storage.close()
 
 
-async def test_recovered_answers_keep_order_with_later_goal_replacement(tmp_path):
+async def test_recovered_answers_keep_order_with_later_goal_replacement(tmp_path, monkeypatch):
+    # 固定时钟让回答和改目标拿到同一时刻，复现 Windows 上 15 毫秒时钟精度造成的并列。
+    instant = datetime(2026, 10, 4, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(accepted_at, "now", lambda: instant)
     storage = LocalStorage(tmp_path / "data")
     await storage.call("create", task_record(tmp_path))
     control = TaskInteraction(storage, "task")
@@ -387,6 +392,15 @@ async def test_recovered_answers_keep_order_with_later_goal_replacement(tmp_path
     finally:
         control.close()
         storage.close()
+
+
+def test_accepted_clock_never_repeats_or_goes_backwards():
+    times = iter(datetime(2026, 10, 4, 12, 0, second, tzinfo=UTC) for second in (5, 5, 5, 4, 6))
+    clock = AcceptedClock(lambda: next(times))
+    stamps = [clock() for _ in range(5)]
+    assert stamps == sorted(stamps) and len(set(stamps)) == 5
+    assert stamps[1] == "2026-10-04T12:00:05.000001+00:00"
+    assert stamps[-1] == "2026-10-04T12:00:06.000000+00:00"
 
 
 @pytest.mark.parametrize("confirmation,operation", [(True, None), (False, {"title": "write"})])

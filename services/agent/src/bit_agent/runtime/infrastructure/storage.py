@@ -14,6 +14,7 @@ from bit_agent.context.manager import CONTEXT_SUMMARY_PREFIX
 from bit_agent.memory.models import TestStatus, WorkingMemory
 from bit_agent.observability.diagnostics import failure, public_error, safe_fields
 from bit_agent.runtime.application.ports import StoragePort
+from bit_agent.runtime.domain.clock import accepted_at
 
 
 def now() -> str:
@@ -212,7 +213,7 @@ class LocalStorage:
                 "id": "answer_" + question["id"],
                 "kind": "supplement",
                 "text": f"用户对问题「{question['question']}」的回答：{answer['text']}",
-                "accepted_at": now(),
+                "accepted_at": accepted_at(),
             }
             self._db.execute(
                 "INSERT OR IGNORE INTO user_answers(question_id, task_id, data) VALUES (?, ?, ?)",

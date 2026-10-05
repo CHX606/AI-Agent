@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from bit_agent.runtime.application.capacity import ExecutionSlot
 from bit_agent.runtime.application.ports import StoragePort
+from bit_agent.runtime.domain.clock import accepted_at
 from bit_agent.runtime.domain.errors import InteractionError
 
 
@@ -222,7 +223,7 @@ class TaskInteraction:
                     "id": uuid4().hex,
                     "kind": action,
                     "text": text.strip(),
-                    "accepted_at": datetime.now(UTC).isoformat(),
+                    "accepted_at": accepted_at(),
                 }
                 result = await self._state(
                     "RUNNING" if task["started_at"] else "QUEUED",
