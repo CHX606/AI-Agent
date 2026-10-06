@@ -109,12 +109,23 @@ svg {
   display: none;
 }
 
-.shell[data-view="repository"] .browser-pane {
-  display: none;
-}
-
 .shell[data-view="repository"] {
   grid-template-columns: var(--sidebar-width) minmax(480px, 1fr);
+}
+
+/* 代码仓库页里浏览器也可以开着，同样占右侧一列（编辑区平时横跨到最后一列，这时只占第二列）。 */
+.shell[data-view="repository"][data-browser-open="true"] {
+  grid-template-columns: var(--sidebar-width) minmax(420px, 1fr)
+    min(var(--browser-width, 520px), calc(100vw - var(--sidebar-width) - 420px));
+}
+
+.shell[data-view="repository"][data-browser-open="true"] .repository-view {
+  grid-column: 2;
+}
+
+.shell[data-view="repository"] .browser-pane {
+  grid-column: 3;
+  grid-row: 1;
 }
 
 .shell[data-view="repository"] .main-center,

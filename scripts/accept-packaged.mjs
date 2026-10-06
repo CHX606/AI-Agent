@@ -10,7 +10,7 @@ import { markdownFixture, verifyCopy, verifyMarkdown } from "../apps/desktop/tes
 import { verifyRewind } from "../apps/desktop/test/rewind-packaged.mjs";
 import { verifySidebarCollapse, verifySidebarResize, verifyWorkspaceOrder } from "../apps/desktop/test/workspace-sidebar-packaged.mjs";
 import { verifyTerminal } from "../apps/desktop/test/terminal-packaged.mjs";
-import { verifyBrowser } from "../apps/desktop/test/browser-packaged.mjs";
+import { verifyBrowser, verifyBrowserFullscreen } from "../apps/desktop/test/browser-packaged.mjs";
 import { evaluateMain, verifyImageInput } from "../apps/desktop/test/image-input-packaged.mjs";
 
 const executable = resolve(process.argv[2] ?? "");
@@ -680,13 +680,16 @@ try {
     main:expression=>evaluateMain(mainInspectorUrl,expression),
     captureLayouts:stage=>captureLayouts(command,evaluate,stage)});
   const rewind = await verifyRewind({ evaluate, check, requests });
+  // 网页全屏会把隐藏的验收窗口显示出来，之后截图不稳定，所以放在最后。
+  const browserFullscreen = await verifyBrowserFullscreen({ command, evaluate, check, main:expression=>evaluateMain(mainInspectorUrl,expression) });
+  console.log("BROWSER_FULLSCREEN_PASSED");
   assert(await evaluate("!document.querySelector('#raw-result,.raw-section,.tool-raw,.event-payload')"), "正式界面仍包含原始结果或原始事件展示");
   await close();
   writeFileSync(join(directory, "result.json"), JSON.stringify({ passed: true, executable,
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,
     allToolsCollapsible: true, noEmptyTextRows: true, userMessagesRightAligned: true, agentMessagesLeftAligned: true,
     messageBackgroundMatchesTheme: true, longMultilineMessagesContained: true, sidebarOrder,
-    markdownRendering, workspaceOrder, sidebarResize, sidebarCollapse, terminal, browser, imageInput, rewind,
+    markdownRendering, workspaceOrder, sidebarResize, sidebarCollapse, terminal, browser, browserFullscreen, imageInput, rewind,
     rawDebugDataAbsentFromUi:true,
     unauthorizedGatewayRejected: true, automaticLocalGateway: true, connectionStatusDotOnly: true, explicitNewChatWorkspace: true, workspaceBindings, noGatewayConnectionSettings: true, staleGatewayAddressIgnored: true, restartAndContinue: true, stopAndSteer: true, immediateStop: true, titlebarBorder: true, offlineRepositoryIcons: true, startupComposer: true, noDuplicateProfileTheme: true, windowsExecutableIcon: { orangePixels:windowsIcon.orange, whitePixels:windowsIcon.white, size:windowsIcon.size }, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, gitCommit: true, sessionSearchRenameDelete: true, externalMcpTools: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
   }, null, 2));

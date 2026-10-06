@@ -1,146 +1,238 @@
-/** 对话区底部的内置终端：主进程里的 PowerShell，用 xterm.js 显示。 */
-import { FitAddon } from "@xterm/addon-fit";
-import { Terminal, type ITheme } from "@xterm/xterm";
+/** 内置终端面板：多个 PowerShell 标签页，用 xterm.js 显示；在对话页和代码仓库页底部都能用。 */
 import "@xterm/xterm/css/xterm.css";
 import "./terminal.css";
 import { mirrorInjectedStyles } from "./style-mirror.js";
+import { TerminalSession, themeFromPage } from "./terminal-session.js";
 
 const HEIGHT_KEY = "bit-agent.terminal-height.v1";
+const FONT_KEY = "bit-agent.terminal-font.v1";
 const MIN_HEIGHT = 120;
-
-const ansi = {
-  light: { black: "#262624", red: "#c84b45", green: "#3d9140", yellow: "#a87a12", blue: "#3973b8", magenta: "#9a4fb0",
-    cyan: "#2b8a94", white: "#7b7b74", brightBlack: "#5c5c57", brightRed: "#d9625b", brightGreen: "#4fa752",
-    brightYellow: "#b98a1c", brightBlue: "#4b86cc", brightMagenta: "#ad62c2", brightCyan: "#36a0ab", brightWhite: "#9a9a92" },
-  dark: { black: "#3a3a36", red: "#df7b74", green: "#7cbd7d", yellow: "#d8b45f", blue: "#7eabd5", magenta: "#c79ad6",
-    cyan: "#6fc0c6", white: "#d6d3cb", brightBlack: "#77746c", brightRed: "#eb948e", brightGreen: "#96cf97",
-    brightYellow: "#e6c77a", brightBlue: "#9cc0e3", brightMagenta: "#d6b2e2", brightCyan: "#8fd0d5", brightWhite: "#f4f2ec" },
-} satisfies Record<string, ITheme>;
-
-function themeFromPage(): ITheme {
-  const style = getComputedStyle(document.documentElement);
-  const value = (name: string) => style.getPropertyValue(name).trim();
-  const dark = document.documentElement.dataset.theme === "dark";
-  return { ...ansi[dark ? "dark" : "light"], background: value("--bg-main"), foreground: value("--text"),
-    cursor: value("--brand"), cursorAccent: value("--bg-main"), selectionBackground: value("--selection") };
-}
+const MAX_SESSIONS = 8;
+const icon = (path: string) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
 
 export interface TerminalPanel {
   toggle(): void;
   isOpen(): boolean;
 }
 
-export function mountTerminalPanel(options: { panel: HTMLElement; toggle: HTMLButtonElement; workspace: () => string }): TerminalPanel {
+export function mountTerminalPanel(options: {
+  panel: HTMLElement;
+  toggle: HTMLButtonElement;
+  /** 面板跟着当前视图移动：对话页放在对话区底部，代码仓库页放在编辑区底部。 */
+  homes: { tasks: HTMLElement; repository: HTMLElement };
+  shell: HTMLElement;
+  workspace: () => string;
+  openUrl: (url: string) => void;
+  /** 把终端内容放进输入框，交给 Agent 看。 */
+  quote: (text: string) => void;
+}): TerminalPanel {
   const { panel, toggle } = options;
   panel.innerHTML = `
     <div class="terminal-resize" role="separator" aria-orientation="horizontal" aria-label="调整终端高度" tabindex="0"></div>
     <header class="terminal-header">
-      <span class="terminal-title">终端</span>
+      <div class="terminal-tabs" role="tablist" aria-label="终端"></div>
+      <button type="button" class="icon-button" data-action="new" title="新建终端（Ctrl+Shift+T）" aria-label="新建终端">${icon("M12 5v14M5 12h14")}</button>
       <span class="terminal-cwd"></span>
       <div class="terminal-actions">
-        <button type="button" class="icon-button" data-action="restart" title="重新启动终端" aria-label="重新启动终端">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 7v5h-5M18 11a6.5 6.5 0 1 0-1.6 5.2"/></svg>
-        </button>
-        <button type="button" class="icon-button" data-action="hide" title="隐藏终端（Ctrl+\`）" aria-label="隐藏终端">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
+        <button type="button" class="icon-button" data-action="quote" title="引用到对话：选中的文字，没选中时为最后 60 行" aria-label="引用到对话">${icon("M8 9h8M8 13h5M5 5h14v11H9l-4 3z")}</button>
+        <button type="button" class="icon-button" data-action="find" title="查找（Ctrl+Shift+F）" aria-label="查找">${icon("m20 20-4.2-4.2M17 11a6 6 0 1 1-12 0 6 6 0 0 1 12 0z")}</button>
+        <button type="button" class="icon-button" data-action="restart" title="重新启动终端" aria-label="重新启动终端">${icon("M19 7v5h-5M18 11a6.5 6.5 0 1 0-1.6 5.2")}</button>
+        <button type="button" class="icon-button" data-action="hide" title="隐藏终端（Ctrl+\`）" aria-label="隐藏终端">${icon("m6 9 6 6 6-6")}</button>
       </div>
     </header>
+    <div class="terminal-find" role="search" hidden>
+      <input type="text" spellcheck="false" placeholder="在终端中查找" aria-label="在终端中查找">
+      <span class="terminal-find-count" aria-live="polite"></span>
+      <button type="button" class="icon-button" data-find="previous" title="上一个（Shift+Enter）" aria-label="上一个">${icon("m6 15 6-6 6 6")}</button>
+      <button type="button" class="icon-button" data-find="next" title="下一个（Enter）" aria-label="下一个">${icon("m6 9 6 6 6-6")}</button>
+      <button type="button" class="icon-button" data-find="close" title="关闭（Esc）" aria-label="关闭查找">${icon("m6 6 12 12M18 6 6 18")}</button>
+    </div>
     <div class="terminal-host"></div>`;
-  const host = panel.querySelector<HTMLElement>(".terminal-host")!;
-  const cwdLabel = panel.querySelector<HTMLElement>(".terminal-cwd")!;
-  const handle = panel.querySelector<HTMLElement>(".terminal-resize")!;
+  const $ = <T extends HTMLElement>(selector: string) => panel.querySelector<T>(selector)!;
+  const host = $(".terminal-host");
+  const tabStrip = $(".terminal-tabs");
+  const cwdLabel = $(".terminal-cwd");
+  const findBar = $(".terminal-find");
+  const findInput = $<HTMLInputElement>(".terminal-find input");
+  const findCount = $(".terminal-find-count");
+  const handle = $(".terminal-resize");
   mirrorInjectedStyles(host);
 
-  const terminal = new Terminal({
-    fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim() || "Consolas, monospace",
-    fontSize: 12.5, lineHeight: 1.2, cursorBlink: true, scrollback: 5000, allowProposedApi: false,
-    theme: themeFromPage(),
-  });
-  const fit = new FitAddon();
-  terminal.loadAddon(fit);
-  terminal.open(host);
+  const sessions: TerminalSession[] = [];
+  let active: TerminalSession | null = null;
+  let fontSize = Math.min(24, Math.max(9, Number(localStorage.getItem(FONT_KEY)) || 12.5));
 
-  let sessionId: string | null = null;
-  let starting = false;
-  let exited = false;
+  // ---- 会话 ----
+  const hooks = {
+    workspace: options.workspace,
+    openUrl: options.openUrl,
+    shortcut: (name: "find" | "new" | "zoom-in" | "zoom-out" | "zoom-reset" | "toggle") => {
+      if (name === "find") openFind();
+      else if (name === "new") void createSession();
+      else if (name === "toggle") setOpen(false);
+      else setFont(name === "zoom-reset" ? 12.5 : fontSize + (name === "zoom-in" ? 1 : -1));
+    },
+    changed: () => renderTabs(),
+  };
 
-  // 选中文字时 Ctrl+C 复制，否则照常发给 Shell（中断命令）；Ctrl+V 交给浏览器的粘贴事件。
-  terminal.attachCustomKeyEventHandler((event) => {
-    if (event.type !== "keydown" || !event.ctrlKey || event.altKey) return true;
-    const key = event.key.toLowerCase();
-    if (key === "c" && (event.shiftKey || terminal.hasSelection())) {
-      const text = terminal.getSelection();
-      if (text) void window.bitAgent.copyText(text);
-      terminal.clearSelection();
-      return false;
-    }
-    if (key === "v") return false;
-    if (key === "`") return false;
-    return true;
-  });
-
-  terminal.onData((data) => {
-    if (exited) { void start(); return; }
-    if (sessionId) window.bitAgent.writeTerminal(sessionId, data);
-  });
-  window.bitAgent.onTerminalOutput(({ id, data }) => { if (id === sessionId) terminal.write(data); });
-  window.bitAgent.onTerminalExit(({ id, exitCode }) => {
-    if (id !== sessionId) return;
-    sessionId = null;
-    exited = true;
-    terminal.write(`\r\n\x1b[2m[进程已退出，代码 ${exitCode}。按任意键重新启动]\x1b[0m\r\n`);
-  });
-
-  function resize(): void {
-    if (panel.hidden || !host.clientWidth || !host.clientHeight) return;
-    fit.fit();
-    if (sessionId) window.bitAgent.resizeTerminal(sessionId, terminal.cols, terminal.rows);
-  }
-  new ResizeObserver(() => resize()).observe(host);
-
-  async function start(): Promise<void> {
-    if (starting) return;
-    starting = true;
-    exited = false;
-    const previous = sessionId;
-    sessionId = null;
-    if (previous) await window.bitAgent.closeTerminal(previous).catch(() => {});
-    terminal.reset();
-    try {
-      resize();
-      const info = await window.bitAgent.openTerminal({ workspaceRoot: options.workspace(), cols: terminal.cols, rows: terminal.rows });
-      sessionId = info.id;
-      cwdLabel.textContent = info.cwd;
-      cwdLabel.title = `${info.shell}\n${info.cwd}`;
-    } catch (error) {
-      exited = true;
-      terminal.write(`\x1b[31m终端启动失败：${error instanceof Error ? error.message : String(error)}\x1b[0m\r\n\x1b[2m按任意键重试\x1b[0m\r\n`);
-    } finally {
-      starting = false;
-    }
+  function renderTabs(): void {
+    tabStrip.replaceChildren(...sessions.map((session, index) => {
+      const tab = document.createElement("div");
+      tab.className = "terminal-tab";
+      tab.setAttribute("role", "tab");
+      tab.setAttribute("aria-selected", String(session === active));
+      tab.dataset.exited = String(session.exited);
+      const label = document.createElement("span");
+      label.textContent = sessions.length > 1 ? `${index + 1}. ${session.title}` : session.title;
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "terminal-tab-close";
+      close.setAttribute("aria-label", "关闭这个终端");
+      close.title = "关闭这个终端";
+      close.innerHTML = icon("m7 7 10 10M17 7 7 17");
+      close.addEventListener("click", (event) => { event.stopPropagation(); void closeSession(session); });
+      tab.append(label, close);
+      tab.addEventListener("click", () => select(session));
+      tab.addEventListener("auxclick", (event) => { if (event.button === 1) void closeSession(session); });
+      return tab;
+    }));
+    cwdLabel.textContent = active?.cwd ?? "";
+    cwdLabel.title = active ? `${active.shell}\n${active.cwd}` : "";
   }
 
-  function setOpen(open: boolean): void {
-    panel.hidden = !open;
-    toggle.setAttribute("aria-expanded", String(open));
-    toggle.classList.toggle("is-active", open);
-    if (!open) return;
-    requestAnimationFrame(() => {
-      resize();
-      if (!sessionId && !exited) void start();
-      terminal.focus();
+  function select(session: TerminalSession): void {
+    if (active === session) { session.terminal.focus(); return; }
+    closeFind();
+    active = session;
+    for (const other of sessions) other.host.hidden = other !== session;
+    renderTabs();
+    requestResize();
+    session.terminal.focus();
+  }
+
+  async function createSession(): Promise<void> {
+    if (sessions.length >= MAX_SESSIONS) return;
+    const session = new TerminalSession(hooks, fontSize);
+    sessions.push(session);
+    watchResults(session);
+    host.append(session.host);
+    select(session);
+    await session.start();
+    renderTabs();
+  }
+
+  async function closeSession(session: TerminalSession): Promise<void> {
+    const index = sessions.indexOf(session);
+    if (index < 0) return;
+    sessions.splice(index, 1);
+    await session.dispose();
+    if (active === session) {
+      active = null;
+      const next = sessions[index] ?? sessions[index - 1];
+      if (next) select(next);
+      else setOpen(false);
+    }
+    renderTabs();
+  }
+
+  window.bitAgent.onTerminalOutput(({ id, data }) => sessions.find((session) => session.sessionId === id)?.write(data));
+  window.bitAgent.onTerminalExit(({ id, exitCode }) => sessions.find((session) => session.sessionId === id)?.exit(exitCode));
+
+  function setFont(size: number): void {
+    fontSize = Math.min(24, Math.max(9, size));
+    localStorage.setItem(FONT_KEY, String(fontSize));
+    for (const session of sessions) session.setFontSize(fontSize);
+  }
+
+  let resizeQueued = false;
+  function requestResize(): void {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    // 用 setTimeout 而不是 requestAnimationFrame：窗口最小化或隐藏时动画帧会暂停。
+    setTimeout(() => { resizeQueued = false; if (isOpen()) active?.resize(); }, 0);
+  }
+  new ResizeObserver(() => requestResize()).observe(host);
+
+  // ---- 查找 ----
+  const decorations = () => {
+    const style = getComputedStyle(document.documentElement);
+    const brand = style.getPropertyValue("--brand").trim();
+    return { matchBackground: style.getPropertyValue("--selection").trim(), activeMatchBackground: brand,
+      matchOverviewRuler: brand, activeMatchColorOverviewRuler: brand };
+  };
+  const find = (backward = false) => {
+    if (!active) return;
+    const term = findInput.value;
+    if (!term) { active.search.clearDecorations(); findCount.textContent = ""; return; }
+    const found = backward ? active.search.findPrevious(term, { decorations: decorations() })
+      : active.search.findNext(term, { decorations: decorations(), incremental: !backward });
+    if (!found) findCount.textContent = "无结果";
+  };
+  function openFind(): void {
+    if (!active) return;
+    findBar.hidden = false;
+    const selection = active.terminal.getSelection();
+    if (selection && !selection.includes("\n")) findInput.value = selection;
+    findInput.focus();
+    findInput.select();
+    if (findInput.value) find();
+  }
+  function closeFind(): void {
+    if (findBar.hidden) return;
+    findBar.hidden = true;
+    findCount.textContent = "";
+    active?.search.clearDecorations();
+    // 查找会选中匹配的文字；关掉查找栏后不留着，免得“引用到对话”和复制拿到的是它。
+    active?.terminal.clearSelection();
+    active?.terminal.focus();
+  }
+  findInput.addEventListener("input", () => find());
+  findInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); find(event.shiftKey); }
+    else if (event.key === "Escape") { event.preventDefault(); closeFind(); }
+  });
+  $("[data-find=previous]").addEventListener("click", () => find(true));
+  $("[data-find=next]").addEventListener("click", () => find());
+  $("[data-find=close]").addEventListener("click", closeFind);
+  function watchResults(session: TerminalSession): void {
+    session.search.onDidChangeResults(({ resultIndex, resultCount }) => {
+      if (session !== active || !findInput.value) return;
+      findCount.textContent = resultCount ? `${resultIndex + 1}/${resultCount}` : "无结果";
     });
   }
 
-  panel.querySelector("[data-action=restart]")!.addEventListener("click", () => { void start().then(() => terminal.focus()); });
-  panel.querySelector("[data-action=hide]")!.addEventListener("click", () => setOpen(false));
+  // ---- 头部按钮 ----
+  $("[data-action=new]").addEventListener("click", () => void createSession());
+  $("[data-action=restart]").addEventListener("click", () => { if (active) void active.start().then(() => active?.terminal.focus()); });
+  $("[data-action=hide]").addEventListener("click", () => setOpen(false));
+  $("[data-action=find]").addEventListener("click", () => (findBar.hidden ? openFind() : closeFind()));
+  $("[data-action=quote]").addEventListener("click", () => {
+    const text = active?.excerpt();
+    if (text?.trim()) options.quote(text);
+  });
+  panel.addEventListener("keydown", (event) => {
+    if (event.target === findInput || !(event.ctrlKey || event.metaKey) || !event.shiftKey || event.altKey) return;
+    const key = event.key.toLowerCase();
+    if (key === "f") { event.preventDefault(); openFind(); }
+    else if (key === "t") { event.preventDefault(); void createSession(); }
+  });
 
-  // 主题切换时更新配色。
-  new MutationObserver(() => { terminal.options.theme = themeFromPage(); })
+  // 主题切换时更新所有终端的配色。
+  new MutationObserver(() => { for (const session of sessions) session.terminal.options.theme = themeFromPage(); })
     .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
-  // 拖动顶边调整高度；高度记在本机。
+  // ---- 跟着视图移动 ----
+  const placeholder = () => (options.shell.dataset.view === "repository" ? options.homes.repository : options.homes.tasks);
+  function relocate(): void {
+    const home = placeholder();
+    if (panel.parentElement === home) return;
+    const footer = home.querySelector(":scope > .editor-status");
+    home.insertBefore(panel, footer);
+    requestResize();
+  }
+  new MutationObserver(relocate).observe(options.shell, { attributes: true, attributeFilter: ["data-view"] });
+
+  // ---- 拖动顶边调整高度；高度记在本机 ----
   const applyHeight = (height: number) => {
     const container = panel.parentElement?.clientHeight ?? window.innerHeight;
     const clamped = Math.round(Math.min(Math.max(MIN_HEIGHT, height), Math.max(MIN_HEIGHT, container - 240)));
@@ -157,13 +249,12 @@ export function mountTerminalPanel(options: { panel: HTMLElement; toggle: HTMLBu
     const startHeight = panel.getBoundingClientRect().height;
     document.body.dataset.resizing = "true";
     const move = (moveEvent: PointerEvent) => { applyHeight(startHeight + startY - moveEvent.clientY); };
-    const end = () => {
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("lostpointercapture", () => {
       handle.removeEventListener("pointermove", move);
       delete document.body.dataset.resizing;
       localStorage.setItem(HEIGHT_KEY, String(Math.round(panel.getBoundingClientRect().height)));
-    };
-    handle.addEventListener("pointermove", move);
-    handle.addEventListener("lostpointercapture", end, { once: true });
+    }, { once: true });
   });
   handle.addEventListener("keydown", (event) => {
     const step = event.shiftKey ? 60 : 20;
@@ -173,7 +264,18 @@ export function mountTerminalPanel(options: { panel: HTMLElement; toggle: HTMLBu
     localStorage.setItem(HEIGHT_KEY, String(applyHeight(panel.getBoundingClientRect().height + delta)));
   });
 
+  // ---- 打开和隐藏 ----
   const isOpen = () => panel.hidden === false;
+  function setOpen(open: boolean): void {
+    panel.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.classList.toggle("is-active", open);
+    if (!open) { closeFind(); return; }
+    relocate();
+    if (!sessions.length) void createSession();
+    else { requestResize(); active?.terminal.focus(); }
+  }
+
   toggle.addEventListener("click", () => setOpen(!isOpen()));
   setOpen(false);
   return { toggle: () => setOpen(!isOpen()), isOpen };

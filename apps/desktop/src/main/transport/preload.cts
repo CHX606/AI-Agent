@@ -77,6 +77,13 @@ const api: DesktopApi = {
   selectBrowserTab: (id) => ipcRenderer.invoke("browser:select-tab", id),
   browserAction: (action) => ipcRenderer.invoke("browser:action", action),
   downloadAction: (id, action) => ipcRenderer.invoke("browser:download-action", id, action),
+  answerBrowserPrompt: (id, answer) => ipcRenderer.invoke("browser:prompt-answer", id, answer),
+  trustBrowserCertificate: () => ipcRenderer.invoke("browser:trust-certificate"),
+  onBrowserPrompt: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof listener>[0]) => listener(payload);
+    ipcRenderer.on("browser:prompt", handler);
+    return () => ipcRenderer.removeListener("browser:prompt", handler);
+  },
   onBrowserDownload: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: BrowserDownload) => listener(payload);
     ipcRenderer.on("browser:download", handler);

@@ -3,12 +3,32 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { isBrowsableUrl, SEARCH_URL } from "../../shared/browser-address.js";
-import type { BrowserAction, BrowserBounds, BrowserDownload, BrowserShortcut, BrowserState, BrowserTab } from "../../shared/contracts.js";
+import type { BrowserAction, BrowserBounds, BrowserDownload, BrowserPromptAnswer, BrowserShortcut, BrowserState,
+  BrowserTab } from "../../shared/contracts.js";
 
 /** 内置浏览器用独立的持久会话：Cookie、缓存和应用自己的页面分开。 */
 export const BROWSER_PARTITION = "persist:bit-agent-browser";
-// 只放行复制到剪贴板；摄像头、麦克风、定位、通知、全屏等一律拒绝。
-const ALLOWED_PERMISSIONS = new Set(["clipboard-sanitized-write"]);
+// 直接放行：写剪贴板、网页全屏（视频）。
+const ALLOWED_PERMISSIONS = new Set(["clipboard-sanitized-write", "fullscreen"]);
+// 先问用户：摄像头/麦克风、定位、通知、读剪贴板。其余一律拒绝。
+const ASKED_PERMISSIONS = new Set(["media", "geolocation", "notifications", "clipboard-read"]);
+// 用户的回答记到应用退出：键是“来源 权限”。
+const permissionAnswers = new Map<string, boolean>();
+// 用户确认继续访问的证书：键是“主机 指纹”，记到应用退出。
+const trustedCertificates = new Set<string>();
+
+export function permissionLabel(permission: string, mediaTypes: readonly string[] = []): string {
+  if (permission === "media") {
+    const camera = mediaTypes.includes("video");
+    const microphone = mediaTypes.includes("audio");
+    return camera && microphone ? "使用摄像头和麦克风" : camera ? "使用摄像头" : microphone ? "使用麦克风" : "使用摄像头或麦克风";
+  }
+  return ({ geolocation: "获取你的位置", notifications: "显示通知", "clipboard-read": "读取剪贴板" } as Record<string, string>)[permission] ?? permission;
+}
+
+function originOf(url: string): string {
+  try { return new URL(url).origin; } catch { return url; }
+}
 const MAX_TABS = 20;
 export const ZOOM_LEVELS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 // 这些文件下载后只提供“在文件夹中显示”，不从应用里直接运行。
@@ -46,8 +66,22 @@ export function uniquePath(directory: string, filename: string, exists: (path: s
 function browserSession(): Session {
   if (configuredSession) return configuredSession;
   const browser = session.fromPartition(BROWSER_PARTITION);
-  browser.setPermissionRequestHandler((_contents, permission, callback) => callback(ALLOWED_PERMISSIONS.has(permission)));
-  browser.setPermissionCheckHandler((_contents, permission) => ALLOWED_PERMISSIONS.has(permission));
+  browser.setPermissionRequestHandler((contents, permission, callback, details) => {
+    if (ALLOWED_PERMISSIONS.has(permission)) { callback(true); return; }
+    const pane = paneByContents.get(contents.id);
+    if (!ASKED_PERMISSIONS.has(permission) || !pane) { callback(false); return; }
+    const origin = originOf(details.requestingUrl || contents.getURL());
+    const key = `${origin} ${permission}`;
+    const remembered = permissionAnswers.get(key);
+    if (remembered !== undefined) { callback(remembered); return; }
+    const mediaTypes = "mediaTypes" in details ? details.mediaTypes ?? [] : [];
+    void pane.askPermission(contents.id, origin, permission, permissionLabel(permission, mediaTypes)).then((allow) => {
+      permissionAnswers.set(key, allow);
+      callback(allow);
+    });
+  });
+  browser.setPermissionCheckHandler((_contents, permission, origin) =>
+    ALLOWED_PERMISSIONS.has(permission) || permissionAnswers.get(`${originOf(origin)} ${permission}`) === true);
   browser.setUserAgent(browserUserAgent(browser.getUserAgent()));
   browser.on("will-download", (_event, item, contents) => {
     const pane = contents ? paneByContents.get(contents.id) : undefined;
@@ -89,6 +123,7 @@ export function shortcutFor(input: Pick<Electron.Input, "type" | "key" | "code" 
       if (key === "w") return "close-tab";
       if (key === "0" || input.code === "Numpad0") return "zoom-reset";
       if (key === "p") return "print";
+      if (key === "d") return "bookmark";
     }
   }
   if (!command && !input.shift && input.alt && key === "arrowleft") return "back";
@@ -105,6 +140,13 @@ interface Tab {
   error: BrowserState["error"];
   /** 恢复的标签页先不加载，第一次切换过去时再打开。 */
   pending: { url: string; title: string } | null;
+  /** 最近一次被拒绝的证书，用户确认后据此信任。 */
+  certificate: { key: string } | null;
+}
+
+interface PendingPrompt {
+  contentsId: number;
+  resolve(answer: BrowserPromptAnswer): void;
 }
 
 export class BrowserPane {
@@ -113,6 +155,8 @@ export class BrowserPane {
   private visible = false;
   private bounds: Electron.Rectangle = { x: 0, y: 0, width: 0, height: 0 };
   private readonly downloads = new Map<string, Electron.DownloadItem>();
+  private readonly prompts = new Map<string, PendingPrompt>();
+  private fullscreen = false;
 
   constructor(private readonly window: BrowserWindow) {
     // 应用页面重新加载时，新页面还不知道浏览器开着；先把网页视图藏起来，等它重新要求显示。
@@ -136,7 +180,7 @@ export class BrowserPane {
     } });
     view.setBackgroundColor("#ffffff");
     view.setVisible(false);
-    const tab: Tab = { id: randomUUID(), view, favicon: null, error: null, pending: null };
+    const tab: Tab = { id: randomUUID(), view, favicon: null, error: null, pending: null, certificate: null };
     const contents = view.webContents;
     paneByContents.set(contents.id, this);
     // 新窗口（target=_blank、window.open、中键点击）在新标签页打开；后台标签页的请求不切换过去。
@@ -149,7 +193,7 @@ export class BrowserPane {
     const guard = (event: Electron.Event, url: string) => { if (!isBrowsableUrl(url)) event.preventDefault(); };
     contents.on("will-navigate", guard);
     contents.on("will-redirect", guard);
-    contents.on("did-start-loading", () => { tab.error = null; this.emit(); });
+    contents.on("did-start-loading", () => { tab.error = null; tab.certificate = null; this.emit(); });
     contents.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
       if (isMainFrame && !isInPlace) tab.favicon = null;
     });
@@ -163,8 +207,35 @@ export class BrowserPane {
     contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
       // -3 是用户或页面自己中止（例如点了停止、重定向），不算失败。
       if (!isMainFrame || code === -3) return;
-      tab.error = { code, description, url };
+      const certificate = code <= -200 && code > -300 && tab.certificate !== null;
+      tab.error = { code, description, url, ...(certificate ? { certificate: true } : {}) };
       this.emit();
+    });
+    // 证书有问题：用户确认过的（同一主机、同一张证书）放行，其余拒绝并记下来，错误页上可以选择继续访问。
+    contents.on("certificate-error", (event, url, _error, certificate, callback) => {
+      let host = url;
+      try { host = new URL(url).host; } catch { /* 保留原样 */ }
+      const key = `${host} ${certificate.fingerprint}`;
+      if (trustedCertificates.has(key)) { event.preventDefault(); callback(true); return; }
+      tab.certificate = { key };
+      callback(false);
+    });
+    // 需要账号密码的网站（HTTP 认证、代理认证）：在面板里填写。
+    contents.on("login", (event, _details, authInfo, callback) => {
+      event.preventDefault();
+      const scheme = authInfo.isProxy ? "代理" : authInfo.scheme;
+      void this.ask(contents.id, { kind: "login", origin: `${authInfo.host}:${authInfo.port}`, realm: authInfo.realm || scheme, proxy: authInfo.isProxy })
+        .then((answer) => {
+          if ("username" in answer) callback(answer.username, answer.password);
+          else callback();
+        });
+    });
+    // 网页全屏（例如视频）：视图铺满整个窗口，退出后回到面板里。
+    contents.on("enter-html-full-screen", () => { this.fullscreen = true; this.layout(); this.emit(); });
+    contents.on("leave-html-full-screen", () => { this.fullscreen = false; this.layout(); this.emit(); });
+    // 页面换了，之前没回答的请求作废。
+    contents.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
+      if (isMainFrame && !isInPlace) this.dismissPrompts(contents.id);
     });
     contents.on("render-process-gone", (_event, details) => {
       tab.error = { code: -1, description: `页面进程已退出（${details.reason}）`, url: contents.getURL() };
@@ -191,6 +262,7 @@ export class BrowserPane {
   }
 
   private destroyTab(tab: Tab): void {
+    this.dismissPrompts(tab.view.webContents.id);
     paneByContents.delete(tab.view.webContents.id);
     if (!this.window.isDestroyed()) this.window.contentView.removeChildView(tab.view);
     if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close();
@@ -213,7 +285,45 @@ export class BrowserPane {
     return { tabs, activeId: this.activeId, url: current?.url ?? "", title: current?.title ?? "", loading: current?.loading ?? false,
       canGoBack: live ? contents.navigationHistory.canGoBack() : false,
       canGoForward: live ? contents.navigationHistory.canGoForward() : false,
-      zoom: live ? contents.getZoomFactor() : 1, error: active?.error ?? null };
+      zoom: live ? contents.getZoomFactor() : 1, error: active?.error ?? null, fullscreen: this.fullscreen };
+  }
+
+  // ---- 网页的请求：权限、登录 ----
+  private ask(contentsId: number, prompt: { kind: "permission"; origin: string; permission: string; label: string }
+    | { kind: "login"; origin: string; realm: string; proxy: boolean }): Promise<BrowserPromptAnswer> {
+    const id = randomUUID();
+    return new Promise((resolve) => {
+      this.prompts.set(id, { contentsId, resolve });
+      if (this.window.isDestroyed()) { this.answer(id, { cancel: true }); return; }
+      this.window.webContents.send("browser:prompt", { id, ...prompt });
+    });
+  }
+
+  async askPermission(contentsId: number, origin: string, permission: string, label: string): Promise<boolean> {
+    const answer = await this.ask(contentsId, { kind: "permission", origin, permission, label });
+    return "allow" in answer && answer.allow === true;
+  }
+
+  answer(id: string, answer: BrowserPromptAnswer): void {
+    const prompt = this.prompts.get(id);
+    if (!prompt) return;
+    this.prompts.delete(id);
+    prompt.resolve(answer);
+    if (!this.window.isDestroyed()) this.window.webContents.send("browser:prompt", { id, kind: "dismiss" });
+  }
+
+  private dismissPrompts(contentsId: number): void {
+    for (const [id, prompt] of this.prompts) if (prompt.contentsId === contentsId) this.answer(id, { cancel: true });
+  }
+
+  /** 用户在错误页确认继续访问：信任这一张证书（只到应用退出），然后重新加载。 */
+  trustCertificate(): void {
+    const tab = this.active;
+    if (!tab?.certificate || !tab.error?.certificate) return;
+    trustedCertificates.add(tab.certificate.key);
+    const url = tab.error.url;
+    tab.error = null;
+    void tab.view.webContents.loadURL(url).catch(() => {});
   }
 
   private emit(): void {
@@ -222,9 +332,12 @@ export class BrowserPane {
 
   /** 只显示当前标签页的视图，其余隐藏。 */
   private layout(): void {
+    const [width = 0, height = 0] = this.window.getContentSize();
     for (const tab of this.tabs) {
-      const show = this.visible && tab.id === this.activeId;
-      if (show) tab.view.setBounds(this.bounds);
+      const active = tab.id === this.activeId;
+      // 全屏时即使面板被弹窗遮住也照样铺满窗口显示：用户正在看视频。
+      const show = active && (this.visible || this.fullscreen);
+      if (show) tab.view.setBounds(this.fullscreen ? { x: 0, y: 0, width, height } : this.bounds);
       tab.view.setVisible(show);
     }
   }
@@ -239,7 +352,7 @@ export class BrowserPane {
 
   setBounds(bounds: BrowserBounds): void {
     this.bounds = cleanBounds(bounds, this.window);
-    this.active?.view.setBounds(this.bounds);
+    if (!this.fullscreen) this.active?.view.setBounds(this.bounds);
   }
 
   async hide(snapshot: boolean): Promise<string | null> {

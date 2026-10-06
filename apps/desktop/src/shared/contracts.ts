@@ -190,9 +190,18 @@ export interface BrowserState {
   canGoForward: boolean;
   /** 缩放比例，1 为 100%。 */
   zoom: number;
-  /** 加载失败时的说明；成功加载后清空。 */
-  error: { code: number; description: string; url: string } | null;
+  /** 加载失败时的说明；成功加载后清空。certificate 为 true 时可以选择继续访问。 */
+  error: { code: number; description: string; url: string; certificate?: boolean } | null;
+  /** 网页进入了 HTML 全屏（例如视频全屏），这时视图铺满整个窗口。 */
+  fullscreen: boolean;
 }
+
+/** 网页向用户提出的请求：权限或登录。 */
+export type BrowserPrompt =
+  | { id: string; kind: "permission"; origin: string; permission: string; label: string }
+  | { id: string; kind: "login"; origin: string; realm: string; proxy: boolean };
+
+export type BrowserPromptAnswer = { allow: boolean } | { username: string; password: string } | { cancel: true };
 
 export interface BrowserDownload {
   id: string;
@@ -210,7 +219,7 @@ export type BrowserAction = "back" | "forward" | "reload" | "stop" | "devtools" 
 
 /** 浏览器页面里按下、需要交给应用处理的快捷键。 */
 export type BrowserShortcut = "focus-address" | "toggle-sidebar" | "toggle-terminal" | "find"
-  | "new-tab" | "close-tab" | "next-tab" | "previous-tab";
+  | "new-tab" | "close-tab" | "next-tab" | "previous-tab" | "bookmark";
 
 export interface DesktopApi {
   reportClientError(input: { kind: "exception" | "rejection"; taskId?: string; line?: number }): Promise<string>;
@@ -283,6 +292,11 @@ export interface DesktopApi {
   selectBrowserTab(id: string): Promise<void>;
   browserAction(action: BrowserAction): Promise<void>;
   downloadAction(id: string, action: "open" | "show" | "cancel"): Promise<void>;
+  /** 回答网页的权限或登录请求。 */
+  answerBrowserPrompt(id: string, answer: BrowserPromptAnswer): Promise<void>;
+  onBrowserPrompt(listener: (prompt: BrowserPrompt | { id: string; kind: "dismiss" }) => void): () => void;
+  /** 当前标签页证书有问题时，用户确认继续访问（只信任这一张证书，直到应用退出）。 */
+  trustBrowserCertificate(): Promise<void>;
   onBrowserDownload(listener: (download: BrowserDownload) => void): () => void;
   findInBrowser(text: string, options?: { forward?: boolean; next?: boolean }): Promise<{ matches: number; active: number }>;
   stopFindInBrowser(): void;

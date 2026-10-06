@@ -1,7 +1,9 @@
 .terminal-panel {
   position: relative;
   display: grid;
-  grid-template-rows: 32px minmax(0, 1fr);
+  grid-template-rows: 34px auto minmax(0, 1fr);
+  /* 每块固定在自己那一行：查找栏隐藏时终端不会挤到它那一行。 */
+  grid-template-areas: "header" "find" "host";
   height: var(--terminal-height, 260px);
   min-height: 120px;
   border-top: 1px solid var(--border);
@@ -37,20 +39,109 @@ body[data-resizing="true"] .terminal-resize::after {
 
 .terminal-header {
   display: flex;
+  grid-area: header;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
-  padding: 0 8px 0 16px;
+  padding: 0 8px 0 10px;
   border-bottom: 1px solid var(--border);
 }
 
-.terminal-title {
+.terminal-tabs {
+  display: flex;
+  flex: 0 1 auto;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.terminal-tab {
+  display: flex;
   flex: none;
+  align-items: center;
+  gap: 4px;
+  max-width: 200px;
+  height: 26px;
+  padding: 0 4px 0 9px;
+  border-radius: 6px;
+  color: var(--text-muted);
   font-size: 12px;
+  cursor: default;
+  user-select: none;
+}
+
+.terminal-tab span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-soft);
+}
+
+.terminal-tab[aria-selected="true"] {
+  background: var(--bg-panel);
+  color: var(--text);
   font-weight: 600;
 }
 
+.terminal-tab[data-exited="true"] span {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.terminal-tab-close {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0;
+}
+
+.terminal-tab-close svg {
+  width: 11px;
+  height: 11px;
+}
+
+.terminal-tab:hover .terminal-tab-close,
+.terminal-tab[aria-selected="true"] .terminal-tab-close {
+  opacity: 1;
+}
+
+.terminal-tab-close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.terminal-header > .icon-button {
+  display: grid;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.terminal-header > .icon-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.terminal-header > .icon-button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 .terminal-cwd {
+  margin-left: 6px;
   min-width: 0;
   overflow: hidden;
   color: var(--text-muted);
@@ -84,15 +175,83 @@ body[data-resizing="true"] .terminal-resize::after {
   color: var(--text);
 }
 
+.terminal-find {
+  display: flex;
+  grid-area: find;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-find input {
+  width: min(320px, 50%);
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-main);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.terminal-find input:focus {
+  border-color: var(--field-focus-border);
+  outline: none;
+  box-shadow: var(--field-focus-ring);
+}
+
+.terminal-find-count {
+  min-width: 48px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.terminal-find .icon-button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.terminal-find .icon-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.terminal-find .icon-button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 .terminal-host {
+  grid-area: host;
   min-height: 0;
   padding: 6px 4px 4px 14px;
   overflow: hidden;
 }
 
+.terminal-session {
+  height: 100%;
+}
+
 .terminal-host .xterm {
   height: 100%;
 }
+
+/* 代码仓库页：终端在编辑区和状态栏之间。各块固定行号，终端隐藏时状态栏不会跑到它那一行。 */
+.shell .repository-view {
+  grid-template-rows: 36px 26px minmax(0, 1fr) auto 24px;
+}
+
+.repository-view > .editor-tabs { grid-row: 1; }
+.repository-view > .editor-breadcrumbs { grid-row: 2; }
+.repository-view > .repository-preview-shell { grid-row: 3; }
+.repository-view > .terminal-panel { grid-row: 4; }
+.repository-view > .editor-status { grid-row: 5; }
 
 /* xterm.css 给底层视口默认黑底；文字区比容器矮几个像素时会在底部露出一条黑边。 */
 .terminal-host .xterm .xterm-viewport {

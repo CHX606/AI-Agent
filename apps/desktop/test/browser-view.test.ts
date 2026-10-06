@@ -41,7 +41,10 @@ vi.mock("electron", async () => {
     setBounds() {}
   }
   const session = Object.assign(new Emitter(), {
-    setPermissionRequestHandler() {}, setPermissionCheckHandler() {}, getUserAgent: () => "UA", setUserAgent() {},
+    request: null as any, check: null as any,
+    setPermissionRequestHandler(handler: any) { this.request = handler; },
+    setPermissionCheckHandler(handler: any) { this.check = handler; },
+    getUserAgent: () => "UA", setUserAgent() {},
   });
   fake.session = session;
   return {
@@ -55,7 +58,7 @@ vi.mock("electron", async () => {
   };
 });
 
-import { BrowserPane, isExecutable, nextZoom, uniquePath } from "../src/main/transport/browser-view";
+import { BrowserPane, isExecutable, nextZoom, permissionLabel, uniquePath } from "../src/main/transport/browser-view";
 
 function fakeWindow(visible = true) {
   const window = Object.assign(new EventEmitter(), {
@@ -207,6 +210,93 @@ it("names downloads uniquely and never runs executables from the app", async () 
   expect(fake.opened).toEqual([]);
   await pane.downloadAction(id, "show");
   expect(fake.opened).toEqual([`show:${item.path}`]);
+});
+
+const prompts = (window: any) => window.webContents.send.mock.calls
+  .filter(([channel]: [string]) => channel === "browser:prompt").map(([, value]: [string, any]) => value);
+
+it("asks before granting camera, location or notifications and remembers the answer", async () => {
+  expect(permissionLabel("media", ["video", "audio"])).toBe("使用摄像头和麦克风");
+  expect(permissionLabel("media", ["audio"])).toBe("使用麦克风");
+  const window = fakeWindow();
+  const pane = new BrowserPane(window);
+  await pane.show(bounds, "https://meet.example.com/room");
+  const contents = lastContents();
+  const decide = (permission: string, details: object = {}) => new Promise<boolean>((resolve) =>
+    fake.session.request(contents, permission, resolve, { requestingUrl: "https://meet.example.com/room", ...details }));
+
+  expect(await decide("fullscreen")).toBe(true);
+  expect(await decide("midi")).toBe(false);
+  const camera = decide("media", { mediaTypes: ["video"] });
+  const asked = prompts(window).at(-1);
+  expect(asked).toMatchObject({ kind: "permission", origin: "https://meet.example.com", permission: "media", label: "使用摄像头" });
+  pane.answer(asked.id, { allow: true });
+  expect(await camera).toBe(true);
+  expect(prompts(window).at(-1)).toEqual({ id: asked.id, kind: "dismiss" });
+  // 记住了：同一来源同一权限不再问。
+  const count = prompts(window).length;
+  expect(await decide("media", { mediaTypes: ["video"] })).toBe(true);
+  expect(prompts(window)).toHaveLength(count);
+  expect(fake.session.check(contents, "media", "https://meet.example.com")).toBe(true);
+  expect(fake.session.check(contents, "geolocation", "https://meet.example.com")).toBe(false);
+
+  // 换页面时没回答的请求作废（按拒绝处理）。
+  const location = decide("geolocation");
+  contents.emit("did-start-navigation", {}, "https://other.example.com/", false, true);
+  expect(await location).toBe(false);
+});
+
+it("asks for a login in the panel and passes it to the site", async () => {
+  const window = fakeWindow();
+  const pane = new BrowserPane(window);
+  await pane.show(bounds, "https://intranet.example.com/");
+  const credentials = new Promise<unknown[]>((resolve) => lastContents().emit("login", { preventDefault() {} }, {},
+    { isProxy: false, scheme: "basic", host: "intranet.example.com", port: 443, realm: "Staff" }, (...args: unknown[]) => resolve(args)));
+  const asked = prompts(window).at(-1);
+  expect(asked).toMatchObject({ kind: "login", origin: "intranet.example.com:443", realm: "Staff", proxy: false });
+  pane.answer(asked.id, { username: "me", password: "secret" });
+  expect(await credentials).toEqual(["me", "secret"]);
+  const cancelled = new Promise<unknown[]>((resolve) => lastContents().emit("login", { preventDefault() {} }, {},
+    { isProxy: true, scheme: "basic", host: "proxy", port: 8080, realm: "" }, (...args: unknown[]) => resolve(args)));
+  pane.answer(prompts(window).at(-1).id, { cancel: true });
+  expect(await cancelled).toEqual([]);
+});
+
+it("lets the user proceed past a certificate error for that certificate only", async () => {
+  const pane = new BrowserPane(fakeWindow());
+  await pane.show(bounds, "https://dev.local:8443/");
+  const contents = lastContents();
+  const certificateError = (fingerprint: string) => new Promise<{ trusted: boolean; prevented: boolean }>((resolve) => {
+    const event = { prevented: false, preventDefault() { this.prevented = true; } };
+    contents.emit("certificate-error", event, "https://dev.local:8443/", "net::ERR_CERT_AUTHORITY_INVALID", { fingerprint },
+      (trusted: boolean) => resolve({ trusted, prevented: event.prevented }));
+  });
+  expect(await certificateError("sha256/AAA")).toEqual({ trusted: false, prevented: false });
+  contents.emit("did-fail-load", {}, -202, "ERR_CERT_AUTHORITY_INVALID", "https://dev.local:8443/", true);
+  expect(pane.state().error).toMatchObject({ code: -202, certificate: true });
+  pane.trustCertificate();
+  expect(contents.loaded.at(-1)).toBe("https://dev.local:8443/");
+  expect(await certificateError("sha256/AAA")).toEqual({ trusted: true, prevented: true });
+  // 换了一张证书（比如被中间人替换）要重新确认。
+  expect(await certificateError("sha256/BBB")).toEqual({ trusted: false, prevented: false });
+});
+
+it("fills the window while a page is in fullscreen", async () => {
+  const pane = new BrowserPane(fakeWindow());
+  const placed: unknown[] = [];
+  await pane.show({ x: 700, y: 80, width: 500, height: 600 }, "https://video.example.com/");
+  const view = fake.views.at(-1);
+  view.setBounds = (value: unknown) => placed.push(value);
+  view.webContents.emit("enter-html-full-screen");
+  expect(placed.at(-1)).toEqual({ x: 0, y: 0, width: 1200, height: 800 });
+  expect(pane.state().fullscreen).toBe(true);
+  pane.setBounds({ x: 700, y: 80, width: 400, height: 600 });
+  expect(placed.at(-1)).toEqual({ x: 0, y: 0, width: 1200, height: 800 });
+  await pane.hide(false);
+  expect(view.visible).toBe(true);
+  view.webContents.emit("leave-html-full-screen");
+  expect(view.visible).toBe(false);
+  expect(pane.state().fullscreen).toBe(false);
 });
 
 it("builds a context menu that fits what was clicked", async () => {

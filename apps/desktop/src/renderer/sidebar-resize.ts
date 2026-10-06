@@ -32,9 +32,10 @@ class SidebarResize {
   }
 
   private inspectorReserve(): number {
-    if (window.innerWidth <= 1050 || this.shell.dataset.view === "repository") return 0;
-    // 浏览器开着时右侧至少保留浏览器的最小宽度。
+    if (window.innerWidth <= 1050) return 0;
+    // 浏览器开着时（对话页和代码仓库页都可以）右侧至少保留浏览器的最小宽度。
     if (this.shell.dataset.browserOpen === "true") return 360;
+    if (this.shell.dataset.view === "repository") return 0;
     if (this.shell.dataset.inspectorCollapsed === "true") return 0;
     const preferred = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--inspector-width"));
     return Number.isFinite(preferred) ? Math.min(280, preferred) : 280;

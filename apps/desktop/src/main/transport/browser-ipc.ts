@@ -1,6 +1,6 @@
 import { BrowserWindow, ipcMain, type WebContents } from "electron";
 import type { DesktopServices } from "../application/ports.js";
-import type { BrowserAction, BrowserBounds } from "../../shared/contracts.js";
+import type { BrowserAction, BrowserBounds, BrowserPromptAnswer } from "../../shared/contracts.js";
 import { BrowserPane } from "./browser-view.js";
 import type { IpcHandler } from "./ipc-handler.js";
 
@@ -53,6 +53,14 @@ export function registerBrowserIpc(services: DesktopServices, handle: IpcHandler
     if (!DOWNLOAD_ACTIONS.has(action as DownloadAction)) throw new Error("不支持的操作");
     return pane(event.sender).downloadAction(text(id, "下载项无效"), action as DownloadAction);
   });
+  handle("browser:prompt-answer", (event, id: unknown, answer: unknown) => {
+    const value = (answer && typeof answer === "object" ? answer : {}) as Record<string, unknown>;
+    const clean: BrowserPromptAnswer = typeof value.username === "string" && typeof value.password === "string"
+      ? { username: value.username.slice(0, 500), password: value.password.slice(0, 500) }
+      : typeof value.allow === "boolean" ? { allow: value.allow } : { cancel: true };
+    pane(event.sender).answer(text(id, "请求无效"), clean);
+  });
+  handle("browser:trust-certificate", (event) => pane(event.sender).trustCertificate());
   handle("browser:find", (event, value: unknown, options: unknown) => {
     const input = (options && typeof options === "object" ? options : {}) as Record<string, unknown>;
     return pane(event.sender).find(typeof value === "string" ? value.slice(0, 500) : "",

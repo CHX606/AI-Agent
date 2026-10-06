@@ -13,6 +13,17 @@ const pages = {
 function fixtureServer() {
   const server = createServer((request, response) => {
     const path = new URL(request.url, "http://x").pathname;
+    if (path === "/secure") {
+      // HTTP 基本认证：用户名 me、密码 pw。
+      if (request.headers.authorization !== `Basic ${Buffer.from("me:pw").toString("base64")}`) {
+        response.writeHead(401, { "www-authenticate": 'Basic realm="Fixture Staff"' });
+        response.end("login required");
+        return;
+      }
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<title>Secret Area</title><body>welcome</body>");
+      return;
+    }
     if (path === "/file.txt") {
       response.writeHead(200, { "content-type": "text/plain", "content-disposition": "attachment; filename=\"bit-agent-download.txt\"" });
       response.end("downloaded by the built-in browser");
@@ -130,7 +141,44 @@ export async function verifyBrowser({ command, evaluate, check, main, screenshot
     await ui("pane.querySelector('.browser-zoom').click()");
     await check(async () => (await native()).zoom === 1 && await ui("pane.querySelector('.browser-zoom').hidden"), "点击比例没有恢复到 100%");
 
+    // 地址栏建议：输入时列出访问过的页面；建议浮在网页上方时原生视图让开；上下键选择、回车打开。
+    await ui("(() => { const input=pane.querySelector('.browser-address input'); input.focus(); input.value='fixture po'; input.dispatchEvent(new Event('input')); })()");
+    await check(() => ui("!pane.querySelector('.browser-suggestions').hidden && pane.querySelector('.browser-suggestion strong')?.textContent==='Fixture Popup'"),
+      "地址栏没有给出访问过的页面作为建议");
+    await check(async () => !(await native()).visible, "建议列表出现时原生视图没有让开");
+    await ui("pane.querySelector('.browser-address input').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}))");
+    assert.equal(await ui("pane.querySelector('.browser-suggestion').getAttribute('aria-selected')"), "true", "方向键没有选中建议");
+    await ui("pane.querySelector('.browser-address').requestSubmit()");
+    await check(async () => await title() === "Fixture Popup" && await ui("pane.querySelector('.browser-suggestions').hidden") && await aligned(),
+      "回车没有打开选中的建议");
+
+    // 书签：星标切换，起始页和建议里会出现。
+    await ui("pane.querySelector('.browser-bookmark').click()");
+    assert.equal(await ui("pane.querySelector('.browser-bookmark').getAttribute('aria-pressed')"), "true", "星标没有加入书签");
+    assert(await evaluate(`JSON.parse(localStorage.getItem('bit-agent.browser-bookmarks.v1')||'[]').some(item=>item.url===${JSON.stringify(`${origin}/popup`)})`),
+      "书签没有保存");
+
+    // 网页请求权限：在面板里问用户，允许后网页拿到结果。
+    await inPage("window.__permission = Notification.requestPermission(); true", true);
+    await check(() => ui("!pane.querySelector('.browser-prompt').hidden && pane.querySelector('.browser-prompt-label').textContent==='显示通知'"),
+      "网页请求通知权限时没有询问用户");
+    await check(aligned, "权限提示出现后原生视图没有对齐");
+    await ui("pane.querySelector('.browser-prompt [data-answer=allow]').click()");
+    assert.equal(await inPage("window.__permission"), "granted", "允许后网页没有拿到权限");
+    assert.equal(await ui("pane.querySelector('.browser-prompt').hidden"), true, "回答后权限提示没有消失");
+
+    // 需要登录的网站：在面板里填账号密码。
+    await go(`${origin}/secure`);
+    await check(() => ui("!pane.querySelector('.browser-prompt').hidden && !pane.querySelector('.browser-prompt-login').hidden"),
+      "需要登录的网站没有弹出登录表单");
+    assert.equal(await ui("pane.querySelector('.browser-prompt-realm').textContent"), "（Fixture Staff）");
+    await ui("(() => { const form=pane.querySelector('.browser-prompt-login'); form.elements.username.value='me'; form.elements.password.value='pw'; form.requestSubmit(); })()");
+    await check(async () => await title() === "Secret Area", "填写账号密码后没有登录成功");
+    assert.equal(await ui("pane.querySelector('.browser-prompt-login').elements.password.value"), "", "登录后密码还留在页面里");
+
     // 页内查找。页面没有被合成（隐藏窗口）时 Chromium 不返回查找结果；这时只验证查找栏走通（显示“无结果”）。
+    await go(`${origin}/next`);
+    await check(async () => await title() === "Fixture Next", "没有打开查找用的测试页");
     const rendering = await main(`(() => { const { BrowserWindow } = ${electron}; const window = BrowserWindow.getAllWindows()[0];
       return window.isVisible() && !window.isMinimized(); })()`);
     console.log("BROWSER_RENDERING", rendering);
@@ -188,10 +236,12 @@ export async function verifyBrowser({ command, evaluate, check, main, screenshot
     // 回到正常页面，切换视图、调整宽度。
     await go(`${origin}/`);
     await check(aligned, "错误后重新导航没有恢复视图");
+    // 代码仓库页里浏览器照样开着，占右侧一列。
     await evaluate("document.querySelector('#nav-repository').click()");
-    await check(async () => !(await native()).visible, "切到代码仓库页后原生视图没有隐藏");
+    await check(async () => await aligned() && await evaluate("getComputedStyle(document.querySelector('#repository-view')).display!=='none'"),
+      "代码仓库页里浏览器没有保持显示");
     await evaluate("document.querySelector('#nav-tasks').click()");
-    await check(aligned, "切回对话页后原生视图没有恢复");
+    await check(aligned, "切回对话页后原生视图没有对齐");
     // 先变窄再恢复：窗口不宽时变宽会碰到“对话区至少 420px”的上限。
     const widthBefore = (await stage()).width;
     await ui("pane.querySelector('.browser-resize').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',shiftKey:true,bubbles:true}))");
@@ -229,13 +279,53 @@ export async function verifyBrowser({ command, evaluate, check, main, screenshot
       inspector:document.querySelector('.shell').dataset.inspectorCollapsed })`);
     assert.deepEqual(closed, { open:"false", inspector:inspectorBefore }, "关闭浏览器后右侧没有恢复原状");
     return { result:{ tabs:true, aligned:true, navigation:true, newWindowAsTab:true, conversationLinks:true, zoom:true, find:true,
-      occlusion:true, download:true, errorPage:true, httpOnly:true, hiddenInRepositoryView:true, resizeFollows:true,
+      suggestions:true, bookmarks:true, permissionPrompt:true, login:true, keptInRepositoryView:true,
+      occlusion:true, download:true, errorPage:true, httpOnly:true, resizeFollows:true,
       survivesPageReload:true, restoresTabsLazily:true, closeRestoresInspector:true, rendering }, shots };
   } finally {
     await main(`(() => { const { app } = ${electron}; const { rmSync } = process.getBuiltinModule('fs');
       rmSync(${JSON.stringify(downloads)}, { recursive:true, force:true });
       if (globalThis.browserAcceptanceDownloads) app.setPath('downloads', globalThis.browserAcceptanceDownloads); })()`).catch(() => {});
-    await evaluate("['bit-agent.browser-recent.v1','bit-agent.browser-width.v1','bit-agent.browser-tabs.v1'].forEach(key => localStorage.removeItem(key))").catch(() => {});
+    await evaluate(`['bit-agent.browser-recent.v1','bit-agent.browser-width.v1','bit-agent.browser-tabs.v1','bit-agent.browser-history.v1',
+      'bit-agent.browser-bookmarks.v1'].forEach(key => localStorage.removeItem(key))`).catch(() => {});
+    await new Promise(resolve => server.close(resolve));
+  }
+}
+
+/**
+ * 网页全屏（视频）：Electron 会让整个窗口进入全屏（和 Chrome 里视频全屏一样占满屏幕），视图铺满全屏后的窗口；
+ * 退出后窗口恢复原样。进入全屏会把隐藏的验收窗口显示出来，之后的截图就不稳定了，所以放在整个验收的最后。
+ */
+export async function verifyBrowserFullscreen({ command, evaluate, check, main }) {
+  const server = await fixtureServer();
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const view = (body) => main(viewExpression(body));
+  const windowState = () => main(`(() => { const { BrowserWindow } = ${electron}; const window = BrowserWindow.getAllWindows()[0];
+    const [width, height] = window.getContentSize(); return { width, height, fullScreen:window.isFullScreen() }; })()`);
+  try {
+    // 用窗口真实尺寸：原生视图的坐标是窗口坐标，不受页面模拟尺寸影响。
+    await command("Emulation.clearDeviceMetricsOverride", {});
+    await evaluate("document.querySelector('#nav-tasks').click(); document.querySelector('#browser-toggle').click()");
+    await evaluate(`(() => { const form=document.querySelector('#browser-pane .browser-address');
+      form.querySelector('input').value=${JSON.stringify(`${origin}/`)}; form.requestSubmit(); })()`);
+    await check(() => view("return view?.webContents.getTitle()==='Fixture Home';"), "全屏验收没有打开测试页");
+    const before = await windowState();
+    const entered = await view(`return view.webContents.executeJavaScript("document.documentElement.requestFullscreen().then(() => 'ok', (error) => String(error))", true);`);
+    assert.equal(entered, "ok", `网页全屏请求失败：${entered}`);
+    await check(async () => { const [bounds, window] = [await view("return view?.getBounds();"), await windowState()];
+      return window.fullScreen && bounds?.x === 0 && bounds.y === 0 && bounds.width === window.width && bounds.height === window.height; },
+    "网页全屏时没有铺满窗口");
+    await view(`return view.webContents.executeJavaScript("document.exitFullscreen().then(() => true)", true);`);
+    await check(async () => { const window = await windowState();
+      return !window.fullScreen && window.width === before.width && window.height === before.height; }, "退出网页全屏后窗口没有恢复原来的大小");
+    await check(() => evaluate(`(() => { const r=document.querySelector('#browser-pane .browser-stage').getBoundingClientRect(); return [r.left,r.top,r.width,r.height].map(Math.round); })()`)
+      .then(async (stage) => { const bounds = await view("return view?.getBounds();");
+        return bounds && [bounds.x, bounds.y, bounds.width, bounds.height].every((value, index) => Math.abs(value - stage[index]) <= 1); }),
+    "退出全屏后没有回到浏览器面板");
+    return { fillsWindow:true, restoresWindow:true, backInPane:true };
+  } finally {
+    await evaluate(`document.querySelectorAll('#browser-pane .browser-tab .browser-tab-close').forEach(button=>button.click());
+      ['bit-agent.browser-tabs.v1','bit-agent.browser-history.v1'].forEach(key => localStorage.removeItem(key))`).catch(() => {});
     await new Promise(resolve => server.close(resolve));
   }
 }

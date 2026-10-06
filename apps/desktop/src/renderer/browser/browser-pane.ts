@@ -8,26 +8,24 @@ import { browserErrorMessage } from "../../shared/browser-errors.js";
 import type { BrowserBounds, BrowserShortcut, BrowserState } from "../../shared/contracts.js";
 import "./browser.css";
 import { mountDownloads } from "./browser-downloads.js";
+import { bookmarks, isBookmarked, recentVisits, recordVisit, toggleBookmark } from "./browser-history.js";
 import { browserMarkup } from "./browser-markup.js";
+import { mountPrompts } from "./browser-prompts.js";
+import { mountSuggestions } from "./browser-suggestions.js";
 import { renderTabs, tabTitle } from "./browser-tabs.js";
 
 const WIDTH_KEY = "bit-agent.browser-width.v1";
-const RECENT_KEY = "bit-agent.browser-recent.v1";
 const TABS_KEY = "bit-agent.browser-tabs.v1";
 const MIN_WIDTH = 360;
 const MAIN_MIN_WIDTH = 420;
-const OVERLAYS = "dialog[open], .choice-popover:not([hidden]), #profile-menu:not([hidden])";
+// 这些元素出现在网页区域上方时，原生视图要先让开（换成截图）。
+const OVERLAYS = "dialog[open], .choice-popover:not([hidden]), #profile-menu:not([hidden]), .browser-suggestions:not([hidden])";
 
 interface Recent { url: string; title: string }
 interface SavedTabs { tabs: Recent[]; active: number }
 
 function readJson<T>(key: string, fallback: T): T {
   try { return (JSON.parse(localStorage.getItem(key) ?? "null") as T | null) ?? fallback; } catch { return fallback; }
-}
-
-function readRecent(): Recent[] {
-  const value = readJson<unknown>(RECENT_KEY, []);
-  return Array.isArray(value) ? value.filter((item): item is Recent => typeof item?.url === "string").slice(0, 6) : [];
 }
 
 export interface BrowserPaneController {
@@ -62,10 +60,12 @@ export function mountBrowserPane(options: {
   const findInput = $<HTMLInputElement>(".browser-find input");
   const findCount = $(".browser-find-count");
   const button = (action: string) => $<HTMLButtonElement>(`.browser-toolbar [data-action="${action}"]`);
+  const star = $<HTMLButtonElement>(".browser-bookmark");
   mountDownloads($(".browser-downloads"));
+  mountPrompts($(".browser-prompt"));
 
   let state: BrowserState = { tabs: [], activeId: null, url: "", title: "", loading: false, canGoBack: false,
-    canGoForward: false, zoom: 1, error: null };
+    canGoForward: false, zoom: 1, error: null, fullscreen: false };
   let open = false;
   let restored = false;
   let viewShown = false;
@@ -97,8 +97,7 @@ export function mountBrowserPane(options: {
     });
   };
   const hasPage = () => Boolean(state.url) && !state.error;
-  const wanted = () => open && !resizing && hasPage() && shell.dataset.view !== "repository"
-    && !occluded() && stage.getBoundingClientRect().width > 0;
+  const wanted = () => open && !resizing && hasPage() && !occluded() && stage.getBoundingClientRect().width > 0;
 
   /** 按当前状态显示或隐藏原生视图；串行执行，避免显示和隐藏的请求交错。 */
   function sync(): void {
@@ -111,7 +110,7 @@ export function mountBrowserPane(options: {
         // 视图已经画上去之后再拿掉截图，避免闪一下空白。
         setTimeout(() => { if (viewShown) snapshot.hidden = true; }, 60);
       } else if (!show && viewShown) {
-        const keepPicture = open && hasPage() && shell.dataset.view !== "repository";
+        const keepPicture = open && hasPage();
         const picture = await window.bitAgent.hideBrowser(keepPicture);
         viewShown = false;
         if (picture && keepPicture) { snapshot.src = picture; snapshot.hidden = false; }
@@ -190,7 +189,14 @@ export function mountBrowserPane(options: {
       $(".browser-error-detail").textContent = browserErrorMessage(state.error.code, state.error.description);
       $(".browser-error-code").textContent = state.error.code === -1 ? "" : `${state.error.description}（${state.error.code}）`;
       $(".browser-error-url").textContent = state.error.url;
+      $(".browser-error-certificate").hidden = !state.error.certificate;
+      $(".browser-error [data-proceed]").hidden = !state.error.certificate;
     }
+    star.hidden = !hasPage();
+    const marked = hasPage() && isBookmarked(state.url);
+    star.setAttribute("aria-pressed", String(marked));
+    star.title = marked ? "移除书签（Ctrl+D）" : "加入书签（Ctrl+D）";
+    star.setAttribute("aria-label", marked ? "移除书签" : "加入书签");
     if (document.activeElement !== address) address.value = state.url ? displayAddress(state.url) : "";
     address.title = state.title ? `${state.title}\n${state.url}` : state.url;
     button("back").disabled = !state.canGoBack;
@@ -211,10 +217,14 @@ export function mountBrowserPane(options: {
 
   function remember(): void {
     if (!state.url || state.loading || state.error) return;
-    const recent = [{ url: state.url, title: state.title || displayAddress(state.url) },
-      ...readRecent().filter((item) => item.url !== state.url)].slice(0, 6);
-    try { localStorage.setItem(RECENT_KEY, JSON.stringify(recent)); } catch { /* 存不下就不记 */ }
+    recordVisit(state.url, state.title);
   }
+  function toggleStar(): void {
+    if (!hasPage()) return;
+    toggleBookmark(state.url, state.title);
+    render();
+  }
+  star.addEventListener("click", toggleStar);
 
   window.bitAgent.onBrowserState((next) => {
     const finished = state.loading && !next.loading && state.activeId === next.activeId;
@@ -233,11 +243,17 @@ export function mountBrowserPane(options: {
     await window.bitAgent.navigateBrowser(url);
   }
 
+  // 地址栏建议：输入时列出匹配的书签和历史，上下键选择，回车打开。
+  const suggest = mountSuggestions({ input: address, list: $(".browser-suggestions"), open: (url) => void navigate(url) });
+
   // 不用表单自带的校验：上一次的错误提示会一直拦住提交，粘贴新地址后也提交不了。
   form.noValidate = true;
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     address.setCustomValidity("");
+    const picked = suggest.picked();
+    suggest.close();
+    if (picked) { void navigate(picked); return; }
     try {
       const url = browserAddress(address.value);
       if (!url) return;
@@ -251,7 +267,7 @@ export function mountBrowserPane(options: {
   address.addEventListener("focus", () => { if (state.url) address.value = state.url; address.select(); });
   address.addEventListener("blur", () => { if (state.url) address.value = displayAddress(state.url); });
   address.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") { address.value = state.url ? displayAddress(state.url) : ""; address.blur(); }
+    if (event.key === "Escape" && !suggest.isOpen()) { address.value = state.url ? displayAddress(state.url) : ""; address.blur(); }
   });
 
   // ---- 工具栏 ----
@@ -270,23 +286,27 @@ export function mountBrowserPane(options: {
   $(".browser-error [data-external]").addEventListener("click", () => {
     if (state.error?.url) window.open(state.error.url, "_blank", "noopener");
   });
+  $(".browser-error [data-proceed]").addEventListener("click", () => void window.bitAgent.trustBrowserCertificate());
 
   // ---- 起始页：本机开发服务器、最近访问 ----
   async function renderStart(): Promise<void> {
-    const recentList = $(".browser-recent");
-    const recent = readRecent();
-    recentList.replaceChildren(...recent.map((item) => {
-      const entry = document.createElement("button");
-      entry.type = "button";
-      entry.className = "browser-recent-item";
+    const entry = (item: Recent) => {
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = "browser-recent-item";
       const title = document.createElement("strong");
       title.textContent = item.title;
       const url = document.createElement("span");
       url.textContent = displayAddress(item.url);
-      entry.append(title, url);
-      entry.addEventListener("click", () => void navigate(item.url));
-      return entry;
-    }));
+      element.append(title, url);
+      element.addEventListener("click", () => void navigate(item.url));
+      return element;
+    };
+    const marked = bookmarks().slice(0, 8);
+    $(".browser-bookmarks").replaceChildren(...marked.map(entry));
+    $(".browser-bookmarks-section").hidden = !marked.length;
+    const recent = recentVisits(6);
+    $(".browser-recent").replaceChildren(...recent.map(entry));
     $(".browser-recent-section").hidden = !recent.length;
     const servers = $(".browser-servers");
     servers.dataset.state = "loading";
@@ -338,6 +358,7 @@ export function mountBrowserPane(options: {
     else if (name === "close-tab") { if (state.activeId) tabActions.close(state.activeId); }
     else if (name === "next-tab") cycleTab(1);
     else if (name === "previous-tab") cycleTab(-1);
+    else if (name === "bookmark") toggleStar();
     else if (name === "zoom-in" || name === "zoom-out" || name === "zoom-reset" || name === "print") {
       if (hasPage()) void window.bitAgent.browserAction(name);
     } else options.onShortcut(name);
@@ -347,8 +368,8 @@ export function mountBrowserPane(options: {
     const key = event.key.toLowerCase();
     const name = key === "tab" ? (event.shiftKey ? "previous-tab" : "next-tab")
       : event.shiftKey ? (key === "+" ? "zoom-in" : null)
-      : ({ f: "find", t: "new-tab", w: "close-tab", l: "focus-address", "=": "zoom-in", "+": "zoom-in", "-": "zoom-out",
-        "0": "zoom-reset", p: "print" } as const)[key as "f"] ?? null;
+      : ({ f: "find", t: "new-tab", w: "close-tab", l: "focus-address", d: "bookmark", "=": "zoom-in", "+": "zoom-in",
+        "-": "zoom-out", "0": "zoom-reset", p: "print" } as const)[key as "f"] ?? null;
     if (!name) return;
     event.preventDefault();
     event.stopPropagation();

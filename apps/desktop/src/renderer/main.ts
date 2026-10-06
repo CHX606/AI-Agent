@@ -133,7 +133,20 @@ app.sidebarToggle.addEventListener("click", toggleSidebar);
 const terminalPanel = mountTerminalPanel({
   panel: element<HTMLElement>("#terminal-panel"),
   toggle: element<HTMLButtonElement>("#terminal-toggle"),
+  homes: { tasks: element<HTMLElement>(".main-center"), repository: element<HTMLElement>("#repository-view") },
+  shell: app.shell,
   workspace: () => app.activeWorkspaceRoot,
+  openUrl: (url) => browserPane.openInNewTab(url),
+  // 把终端内容作为代码块放进输入框，用户补一句话就能让 Agent 看。
+  quote: (text) => {
+    if (app.activeView !== "tasks") app.setActiveView("tasks");
+    const input = app.objectiveInput;
+    const block = `\n\`\`\`\n${text}\n\`\`\`\n`;
+    const start = input.selectionStart ?? input.value.length;
+    input.setRangeText(block, start, input.selectionEnd ?? start, "end");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.focus();
+  },
 });
 const browserPane = mountBrowserPane({
   shell: app.shell,
@@ -141,7 +154,7 @@ const browserPane = mountBrowserPane({
   toggle: element<HTMLButtonElement>("#browser-toggle"),
   onShortcut: (shortcut) => {
     if (shortcut === "toggle-sidebar") toggleSidebar();
-    else if (shortcut === "toggle-terminal" && app.activeView === "tasks") terminalPanel.toggle();
+    else if (shortcut === "toggle-terminal") terminalPanel.toggle();
   },
 });
 // 对话里的网页链接在内置浏览器的新标签页打开；按住 Ctrl/Shift 点击时仍交给系统浏览器。
@@ -159,7 +172,6 @@ document.addEventListener("keydown", (event) => {
   if (event.isComposing || document.querySelector("dialog[open]")) return;
   const key = event.key.toLowerCase();
   if (key === "`") {
-    if (app.activeView !== "tasks") return;
     event.preventDefault();
     terminalPanel.toggle();
   } else if (key === "b" && !(event.target instanceof Element && event.target.closest(".terminal-panel"))) {
