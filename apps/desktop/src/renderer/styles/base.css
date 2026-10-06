@@ -77,6 +77,8 @@ svg {
 }
 
 .shell {
+  /* 窄窗口时浮动的任务详情和浏览器以这里为参照，从标题栏下面开始，不会盖住标题栏。 */
+  position: relative;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(480px, 1fr)
     min(var(--inspector-width), calc(100vw - var(--sidebar-width) - 480px));

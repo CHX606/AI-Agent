@@ -70,17 +70,32 @@ body[data-resizing="true"] {
     display: none;
   }
 
-  .shell[data-browser-open="true"] {
+  /* 窄窗口时浏览器浮在内容上方，不再占一列（代码仓库页的三列规则优先级更高，这里一并覆盖）。 */
+  .shell[data-browser-open="true"],
+  .shell[data-view="repository"][data-browser-open="true"] {
     grid-template-columns: var(--sidebar-width) minmax(460px, 1fr);
   }
 
-  .browser-pane {
+  .shell[data-view="repository"][data-browser-open="true"] .repository-view {
+    grid-column: 2 / -1;
+  }
+
+  .browser-pane,
+  .shell[data-view="repository"] .browser-pane {
     position: absolute;
     z-index: 20;
     top: 0;
     right: 0;
+    grid-column: auto;
     width: min(var(--browser-width, 520px), 88vw);
     box-shadow: var(--overlay-shadow);
+  }
+
+  /* 对话页：浮动的面板从对话区顶栏下面开始，顶栏的状态和终端、浏览器、任务详情按钮始终能看到、能点。 */
+  .shell[data-view="tasks"] .sidebar-right,
+  .shell[data-view="tasks"] .browser-pane {
+    top: 52px;
+    height: calc(var(--app-height) - 52px);
   }
 }
 

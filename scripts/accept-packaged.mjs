@@ -11,6 +11,7 @@ import { verifyRewind } from "../apps/desktop/test/rewind-packaged.mjs";
 import { verifySidebarCollapse, verifySidebarResize, verifyWorkspaceOrder } from "../apps/desktop/test/workspace-sidebar-packaged.mjs";
 import { verifyTerminal } from "../apps/desktop/test/terminal-packaged.mjs";
 import { verifyBrowser, verifyBrowserAgent, verifyBrowserFullscreen } from "../apps/desktop/test/browser-packaged.mjs";
+import { auditLayouts } from "../apps/desktop/test/layout-audit-packaged.mjs";
 import { evaluateMain, verifyImageInput } from "../apps/desktop/test/image-input-packaged.mjs";
 
 const executable = resolve(process.argv[2] ?? "");
@@ -706,6 +707,12 @@ try {
     main:expression=>evaluateMain(mainInspectorUrl,expression) });
   for (const shot of browserShots) writeFileSync(join(directory, shot.name), Buffer.from(shot.data, "base64"));
   console.log("BROWSER_PASSED", browserShots.map(shot => shot.name).join(" "));
+  const audit = await auditLayouts({ command, evaluate, check, main:expression=>evaluateMain(mainInspectorUrl,expression) });
+  for (const shot of audit.shots) writeFileSync(join(directory, shot.name), Buffer.from(shot.data, "base64"));
+  writeFileSync(join(directory, "layout-audit.json"), JSON.stringify(audit.results, null, 2));
+  const layoutIssues = audit.results.filter(item => item.issues.length);
+  assert.deepEqual(layoutIssues, [], `界面有错位或重叠（截图和 layout-audit.json 在 ${directory}）：${JSON.stringify(layoutIssues).slice(0, 3000)}`);
+  console.log("LAYOUT_AUDIT_PASSED", audit.results.length);
   await command("Emulation.setDeviceMetricsOverride", { width:1280, height:820, deviceScaleFactor:1, mobile:false });
   const workspaceOrder = await verifyWorkspaceOrder(evaluate, check);
   const sidebarOrder = await verifySidebarOrder(evaluate, check);
