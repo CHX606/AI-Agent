@@ -102,4 +102,23 @@ describe("composer primary button", () => {
     expect(button.dataset.state).toBe("stopped");
     expect(button.disabled).toBe(true);
   });
+
+  it("enables image-only messages while retaining stop and read-in-progress behavior", () => {
+    const { app, button } = fixture();
+    let reading = false;
+    app.composerImages = { snapshot: () => [{ name: "screen.png" }], isReading: () => reading } as unknown as RendererApp["composerImages"];
+    app.paintRunButton();
+    expect(button.disabled).toBe(false);
+    expect(button.dataset.empty).toBe("false");
+    reading = true;
+    app.paintRunButton();
+    expect(button.disabled).toBe(true);
+    app.composerImages = null;
+    document.body.dataset.busy = "true";
+    app.activeTaskId = "task-1";
+    app.statusText.dataset.status = "RUNNING";
+    app.paintRunButton();
+    expect(button.disabled).toBe(false);
+    expect(button.dataset.state).toBe("running");
+  });
 });

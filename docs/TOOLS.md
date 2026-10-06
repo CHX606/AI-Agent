@@ -90,7 +90,7 @@
 
 `run_tests`、`run_checks` 和 `verify_project` 都通过官方 Windows OS 沙箱（`@anthropic-ai/sandbox-runtime@0.0.78`）运行：命令以独立的 `srt-sandbox` 账户执行，禁网，可以写选定的工作区，但不能改 `.git`、依赖目录和 `.bit-agent` 等配置；整台电脑同一时间只跑一个沙箱命令。
 
-命令直接在你的工作区里运行，用的是项目自己的 `.venv`（没有时用 Agent 自带的 Python）和本机工具链，验证时不自动安装依赖。命令自己写出的文件不进入改动审阅。完整边界和 Windows 自身权限带来的限制见 [Windows OS 沙箱](ENVIRONMENT.md)。
+`run_tests`、`run_checks` 直接在你的工作区里运行，用的是项目自己的 `.venv`（没有时用 Agent 自带的 Python）和本机工具链，验证时不自动安装依赖，命令自己写出的文件不进入改动审阅。`verify_project` 在私有临时副本里运行，不改工作区。完整边界和 Windows 自身权限带来的限制见 [Windows OS 沙箱](ENVIRONMENT.md)。
 
 ## 修改后什么时候允许结束
 

@@ -47,11 +47,11 @@ powershell -ExecutionPolicy Bypass -File scripts\harden-sandbox.ps1 -Remove
 
 测试、检查和独立验收在“逐次确认”和“允许修改”模式下直接运行，不弹审批；“只读模式”下不运行。这与 Claude Code（沙箱 auto-allow 模式）和 Codex（默认的 Auto 模式）一致：沙箱内的命令自动运行，越过沙箱边界才需要确认。
 
-检查命令自己产生的文件改动（例如构建产物）直接留在工作区，不进入“审阅改动”，也不能用“撤销这次改动”还原。Claude Code 的检查点同样不记录 Shell 命令改动的文件，Codex 依靠 Git 回退。建议在 Git 仓库里使用，需要时用 Git 还原。
+单独调用的 `run_tests`、`run_checks` 直接在工作区里运行，它们自己产生的文件改动直接留在工作区，不进入“审阅改动”，也不能用“撤销这次改动”还原。Claude Code 的检查点同样不记录 Shell 命令改动的文件，Codex 依靠 Git 回退。建议在 Git 仓库里使用，需要时用 Git 还原。
 
 ## 工作区和依赖
 
-普通检查直接使用选定的工作区。仅失败原因对比和独立验收需要安全快照，快照建在私有临时目录里，过滤凭据、虚拟环境及依赖目录。Python 优先使用原项目 `.venv`，缺少时使用 Agent 的验证工具；Node 使用项目现有 npm/pnpm 脚本。项目依赖和工具链需要预先准备，验证时禁网且不自动安装依赖。
+基础检查（`verify_project`）、失败原因对比和独立验收都在私有临时目录的安全副本里运行，不改你的工作区；副本过滤凭据、虚拟环境（`.venv`）及依赖目录（`node_modules`）。单独调用的 `run_tests`、`run_checks` 直接在选定的工作区里运行，优先使用项目 `.venv`，没有时使用 Agent 自带的 Python。Node 使用项目现有 npm/pnpm 脚本。项目依赖和工具链需要预先准备，验证时禁网且不自动安装依赖。
 
 Node 项目放在用户目录深处（例如 `AppData`、`Temp` 下）时，Node 读取上级目录信息可能返回 EPERM；这一限制没有通过扩大用户目录权限绕过。
 

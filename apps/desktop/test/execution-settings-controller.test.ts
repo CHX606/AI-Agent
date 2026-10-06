@@ -83,7 +83,7 @@ it("saves once, blocks closing during save and restores controls after success",
   expect(submitted.defaultPrevented).toBe(true);
   expect(view.dialog.open).toBe(true);
   expect(view.dialog.dispatch("wa-hide").defaultPrevented).toBe(true);
-  expect(api.saveExecutionSettings).toHaveBeenCalledExactlyOnceWith({ maxToolRounds: 325 });
+  expect(api.saveExecutionSettings).toHaveBeenCalledExactlyOnceWith({ maxToolRounds: 325, acceptanceMode: "auto" });
   expect(view.save.loading).toBe(true);
   pending.resolve({ maxToolRounds: 325 });
   await pending.promise;
@@ -92,6 +92,33 @@ it("saves once, blocks closing during save and restores controls after success",
   expect(view.save.disabled).toBe(false);
   expect(view.feedback.dataset.kind).toBe("success");
   expect(view.feedback.textContent).toContain("325");
+});
+
+it("loads, changes and saves the independent acceptance mode", async () => {
+  const options = ["auto", "always", "off"].map(value => ({ value, checked: false }));
+  const fieldset = Object.assign(new Control(), {
+    querySelector: () => options.find(option => option.checked) ?? null,
+    querySelectorAll: () => options,
+  });
+  const view = fixture();
+  const nodes = view.nodes as Record<string, unknown>;
+  nodes["#acceptance-mode"] = fieldset;
+  const controller = new ExecutionSettingsController(view.dialog as unknown as HTMLElementTagNameMap["wa-dialog"]);
+  api.getExecutionSettings.mockResolvedValue({ maxToolRounds: 100, acceptanceMode: "off" });
+  await controller.open();
+  expect(options.find(option => option.checked)?.value).toBe("off");
+  options.forEach(option => { option.checked = option.value === "always"; });
+  api.saveExecutionSettings.mockImplementation(async settings => settings);
+  controller.bind(new Control() as unknown as HTMLButtonElement);
+  await (controller as unknown as { submit(event: Event): Promise<void> }).submit(new Event("submit"));
+  expect(api.saveExecutionSettings).toHaveBeenCalledExactlyOnceWith({ maxToolRounds: 100, acceptanceMode: "always" });
+  expect(view.feedback.textContent).toContain("每次修改都验收");
+});
+
+it("treats settings saved by an older version as automatic acceptance", async () => {
+  const { parseExecutionSettings } = await import("../src/shared/execution-settings");
+  expect(parseExecutionSettings({ maxToolRounds: 80 })).toEqual({ maxToolRounds: 80, acceptanceMode: "auto" });
+  expect(() => parseExecutionSettings({ maxToolRounds: 80, acceptanceMode: "sometimes" })).toThrow("独立验收");
 });
 
 it("reports a failed save and permits retry without hiding the error", async () => {

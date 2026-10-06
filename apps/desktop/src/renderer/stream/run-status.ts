@@ -15,9 +15,33 @@ export interface StatusPresentation {
   meta: string;
 }
 
+const minutes = (seconds: number) => `${Math.floor(seconds / 60)} 分 ${String(seconds % 60).padStart(2, "0")} 秒`;
+
+/** 状态行的计时：整秒走动，“22 秒”“3 分 05 秒”。 */
 export function formatElapsed(milliseconds: number): string {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
-  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+  return seconds < 60 ? `${seconds} 秒` : minutes(seconds);
+}
+
+/** 工具用时：短的保留一位小数“6.3 秒”，长的“11 秒”“3 分 41 秒”。 */
+export function formatDuration(milliseconds: number): string {
+  const value = Math.max(0, milliseconds);
+  if (value < 10_000) return `${(value / 1000).toFixed(1)} 秒`;
+  const seconds = Math.round(value / 1000);
+  return seconds < 60 ? `${seconds} 秒` : minutes(seconds);
+}
+
+// “点右下角 ■ 可停止”只在第一次运行时提示，之后状态行只留动作和计时。
+const STOP_HINT_KEY = "bit-agent.stop-hint-seen.v1";
+
+function firstStopHint(): boolean {
+  try {
+    if (localStorage.getItem(STOP_HINT_KEY) === "1") return false;
+    localStorage.setItem(STOP_HINT_KEY, "1");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export class RunStatus {
@@ -28,6 +52,7 @@ export class RunStatus {
   private frame = 0;
   stopped = false;
   private paused = false;
+  private stopHint: boolean | null = null;
 
   reset(): void {
     this.value = "IDLE";
@@ -37,11 +62,13 @@ export class RunStatus {
     this.frame = 0;
     this.stopped = false;
     this.paused = false;
+    this.stopHint = null;
   }
 
   setStatus(value: string): void {
     if (this.stopped) return;
     this.value = value;
+    if (value === "RUNNING" && this.stopHint === null) this.stopHint = firstStopHint();
     if (STOPPED.has(value)) {
       this.stopped = true;
       this.paused = value === "PAUSED" || value === "PAUSE_REQUESTED";
@@ -75,6 +102,6 @@ export class RunStatus {
     if (this.loading !== null) return base;
     const queued = this.value === "QUEUED" || this.value === "SUBMITTING";
     return { ...base, verb: queued ? "等待执行…" : `${this.phase.replace(/…$/u, "")}…`,
-      meta: formatElapsed(now - this.startedAt) + (this.value === "RUNNING" ? " · 点右下角 ■ 可停止" : "") };
+      meta: formatElapsed(now - this.startedAt) + (this.value === "RUNNING" && this.stopHint ? " · 点右下角 ■ 可停止" : "") };
   }
 }

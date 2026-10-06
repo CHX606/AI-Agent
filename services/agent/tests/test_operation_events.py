@@ -16,4 +16,5 @@ def test_tool_operation_describes_search_and_verification() -> None:
     verify = tool_operation("verify_project", "{}")
 
     assert search["target"] == "“ContextManager”"
-    assert verify["target"] == "当前项目"
+    # 基础检查没有具体对象，界面只显示“基础检查”，不再加一个没有信息量的“当前项目”。
+    assert verify == {"kind": "verify_project", "label": "基础检查", "target": ""}

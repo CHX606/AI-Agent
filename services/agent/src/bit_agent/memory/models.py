@@ -50,6 +50,8 @@ class WorkingMemory(BaseModel):
     # 任务进度只在这里保存；对话历史和压缩摘要由 Context Manager 管理。
     has_unverified_changes: bool = False
     verification_paths: list[str] = Field(default_factory=list)
+    # 还没验证的改动累计增删了多少行；下一轮“继续”时据此判断是否需要独立验收。
+    verification_changed_lines: int = Field(default=0, ge=0)
     applied_interaction_ids: list[str] = Field(default_factory=list)
     rounds: int = Field(default=0, ge=0)
     status: WorkingMemoryStatus = WorkingMemoryStatus.ACTIVE

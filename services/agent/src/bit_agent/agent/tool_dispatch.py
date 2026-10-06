@@ -6,6 +6,12 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
+from bit_agent.agent.result_summaries import (
+    clip,
+    patch_summary,
+    verify_project_summary,
+    verify_task_summary,
+)
 from bit_agent.tools import (
     apply_patch,
     list_files,
@@ -80,8 +86,9 @@ _OPERATIONS: dict[str, tuple[str, Callable[[dict[str, Any]], str]]] = {
     "run_tests": ("运行测试", _argument("target", "项目测试")),
     "run_checks": ("运行检查", _checks_target),
     "apply_patch": ("修改文件", _patch_target),
-    "verify_project": ("基础检查", _fixed("当前项目")),
-    "verify_task": ("独立验收", _fixed("独立测试 Agent")),
+    # 这两项没有具体对象，留空比写“当前项目”“独立测试 Agent”更干净。
+    "verify_project": ("基础检查", _fixed("")),
+    "verify_task": ("独立验收", _fixed("")),
     "write_acceptance_test": ("编写验收测试", _argument("filename", "隔离测试文件")),
     "run_acceptance_test": ("运行验收测试", _argument("target", "项目测试集")),
     "submit_acceptance_report": ("提交验收报告", _argument("verdict", "验收结论")),
@@ -102,29 +109,26 @@ def tool_operation(tool_name: str, raw_arguments: str) -> dict[str, str]:
     return {"kind": tool_name, "label": label, "target": target(arguments)}
 
 
-_VERIFY_OUTCOMES = {
-    "PASSED": "检查通过",
-    "FAILED": "出现新的失败",
-    "UNVERIFIED": "没有能运行的检查",
-    "NOT_APPLICABLE": "只改了文档，无需检查",
-}
-
-
 def _lines(output: Any) -> int:
     return len(output.splitlines()) if isinstance(output, str) and output else 0
 
 
-def result_summary(tool_name: str, result: ToolResult) -> str:
+def result_summary(tool_name: str, result: ToolResult, raw_arguments: str | None = None) -> str:
     """一句话说明工具结果，显示在界面的工具行下面；不包含文件内容。"""
     output = result.output
+    message = result.error.message if result.error is not None else None
     if tool_name == "verify_project" and isinstance(output, dict):
-        return _VERIFY_OUTCOMES.get(str(output.get("outcome")), "")
+        return clip(verify_project_summary(output))
     if tool_name == "verify_task" and isinstance(output, dict) and output.get("verdict"):
-        return {"PASSED": "验收通过", "FAILED": "验收发现问题"}.get(
-            str(output["verdict"]), "验收未完成"
-        )
+        return clip(verify_task_summary(output, message))
+    if (
+        tool_name == "verify_task"
+        and result.error
+        and result.error.code == "ACCEPTANCE_NOT_VERIFIED"
+    ):
+        return clip(verify_task_summary({}, message))
     if result.error is not None:
-        return result.error.message.strip().splitlines()[0][:160] if result.error.message else ""
+        return message.strip().splitlines()[0][:160] if message else ""
     if tool_name == "read_file":
         return f"{_lines(output)} 行"
     if tool_name == "list_files":
@@ -133,7 +137,7 @@ def result_summary(tool_name: str, result: ToolResult) -> str:
         count = _lines(output)
         return f"{count} 处匹配" if count else "没有匹配"
     if tool_name == "apply_patch":
-        return f"修改 {len(result.metadata.affected_paths)} 个文件"
+        return patch_summary(raw_arguments, len(result.metadata.affected_paths))
     if tool_name == "delegate_tasks" and isinstance(output, dict):
         return f"{len(output.get('investigations') or [])} 个调查已返回"
     if tool_name == "ask_user" and isinstance(output, dict):

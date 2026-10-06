@@ -1,6 +1,7 @@
 """在每次模型请求前控制运行时上下文大小并保持工具协议完整。"""
 
 import json
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -104,8 +105,13 @@ class ContextManager:
         *,
         working_memory: WorkingMemory,  # 工作内存
         tools: list[dict[str, Any]],  # 工具列表
+        on_compaction: Callable[[int], Awaitable[None]] | None = None,
     ) -> ContextPreparation:
-        """原地压缩 history，并返回可直接传给 Responses API 的输入。"""
+        """原地压缩 history，并返回可直接传给 Responses API 的输入。
+
+        需要压缩时先调用 on_compaction(当前 token 数)：摘要可能要调用几次模型、等上几分钟，
+        调用方据此提前告诉用户，而不是让界面看起来卡住。
+        """
         raw_tokens = estimate_context_tokens(history, tools)  # 估算当前历史的 token 数
         # 记录到的最大估算输入 token 数
         self.peak_input_tokens = max(self.peak_input_tokens, raw_tokens)
@@ -115,6 +121,8 @@ class ContextManager:
         compacted = False  # 标记是否进行了压缩
 
         if current_tokens > self.policy.soft_limit_tokens:  # 如果当前 token 数超过软限制
+            if on_compaction is not None:
+                await on_compaction(current_tokens)
             # 循环尝试压缩，attempt 依次为 0、1、2
             for attempt in range(MAX_CONTEXT_COMPACTION_ATTEMPTS):
                 previous_tokens = current_tokens  # 保存本轮压缩前的 token 数，便于比较是否变短

@@ -23,10 +23,11 @@ from bit_agent.runtime.application.ports import (
     ProjectVerifier,
 )
 from bit_agent.runtime.domain.acceptance import VERIFY_TASK_SCHEMA
+from bit_agent.runtime.domain.acceptance_policy import acceptance_decision
 from bit_agent.runtime.domain.tool_schemas import VERIFY_SCHEMA
 from bit_agent.tool_provider import LocalToolProvider, RestrictedToolProvider
 from bit_agent.tool_provider.external import ExternalMcpTools
-from bit_agent.tools.apply_patch import patch_deletes_files
+from bit_agent.tools.apply_patch import patch_changed_lines, patch_deletes_files
 from bit_agent.tools.models import ToolMetadata, ToolResult, ToolStatus
 
 MAX_DELEGATION_TASKS = 3
@@ -35,7 +36,7 @@ MAX_CONCURRENT_INVESTIGATIONS = 3
 VERIFICATION_CONFIG_DIRECTORY = ".bit-agent/"
 
 MODE_INSTRUCTIONS = {
-    "off": "本轮关闭并行开发分工，由你直接完成实现；独立验收工具 verify_task 仍可使用。",
+    "off": "本轮关闭并行开发分工，由你直接完成实现。",
     "on": (
         "本轮开启多 Agent。先考虑分工，对适合独立调查的部分调用 delegate_tasks。"
         "没有合理分工方式时说明原因，不要为了凑数量创建子任务。"
@@ -111,6 +112,8 @@ class DelegatingToolProvider(LocalToolProvider):
         external: ExternalMcpTools | None = None,
         report: Callable[[str, dict], Awaitable[None]] | None = None,
         approved_categories: set[str] | None = None,
+        acceptance_mode: str = "always",
+        inherited_changed_lines: int = 0,
     ) -> None:
         super().__init__(root, execute_tool)
         # 只读模式不连接外部工具：它们可能写文件、联网或改动外部系统。
@@ -127,8 +130,11 @@ class DelegatingToolProvider(LocalToolProvider):
         self.journal = journal
         self.verifier = verifier
         self.changed_paths = set(inherited_changes or [])
+        # 上一轮没验证完的改动行数也算进来，“继续”时才能按完整改动大小决定是否验收。
+        self.changed_lines = max(0, inherited_changed_lines)
         self.acceptance_workspace = acceptance_workspace
         self.acceptance_context = acceptance_context
+        self.acceptance_mode = acceptance_mode
         self.baseline: ToolResult | None = None
         self.max_tool_rounds = max_tool_rounds
         # 用户选择“本对话内同类操作都批准”的类别（同一对话的各轮共用这个集合）；
@@ -194,6 +200,29 @@ class DelegatingToolProvider(LocalToolProvider):
             return False, answer["text"].strip()[:2000] or None
         return answer.get("option_id") == "approve", None
 
+    def _acceptance_available(self) -> bool:
+        return self.acceptance_workspace is not None and self.acceptance_context is not None
+
+    def _with_acceptance_decision(self, result: ToolResult) -> ToolResult:
+        """在基础检查结果里写明这次是否需要独立验收，模型和界面都按它走。"""
+        if not self._acceptance_available() or not isinstance(result.output, dict):
+            return result
+        required, reason = acceptance_decision(
+            self.acceptance_mode, self.changed_paths, self.changed_lines
+        )
+        output = {
+            **result.output,
+            "acceptance": "required" if required else "skipped",
+            "acceptance_reason": reason,
+        }
+        if result.output.get("outcome") == "PASSED":
+            output["next_step"] = (
+                "调用 verify_task 做独立验收。"
+                if required
+                else "不需要独立验收：不要调用 verify_task，直接给出最终回答。"
+            )
+        return result.model_copy(update={"output": output})
+
     async def __aenter__(self) -> "DelegatingToolProvider":
         if self.external is not None:
             await self.external.__aenter__()
@@ -213,7 +242,7 @@ class DelegatingToolProvider(LocalToolProvider):
         if self.external is not None:
             tools.extend(self.external.model_tools())
         tools.append(VERIFY_SCHEMA)
-        if self.acceptance_workspace is not None and self.acceptance_context is not None:
+        if self._acceptance_available() and self.acceptance_mode != "off":
             tools.append(VERIFY_TASK_SCHEMA)
         if self.interaction is not None:
             tools.append(ASK_USER_SCHEMA)
@@ -300,6 +329,8 @@ class DelegatingToolProvider(LocalToolProvider):
                 finally:
                     self.journal.finish(entry)
                     self.changed_paths.update(entry["files"])
+                if result.status is ToolStatus.SUCCESS:
+                    self.changed_lines += patch_changed_lines(entry["patch"])
                 return result
             except (ValueError, KeyError, TypeError, OSError) as exc:
                 return tool_error_result(tool_call_id, tool_name, "PATCH_REJECTED", str(exc))
@@ -332,6 +363,7 @@ class DelegatingToolProvider(LocalToolProvider):
                                     }
                                 }
                             )
+                self.baseline = self._with_acceptance_decision(self.baseline)
                 return self.baseline
             except ValueError as exc:
                 return tool_error_result(tool_call_id, tool_name, "INVALID_ARGUMENT", str(exc))
@@ -347,6 +379,19 @@ class DelegatingToolProvider(LocalToolProvider):
                     raise ValueError("verify_task 只接受 focus 字符串，最多 4000 字符")
                 if self.acceptance_workspace is None or self.acceptance_context is None:
                     raise ValueError("独立验收尚未配置")
+                decided = self.baseline.output if self.baseline is not None else None
+                if self.acceptance_mode == "off" or (
+                    isinstance(decided, dict) and decided.get("acceptance") == "skipped"
+                ):
+                    reason = (
+                        decided.get("acceptance_reason") if isinstance(decided, dict) else None
+                    ) or "执行设置已关闭独立验收"
+                    return tool_error_result(
+                        tool_call_id,
+                        tool_name,
+                        "ACCEPTANCE_NOT_APPLICABLE",
+                        f"不需要独立验收：{reason}。不要再调用 verify_task，直接给出最终回答。",
+                    )
                 outcome = (
                     self.baseline.output.get("outcome")
                     if self.baseline is not None and isinstance(self.baseline.output, dict)

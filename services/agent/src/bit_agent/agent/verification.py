@@ -14,6 +14,7 @@ from typing import Literal
 
 from bit_agent.agent.result import ToolCallRecord, VerificationStatus
 from bit_agent.memory import WorkingMemory
+from bit_agent.tools.apply_patch import patch_changed_lines
 
 AcceptanceStatus = Literal["NOT_RUN", "PASSED", "FAILED", "NOT_VERIFIED"]
 # 模型连续这么多次想结束却不做任何验证，就停止任务，不再空耗轮数。
@@ -64,6 +65,7 @@ def check_paths_cover_changes(paths: object, changed_files: set[str]) -> bool:
 class VerificationState:
     require_independent_acceptance: bool = False
     changed_files: set[str] = field(default_factory=set)
+    changed_lines: int = 0
     has_unverified_changes: bool = False
     tests_passed: bool = False
     quality_checks_passed: bool = False
@@ -84,6 +86,7 @@ class VerificationState:
         self.has_unverified_changes = memory.has_unverified_changes
         if self.has_unverified_changes:
             self.changed_files.update(memory.verification_paths)
+            self.changed_lines += memory.verification_changed_lines
         if patch_interrupted:
             self.has_unverified_changes = True
             self.changed_files.add(".")
@@ -95,6 +98,7 @@ class VerificationState:
         memory.verification_paths = (
             sorted(self.changed_files) if self.has_unverified_changes else []
         )
+        memory.verification_changed_lines = self.changed_lines if self.has_unverified_changes else 0
 
     def requirements_changed(self) -> None:
         """用户补充或修改了要求：独立验收模式下，已有改动必须重新验收。"""
@@ -143,10 +147,17 @@ class VerificationState:
             self.tests_passed = self.quality_checks_passed = success
             self.status = "PASSED" if success else "FAILED"
             self.notes = [note for note in output.get("notes", []) if isinstance(note, str)]
+            # 自动模式下小改动不做独立验收：基础检查通过即可收尾，并在结果里写明原因。
+            skipped = output.get("acceptance") == "skipped"
+            if success and skipped and isinstance(output.get("acceptance_reason"), str):
+                self.notes = [*self.notes, output["acceptance_reason"]]
             self.has_unverified_changes = pending and (
-                not success or self.require_independent_acceptance
+                not success or (self.require_independent_acceptance and not skipped)
             )
         elif name == "verify_task":
+            if code == "ACCEPTANCE_NOT_APPLICABLE":
+                # 只是告诉模型这次不需要验收，不改变已有的验证结论。
+                return
             if self.status in {"UNVERIFIED", "NOT_APPLICABLE"}:
                 # 基础检查已经说明没有能运行的检查，独立验收不适用；
                 # 不能因为这次被拒绝的调用又把改动标回“未验证”，否则会在两者之间无限循环。
@@ -175,6 +186,9 @@ class VerificationState:
             )
         elif name == "apply_patch":
             if success:
+                if not self.has_unverified_changes:
+                    self.changed_lines = 0
+                self.changed_lines += patch_changed_lines((record.arguments or {}).get("patch"))
                 self.changed_files.update(record.metadata.affected_paths)
                 self.has_unverified_changes = True
                 self.tests_passed = self.quality_checks_passed = False

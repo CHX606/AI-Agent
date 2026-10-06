@@ -7,12 +7,20 @@ import { taskRequestBody } from "../src/main/application/task-input.js";
 import { parseExecutionSettings } from "../src/shared/execution-settings.js";
 
 describe("execution settings", () => {
-  it("defaults to 100 and reads the saved value after reopening", () => {
+  it("defaults to 100 rounds with automatic acceptance and reads the saved value after reopening", () => {
     const directory = mkdtempSync(join(tmpdir(), "bit-agent-execution-settings-"));
-    expect(readExecutionSettings(directory)).toEqual({ maxToolRounds: 100 });
-    expect(writeExecutionSettings(directory, { maxToolRounds: 325 })).toEqual({ maxToolRounds: 325 });
-    expect(readExecutionSettings(directory)).toEqual({ maxToolRounds: 325 });
-    expect(JSON.parse(readFileSync(join(directory, "execution-settings.json"), "utf8"))).toEqual({ maxToolRounds: 325 });
+    expect(readExecutionSettings(directory)).toEqual({ maxToolRounds: 100, acceptanceMode: "auto" });
+    expect(writeExecutionSettings(directory, { maxToolRounds: 325, acceptanceMode: "off" }))
+      .toEqual({ maxToolRounds: 325, acceptanceMode: "off" });
+    expect(readExecutionSettings(directory)).toEqual({ maxToolRounds: 325, acceptanceMode: "off" });
+    expect(JSON.parse(readFileSync(join(directory, "execution-settings.json"), "utf8")))
+      .toEqual({ maxToolRounds: 325, acceptanceMode: "off" });
+  });
+
+  it("reads a settings file written before the acceptance option existed", () => {
+    const directory = mkdtempSync(join(tmpdir(), "bit-agent-execution-settings-"));
+    writeFileSync(join(directory, "execution-settings.json"), JSON.stringify({ maxToolRounds: 40 }));
+    expect(readExecutionSettings(directory)).toEqual({ maxToolRounds: 40, acceptanceMode: "auto" });
   });
 
   it.each([0, -1, 1.5, 1001, "20", null, true, NaN, Infinity, undefined])("rejects invalid limit %s", (value) => {
@@ -44,17 +52,17 @@ describe("execution settings", () => {
       sessionId: "session-1", multiAgentMode: "off" as const, permissionMode: "read_only" as const };
     writeExecutionSettings(directory, { maxToolRounds: 25 });
     const first = taskRequestBody(input, readExecutionSettings(directory));
-    writeExecutionSettings(directory, { maxToolRounds: 250 });
+    writeExecutionSettings(directory, { maxToolRounds: 250, acceptanceMode: "always" });
     const second = taskRequestBody(input, readExecutionSettings(directory));
     expect(first).toEqual({ objective: "inspect", workspace_root: "D:\\project", session_id: "session-1",
-      multi_agent_mode: "off", permission_mode: "read_only", max_tool_rounds: 25 });
-    expect(second.max_tool_rounds).toBe(250);
+      multi_agent_mode: "off", permission_mode: "read_only", max_tool_rounds: 25, acceptance_mode: "auto" });
+    expect(second).toMatchObject({ max_tool_rounds: 250, acceptance_mode: "always" });
     expect(first.max_tool_rounds).toBe(25);
   });
 
   it("sends the chosen model and thinking level only when they are set", () => {
     const base = { gatewayUrl: "http://localhost:3000", objective: "fix", workspaceRoot: "D:\\project" };
-    const settings = { maxToolRounds: 100 };
+    const settings = { maxToolRounds: 100, acceptanceMode: "auto" as const };
     expect(taskRequestBody({ ...base, model: " gpt-5.5-mini ", reasoningEffort: "high" }, settings))
       .toMatchObject({ model: "gpt-5.5-mini", reasoning_effort: "high" });
     const plain = taskRequestBody(base, settings);

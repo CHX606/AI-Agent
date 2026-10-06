@@ -19,6 +19,19 @@
 .execution-settings-dialog wa-input::part(form-control-label) { color: var(--text); font-size: 13px; }
 .execution-settings-dialog wa-input [slot="end"] { color: var(--text-muted); font-size: 12px; }
 .execution-settings-form .product-feedback { margin: 0; }
+/* 独立验收：三个选项一次看全，选中项用品牌色描边。 */
+.execution-acceptance { display: grid; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.execution-acceptance legend { margin-bottom: 4px; padding: 0; color: var(--text); font: 13px/1.6 var(--font-sans); }
+.execution-acceptance-intro { margin: 0 0 2px; color: var(--text-muted); font: 12px/1.7 var(--font-sans); }
+.execution-choice {
+  display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; align-items: start;
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: 7px; cursor: pointer;
+}
+.execution-choice:has(input:checked) { border-color: var(--brand); background: var(--bg-panel); }
+.execution-choice input { margin: 3px 0 0; accent-color: var(--brand); }
+.execution-choice strong { display: block; color: var(--text); font: 600 13px/1.6 var(--font-sans); }
+.execution-choice small { display: block; color: var(--text-muted); font: 12px/1.6 var(--font-sans); }
+.execution-acceptance:disabled .execution-choice { cursor: default; opacity: 0.6; }
 .execution-settings-footer { display: flex; width: 100%; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 #execution-settings-reset { margin-right: auto; }
 @media (max-width: 720px) {

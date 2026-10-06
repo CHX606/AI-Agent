@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { RunStatus } from "../src/renderer/stream/run-status.js";
+import { describe, expect, it, vi } from "vitest";
+import { RunStatus, formatDuration } from "../src/renderer/stream/run-status.js";
 
 describe("task stopping presentation", () => {
   it.each(["CANCELLED", "CANCELLATION_REQUESTED", "PAUSE_REQUESTED", "PAUSED"])(
@@ -36,8 +36,32 @@ describe("task stopping presentation", () => {
     status.setStartedAt("2026-10-04T00:00:00Z");
     status.setStatus("RUNNING");
     expect(status.presentation(Date.parse("2026-10-04T00:00:12Z"))).toMatchObject({
-      hidden: false, state: "running", verb: "思考中…", meta: "12s · 点右下角 ■ 可停止",
+      hidden: false, state: "running", verb: "思考中…", meta: "12 秒",
     });
+  });
+
+  it("shows the stop hint only during the very first run", () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", { getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => { store.set(key, value); } });
+    try {
+      const first = new RunStatus();
+      first.setStartedAt("2026-10-04T00:00:00Z");
+      first.setStatus("RUNNING");
+      const at = Date.parse("2026-10-04T00:03:05Z");
+      expect(first.presentation(at).meta).toBe("3 分 05 秒 · 点右下角 ■ 可停止");
+      expect(first.presentation(at).meta).toContain("可停止");
+      first.reset();
+      first.setStartedAt("2026-10-04T00:00:00Z");
+      first.setStatus("RUNNING");
+      expect(first.presentation(at).meta).toBe("3 分 05 秒");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("formats tool durations briefly", () => {
+    expect([1_234, 6_300, 11_400, 221_000].map(formatDuration)).toEqual(["1.2 秒", "6.3 秒", "11 秒", "3 分 41 秒"]);
   });
 
   it("replays resumed legacy tasks without unlocking an explicitly cancelled turn", () => {

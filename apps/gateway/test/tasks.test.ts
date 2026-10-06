@@ -29,6 +29,17 @@ describe("task API", () => {
     } finally { await app.close(); }
   });
 
+  it.each([["auto", 202], ["always", 202], ["off", 202], ["sometimes", 400], [true, 400]])(
+    "validates the independent acceptance mode (%s)", async (mode, status) => {
+      const app = buildApp({ logger: false, taskStore: new MemoryTaskStore() });
+      try {
+        const response = await app.inject({ method: "POST", url: "/v1/tasks", payload: {
+          objective: "inspect", workspace_root: "D:\\workspace", acceptance_mode: mode,
+        } });
+        expect(response.statusCode).toBe(status);
+      } finally { await app.close(); }
+    });
+
   it("creates, reads, and cancels a queued task", async () => {
     const store = new MemoryTaskStore();
     const app = buildApp({ logger: false, taskStore: store });

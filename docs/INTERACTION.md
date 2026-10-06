@@ -96,6 +96,7 @@
 | apps/desktop/src/main/transport/preload.cts | 给页面暴露受控的交互方法 |
 | apps/desktop/src/renderer/interaction-view.ts | 暂停按钮、意图编辑器、问题卡片（数字键选择）和倒计时 |
 | apps/desktop/src/renderer/stream-view.ts | 按时间顺序的对话流：文字、工具行、差异和底部状态行 |
+| apps/desktop/src/renderer/stream/tool-group.ts | 连续的查看/读取/搜索和子 Agent 步骤合成可展开的分组 |
 | apps/desktop/src/renderer/main.ts | 将交互界面与当前会话、实时事件连接起来 |
 
 整体顺序：

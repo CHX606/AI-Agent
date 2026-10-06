@@ -1,13 +1,13 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DEFAULT_MAX_TOOL_ROUNDS, parseExecutionSettings, type ExecutionSettings } from "../../../shared/execution-settings.js";
+import { defaultExecutionSettings, parseExecutionSettings, type ExecutionSettings } from "../../../shared/execution-settings.js";
 
 // 与模型密钥分开保存；开发版和打包版都使用各自的 Electron userData。
 export function readExecutionSettings(directory: string): ExecutionSettings {
   try {
     return parseExecutionSettings(JSON.parse(readFileSync(join(directory, "execution-settings.json"), "utf8")));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { maxToolRounds: DEFAULT_MAX_TOOL_ROUNDS };
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return defaultExecutionSettings();
     // 不把损坏的设置静默替换成更大的预算；用户可以打开设置重新保存。
     throw new Error("执行设置无法读取，请打开执行设置重新保存", { cause: error });
   }

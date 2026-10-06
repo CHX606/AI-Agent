@@ -120,7 +120,7 @@ function booleanOrNull(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
-export type ActivityTone = "running" | "success" | "error" | "neutral";
+export type ActivityTone = "running" | "success" | "error" | "neutral" | "warning";
 
 export interface ActivityPresentation {
   key: string;
@@ -156,6 +156,11 @@ const expectedOutcomes: Record<string, [string, string]> = {
   ACCEPTANCE_NOT_APPLICABLE: ["无需独立验收", "不适用"],
   USE_PROJECT_VERIFICATION: ["改用项目整体验证", "已转交"],
   PERMISSION_DENIED: ["未获批准，已跳过", "已拒绝"],
+};
+
+/** 没能得出结论，但不是代码缺陷：用琥珀色提醒，不用表示失败的红色。 */
+const warningOutcomes: Record<string, string> = {
+  ACCEPTANCE_NOT_VERIFIED: "未完成",
 };
 
 function shortTarget(value: string): string {
@@ -221,16 +226,18 @@ export function eventPresentation(event: TaskEvent): ActivityPresentation | null
     // 这些“错误”是预期内的流程提示，不是代码或工具出错，用中性样式，避免满屏红色。
     const expected = finished && typeof payload.error_code === "string"
       ? expectedOutcomes[payload.error_code] : undefined;
+    const warning = finished && typeof payload.error_code === "string"
+      ? warningOutcomes[payload.error_code] : undefined;
     const actions = toolActions[toolName]
       ?? (external ? ["正在调用外部工具", "外部工具已返回", "外部工具调用失败"] : ["正在执行", "操作已完成", "操作失败"]);
     const action = expected ? expected[0] : finished ? (succeeded ? actions[1] : actions[2]) : actions[0];
     return {
       key: `tool:${callId}`,
       title: `${action}${target ? ` ${shortTarget(target)}` : ""}`,
-      tone: expected ? "neutral" : finished ? (succeeded ? "success" : "error") : "running",
+      tone: expected ? "neutral" : warning ? "warning" : finished ? (succeeded ? "success" : "error") : "running",
       toolName,
       target,
-      status: expected ? expected[1] : finished ? (succeeded ? "成功" : "失败") : "进行中",
+      status: expected ? expected[1] : warning ?? (finished ? (succeeded ? "成功" : "失败") : "进行中"),
       ...(typeof payload.duration_ms === "number" ? { durationMs: payload.duration_ms } : {}),
       ...(typeof payload.error_code === "string" ? { errorCode: `${payload.error_code}${
         typeof payload.diagnostic_id === "string" ? ` · 诊断编号：${payload.diagnostic_id}` : ""}` } : {}),
@@ -245,7 +252,7 @@ export function eventPresentation(event: TaskEvent): ActivityPresentation | null
     TASK_PAUSED: ["任务已暂停", "neutral"],
     TASK_RESUMED: ["任务已继续", "running"],
     TASK_INTENT_UPDATED: ["已更新你的要求", "success"],
-    USER_ANSWERED: ["已收到你的回答", "success"],
+    // USER_ANSWERED 不单独成行：批准与否、选了什么已经写在对应的工具行上。
     QUESTION_DEFAULTED: ["等待超时，已采用推荐方案", "neutral"],
     desktop_error: ["桌面连接出现问题", "error"],
   };

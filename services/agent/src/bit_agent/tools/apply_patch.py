@@ -505,6 +505,17 @@ def patch_deletes_files(normalized_patch: str) -> bool:
     return _parse_patch_changes(normalized_patch)[1]
 
 
+def patch_changed_lines(patch: object) -> int:
+    """补丁新增和删除的行数（git diff 与 *** Begin Patch 两种格式），用于判断改动大小。"""
+    if not isinstance(patch, str):
+        return 0
+    return sum(
+        1
+        for line in patch.splitlines()
+        if line[:1] in {"+", "-"} and not line.startswith(("+++", "---"))
+    )
+
+
 async def _run_git_apply(
     workspace_root: str,
     patch_bytes: bytes,

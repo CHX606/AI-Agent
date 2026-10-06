@@ -155,6 +155,36 @@ async def test_large_tool_output_is_externalized_with_hash_and_preview(tmp_path:
 
 
 @pytest.mark.asyncio
+async def test_compaction_is_announced_before_the_slow_summary_starts() -> None:
+    summarizer = StaticSummarizer()
+    order: list[str] = []
+
+    async def started(tokens: int) -> None:
+        order.append(f"started {tokens > 0} after {len(summarizer.calls)} summaries")
+
+    history: list[Any] = [{"role": "user", "content": "修复 calculator"}]
+    for number in range(1, 5):
+        history.extend([tool_call(f"call-{number}"), tool_output(f"call-{number}", "x" * 900)])
+    memory = WorkingMemory(thread_id="thread-1", objective="修复 calculator")
+    manager = ContextManager(policy=policy(), summarizer=summarizer)
+    prepared = await manager.prepare(
+        history, working_memory=memory, tools=[], on_compaction=started
+    )
+    assert prepared.compacted is True
+    assert order == ["started True after 0 summaries"] and summarizer.calls
+
+    order.clear()
+    small = ContextManager(policy=policy(), summarizer=StaticSummarizer())
+    await small.prepare(
+        [{"role": "user", "content": "你好"}],
+        working_memory=memory,
+        tools=[],
+        on_compaction=started,
+    )
+    assert order == [], "没有超过上限时不打扰用户"
+
+
+@pytest.mark.asyncio
 async def test_compaction_preserves_recent_tool_pair_and_trusted_state() -> None:
     summarizer = StaticSummarizer()
     history: list[Any] = [{"role": "user", "content": "修复 calculator"}]

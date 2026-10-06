@@ -55,6 +55,8 @@ describe("desktop result presentation", () => {
 
   it("hides internal events from the customer timeline", () => {
     expect(eventPresentation({ id: "1-0", event_type: "CONTEXT_COMPACTED", data: {} })).toBeNull();
+    // 整理过程只在状态行显示进度（stream-view 处理 CONTEXT_COMPACTING），不在对话流里留条目。
+    expect(eventPresentation({ id: "1-1", event_type: "CONTEXT_COMPACTING", data: {} })).toBeNull();
     expect(eventTitle({ id: "2-0", event_type: "MEMORY_RECALLED", data: {} })).toBe("");
   });
 
@@ -166,7 +168,11 @@ it("shows expected flow outcomes as neutral, not as failures", () => {
   expect(completed("verify_task", "ACCEPTANCE_NOT_APPLICABLE")).toMatchObject({ title: "无需独立验收", tone: "neutral" });
   expect(completed("run_tests", "USE_PROJECT_VERIFICATION")).toMatchObject({ title: "改用项目整体验证", tone: "neutral" });
   expect(completed("apply_patch", "PERMISSION_DENIED")).toMatchObject({ title: "未获批准，已跳过", tone: "neutral" });
-  expect(completed("verify_task", "ACCEPTANCE_NOT_VERIFIED")).toMatchObject({ tone: "error" });
+  // 验收没能得出结论不是代码缺陷：琥珀色提醒，不用表示失败的红色。
+  expect(completed("verify_task", "ACCEPTANCE_NOT_VERIFIED")).toMatchObject({ tone: "warning", status: "未完成" });
+  expect(completed("verify_task", "ACCEPTANCE_FAILED")).toMatchObject({ tone: "error" });
+  // 回答写在对应的工具行上，不再单独一行“已收到你的回答”。
+  expect(eventPresentation({ id: "9-1", event_type: "USER_ANSWERED", data: {} })).toBeNull();
 });
 
 it("presents external MCP connections and calls", () => {
