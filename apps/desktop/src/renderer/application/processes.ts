@@ -15,7 +15,7 @@ function diffLoader(app: RendererApp, taskId: () => string | null) {
       .map(object).find((item) => item?.call_id === callId);
     return (Array.isArray(change?.files) ? change.files : []).map(object)
       .filter((file): file is Record<string, unknown> => typeof file?.path === "string" && typeof file.diff === "string")
-      .map((file) => ({ path: String(file.path), diff: String(file.diff) }));
+      .map((file) => ({ path: String(file.path), diff: String(file.diff), truncated: file.truncated === true }));
   };
 }
 

@@ -1,4 +1,6 @@
-/* Claude Code 风格的对话流：单列、等宽工具行、彩色圆点、底部状态行。 */
+@import "./stream/messages.css";
+
+/* Agent 的对话执行流：等宽工具行、彩色圆点、底部状态行。 */
 
 .turn {
   width: min(820px, calc(100% - 56px));
@@ -8,39 +10,6 @@
 
 .turn + .turn {
   border-top: 1px solid var(--border);
-}
-
-.turn-user {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 9px 14px;
-  border-radius: 8px;
-  background: var(--bg-panel);
-  color: var(--text);
-}
-
-.turn-prompt {
-  flex: none;
-  color: var(--text-muted);
-  font: 600 15px/1.6 var(--font-mono);
-}
-
-.turn-user-text {
-  min-width: 0;
-  margin: 0;
-  font-size: 15px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-.turn-update {
-  margin: 6px 0 0 24px;
-  color: var(--text-muted);
-  font-size: 13px;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 .stream {
@@ -149,20 +118,26 @@
   color: var(--text-faint);
 }
 
-.stream-tool[data-tone="success"] .stream-bullet {
+/* 只给这一行自己的圆点和结果上色；子 Agent 的步骤嵌在里面，不能跟着父行变红。 */
+.stream-tool[data-tone="success"] > .tool-head > .stream-bullet {
   color: var(--green);
 }
 
-.stream-tool[data-tone="error"] .stream-bullet,
-.stream-tool[data-tone="error"] .tool-summary {
+.stream-tool[data-tone="error"] > .tool-head > .stream-bullet,
+.stream-tool[data-tone="error"] > .tool-result > .tool-summary {
   color: var(--red);
 }
 
-.stream-tool[data-tone="neutral"] .stream-bullet {
+.stream-tool[data-tone="neutral"] > .tool-head > .stream-bullet {
   color: var(--text-faint);
 }
 
-.stream-tool[data-tone="running"] .stream-bullet {
+.stream-tool[data-tone="warning"] > .tool-head > .stream-bullet,
+.stream-tool[data-tone="warning"] > .tool-result > .tool-summary {
+  color: var(--amber);
+}
+
+.stream-tool[data-tone="running"] > .tool-head > .stream-bullet {
   color: var(--text-muted);
   animation: stream-blink 1s steps(2, start) infinite;
 }
@@ -172,7 +147,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stream-tool[data-tone="running"] .stream-bullet { animation: none; }
+  .stream-tool[data-tone="running"] > .tool-head > .stream-bullet { animation: none; }
 }
 
 .tool-diff {
@@ -235,28 +210,6 @@
 
 .tool-detail dt { color: var(--text-muted); }
 .tool-detail dd { min-width: 0; margin: 0; color: var(--text-soft); overflow-wrap: anywhere; }
-
-/* 任务进行中补充的要求 */
-
-.stream-user {
-  padding: 6px 10px 6px 0;
-  border-radius: 8px;
-  background: var(--bg-panel);
-}
-
-.stream-user .turn-prompt {
-  text-align: center;
-}
-
-.stream-user p {
-  min-width: 0;
-  margin: 0;
-  color: var(--text);
-  font-size: 14px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
 
 /* 流程提示和错误 */
 

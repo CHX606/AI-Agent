@@ -10,6 +10,7 @@ export interface TaskHistoryEntry {
   gatewayUrl: string;
   status: string;
   createdAt: string;
+  activityAt?: string;
   finalAnswer?: string;
   sessionId?: string;
   multiAgentMode?: MultiAgentMode;
@@ -17,6 +18,21 @@ export interface TaskHistoryEntry {
 
 const historyKey = "bit-agent.task-history.v1";
 export const maximumHistoryEntries = 200;
+
+/** 同一对话继续执行时 taskId 会变，sessionId 保持不变。 */
+export function conversationId(entry: TaskHistoryEntry): string {
+  return entry.sessionId ? `session:${entry.sessionId}` : `task:${entry.taskId}`;
+}
+
+/** 状态更新在原位置替换，打开和回放都不会变成新消息。 */
+export function mergeHistoryEntry(history: TaskHistoryEntry[], entry: TaskHistoryEntry): TaskHistoryEntry[] {
+  const index = history.findIndex(item => conversationId(item) === conversationId(entry));
+  if (index < 0) return [entry, ...history];
+  const previous = history[index]!;
+  const current = previous.activityAt && (!entry.activityAt || Date.parse(previous.activityAt) > Date.parse(entry.activityAt))
+    ? { ...entry, activityAt: previous.activityAt } : entry;
+  return history.map((item, position) => position === index ? current : item);
+}
 
 export function isHistoryEntry(value: unknown): value is TaskHistoryEntry {
   const record = object(value);

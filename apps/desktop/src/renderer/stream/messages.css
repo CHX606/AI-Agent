@@ -1,0 +1,64 @@
+/* 用户消息靠右，颜色沿用软件的面板、边框和文字主题。 */
+.turn-user,
+.stream-item.stream-user,
+.turn-update {
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: min(78%, 640px);
+  margin-left: auto;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  color: var(--text);
+  text-align: left;
+}
+
+.turn-user,
+.stream-item.stream-user {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.stream-item.stream-user {
+  justify-self: end;
+}
+
+.turn-prompt {
+  display: none;
+}
+
+.turn-user-text,
+.stream-user p {
+  min-width: 0;
+  margin: 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.turn-user-text {
+  font-size: 15px;
+}
+
+.stream-user p {
+  font-size: 14px;
+}
+
+.turn-update {
+  margin-top: 6px;
+  margin-bottom: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 700px) {
+  .turn-user,
+  .stream-item.stream-user,
+  .turn-update {
+    max-width: 90%;
+  }
+}

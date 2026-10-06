@@ -5,6 +5,8 @@ import type { RendererApp } from "../src/renderer/application/context";
 import { createHistoryController } from "../src/renderer/application/history";
 import { createRunController } from "../src/renderer/application/run";
 import type { TaskHistoryEntry } from "../src/renderer/task-history";
+import { conversationId } from "../src/renderer/task-history";
+import { orderedConversations, saveConversationOrder } from "../src/renderer/conversation-order";
 
 vi.mock("../src/renderer/session-view", () => ({
   clearPreviousTurns: vi.fn(), getAgentMode: vi.fn(() => "auto"),
@@ -20,6 +22,7 @@ const oldGateway = "http://127.0.0.1:43117";
 const api = {
   getSession: vi.fn(), getTask: vi.fn(), watchTask: vi.fn(), unwatchTask: vi.fn(),
   renameSession: vi.fn(), deleteSession: vi.fn(),
+  listSessions: vi.fn(),
 };
 const storage = { getItem: vi.fn(() => null), setItem: vi.fn() };
 
@@ -85,6 +88,94 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("internal gateway routing for saved conversations", () => {
+  it("distinguishes old pagination from new creation and retains new conversation position after another continues", async () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    });
+    const first = historyEntry();
+    const second = { ...first, taskId: "second", sessionId: "second-session" };
+    const app = fixture(first);
+    app.history = [first, second];
+    saveConversationOrder(first.workspaceRoot, [conversationId(second), conversationId(first)]);
+    const history = createHistoryController(app);
+    app.sessionEntries = history.sessionEntries;
+    app.nextSessionOffset = 20;
+    vi.stubGlobal("document", { querySelector: () => new TestElement() });
+    api.listSessions.mockResolvedValue({ sessions: [{
+      session_id: "older-session", workspace_root: first.workspaceRoot, title: "Older",
+      latest_task: { task_id: "older-task", status: "COMPLETED", created_at: "2026-10-03T00:00:00Z" },
+    }] });
+    await history.refreshSessions(true);
+    expect(orderedConversations(app.history).map(conversationId))
+      .toEqual([conversationId(second), conversationId(first), "session:older-session"]);
+    const fresh = { ...first, taskId: "fresh-task", sessionId: "fresh-session", activityAt: "2026-10-05T10:00:00Z" };
+    history.upsertHistory(fresh);
+    history.upsertHistory({ ...second, taskId: "continued-task", activityAt: "2026-10-05T11:00:00Z" });
+    expect(orderedConversations(app.history).map(conversationId))
+      .toEqual(["session:fresh-session", conversationId(second), conversationId(first), "session:older-session"]);
+  });
+
+  it("updates actual activity after a successful user supplement", async () => {
+    const entry = historyEntry();
+    const app = fixture(entry);
+    app.activeTaskId = entry.taskId;
+    app.objectiveInput.value = "Also check the output";
+    app.interactionView = {
+      pendingKind: vi.fn(() => "question"), supplement: vi.fn(async () => true),
+    } as unknown as RendererApp["interactionView"];
+    app.paintComposer = vi.fn();
+    app.streamView.userNote = vi.fn();
+    const history = createHistoryController(app);
+    app.upsertHistory = history.upsertHistory;
+    app.updateActiveHistory = history.updateActiveHistory;
+    await createRunController(app).steer("supplement");
+    expect(Date.parse(app.history[0]!.activityAt!)).toBeGreaterThan(Date.parse(entry.createdAt));
+    expect(app.history[0]?.createdAt).toBe(entry.createdAt);
+  });
+
+  it("refreshes a session once across a changed local port without losing supplement time", async () => {
+    const entry = { ...historyEntry(), activityAt: "2026-10-04T13:00:00Z" };
+    const app = fixture(entry);
+    app.nextSessionOffset = 0;
+    vi.stubGlobal("document", { querySelector: () => new TestElement() });
+    api.listSessions.mockResolvedValue({ sessions: [{
+      session_id: entry.sessionId, workspace_root: entry.workspaceRoot, title: entry.objective,
+      created_at: "2026-10-04T10:00:00Z", updated_at: "2026-10-04T16:00:00Z",
+      latest_task: { task_id: entry.taskId, status: "COMPLETED", created_at: entry.createdAt },
+    }] });
+    const history = createHistoryController(app);
+    app.sessionEntries = history.sessionEntries;
+    await history.refreshSessions();
+    expect(app.history).toHaveLength(1);
+    expect(app.history[0]?.gatewayUrl).toBe(currentGateway);
+    expect(app.history[0]?.activityAt).toBe(entry.activityAt);
+  });
+
+  it("keeps the sidebar order while opening an older task and replaying its status", async () => {
+    const old = historyEntry();
+    const recent = { ...old, taskId: "recent-task", sessionId: "recent-session" };
+    const app = fixture(old);
+    app.history = [recent, old];
+    const history = createHistoryController(app);
+    app.upsertHistory = history.upsertHistory;
+    app.setStatus = vi.fn((status: string) => history.updateActiveHistory({ status }));
+    await createRunController(app).restoreTask(old);
+    expect(app.history.map(item => item.taskId)).toEqual([recent.taskId, old.taskId]);
+    expect(app.history[1]?.createdAt).toBe(old.createdAt);
+  });
+
+  it("uses the newest task creation time instead of background status updates for activity", () => {
+    const app = fixture(historyEntry());
+    const entries = createHistoryController(app).sessionEntries({ sessions: [{
+      session_id: "session", workspace_root: "D:/project", title: "Conversation",
+      created_at: "2026-10-04T10:00:00Z", updated_at: "2026-10-04T16:00:00Z",
+      latest_task: { task_id: "task", status: "COMPLETED", created_at: "2026-10-04T12:00:00Z" },
+    }] }, currentGateway);
+    expect(entries[0]?.activityAt).toBe("2026-10-04T12:00:00Z");
+  });
+
   it.each(["COMPLETED", "RUNNING"])(
     "restores a %s task through the current gateway without adopting the saved port",
     async (status) => {
