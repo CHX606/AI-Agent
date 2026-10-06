@@ -1,0 +1,22 @@
+.diff-view { max-height: 420px; overflow: auto; background: var(--bg-code); color: var(--text-soft); font: 12px/1.7 var(--font-mono); tab-size: 4; }
+.diff-view table { min-width: 100%; border-collapse: collapse; }
+.diff-view td { padding: 0; vertical-align: top; white-space: pre; }
+.diff-view .diff-num { width: 1%; min-width: 3.5ch; padding: 0 8px; color: var(--text-muted); text-align: right; user-select: none; opacity: .75; }
+.diff-view .diff-sign { width: 1%; padding-right: 6px; color: var(--text-muted); user-select: none; }
+.diff-view .diff-code { padding-right: 16px; }
+.diff-view[data-mode="split"] .diff-code { width: 50%; }
+.diff-view[data-mode="split"] .diff-code + .diff-num { border-left: 1px solid var(--border); }
+.diff-view tr[data-kind="add"], .diff-view [data-kind="add"] { background: var(--diff-add-bg); }
+.diff-view tr[data-kind="remove"], .diff-view [data-kind="remove"] { background: var(--diff-remove-bg); }
+.diff-view tr[data-kind="add"] .diff-sign { color: var(--diff-add-text); }
+.diff-view tr[data-kind="remove"] .diff-sign { color: var(--diff-remove-text); }
+.diff-view .diff-code[data-empty="true"] { background: repeating-linear-gradient(135deg, transparent 0 6px, var(--border) 6px 7px); opacity: .5; }
+.diff-view .diff-banner-text { padding: 2px 12px; background: var(--blue-soft); color: var(--blue); }
+.diff-view .diff-banner[data-kind="note"] .diff-banner-text { background: transparent; color: var(--text-muted); font-style: italic; }
+.diff-stats { margin-left: 8px; font-variant-numeric: tabular-nums; }
+.diff-stats-add { color: var(--diff-add-text); }
+.diff-stats-remove { margin-left: 6px; color: var(--diff-remove-text); }
+.change-list-toolbar { display: flex; justify-content: flex-end; margin: 14px 0 8px; }
+.diff-mode { display: inline-flex; padding: 2px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-main); }
+.diff-mode button { padding: 3px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); font-size: 12px; }
+.diff-mode button[aria-pressed="true"] { background: var(--bg-panel); color: var(--text); box-shadow: 0 0 0 1px var(--border); }

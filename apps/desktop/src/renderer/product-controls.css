@@ -167,11 +167,6 @@
 .memory-meta { margin-top: 8px; color: var(--text-muted); font-size: 11px; }
 .change-file { min-width: 0; border-top: 1px solid var(--border); }
 .change-file > summary { padding: 9px 12px; overflow: hidden; color: var(--text-soft); font: 12px/1.6 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.product-diff { max-height: 360px; padding: 8px 0; overflow: auto; background: var(--bg-code); color: var(--text-soft); font: 12px/1.75 var(--font-mono); tab-size: 4; }
-.diff-line { display: block; width: max-content; min-width: 100%; padding: 0 12px; white-space: pre; }
-.diff-line[data-kind="add"] { background: var(--diff-add-bg); color: var(--diff-add-text); }
-.diff-line[data-kind="remove"] { background: var(--diff-remove-bg); color: var(--diff-remove-text); }
-.diff-line[data-kind="hunk"] { background: var(--blue-soft); color: var(--blue); }
 .diff-truncated { padding: 8px 12px; color: var(--text-muted); font-size: 12px; }
 @media (max-width: 1350px) {
   .composer-context:has(.permission-control) .composer-tip { display: none; }
