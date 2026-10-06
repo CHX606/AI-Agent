@@ -21,6 +21,8 @@ export interface TaskStore {
   renameSession(sessionId: string, title: string): Promise<Record<string, unknown>>;
   /** 删除对话的全部记录和改动快照；正在执行的对话会被拒绝。 */
   deleteSession(sessionId: string): Promise<Record<string, unknown>>;
+  /** 回到对话最后一轮开始前：撤销它的文件改动、恢复上下文，返回原来的要求和图片。 */
+  rewindTurn(sessionId: string, taskId: string): Promise<Record<string, unknown>>;
   getChanges(taskId: string): Promise<Record<string, unknown>>;
   reviewChange(taskId: string, changeId: string, action: string): Promise<Record<string, unknown>>;
   /** 任务改过的文件在 Git 里的状态；只提交这些文件。 */

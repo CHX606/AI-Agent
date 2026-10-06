@@ -6,7 +6,8 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import assert from "node:assert/strict";
 import { verifyConversationLayout, verifyFoldedPatch, verifyNoEmptyText, verifySidebarOrder } from "../apps/desktop/test/stream-sidebar-packaged.mjs";
-import { markdownFixture, verifyMarkdown } from "../apps/desktop/test/markdown-packaged.mjs";
+import { markdownFixture, verifyCopy, verifyMarkdown } from "../apps/desktop/test/markdown-packaged.mjs";
+import { verifyRewind } from "../apps/desktop/test/rewind-packaged.mjs";
 import { verifySidebarResize, verifyWorkspaceOrder } from "../apps/desktop/test/workspace-sidebar-packaged.mjs";
 import { evaluateMain, verifyImageInput } from "../apps/desktop/test/image-input-packaged.mjs";
 
@@ -530,10 +531,21 @@ try {
   await evaluate("document.querySelector('#end-task').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='CANCELLED' && document.body.dataset.busy==='false'"), "等待回答时不能取消");
   await evaluate("document.querySelector('#review-changes').click()");
-  await check(() => evaluate("Boolean(document.querySelector('.change-entry pre')?.textContent.includes('package fixture'))"), "审阅界面没有显示真实差异");
+  await check(() => evaluate("Boolean(document.querySelector('.change-entry .diff-view')?.textContent.includes('package fixture'))"), "审阅界面没有显示真实差异");
+  const reviewDiff = await evaluate(`(() => { const view=document.querySelector('.change-entry .diff-view'), row=view.querySelector('tr[data-kind=add]');
+    return { mode:view.dataset.mode, numbers:[...row.querySelectorAll('.diff-num')].map(cell=>cell.textContent),
+      highlighted:Boolean(row.querySelector('.diff-code .tok-string')), header:Boolean(view.querySelector('tr[data-kind]')?.textContent.includes('+++')),
+      stats:document.querySelector('.change-file .diff-stats').textContent }; })()`);
+  assert.deepEqual(reviewDiff, { mode:"unified", numbers:["", "1"], highlighted:true, header:false, stats:"+1−0" }, "审阅差异没有行号、高亮或增删统计");
   await check(() => evaluate("Boolean(document.querySelector('.git-commit .git-files')?.textContent.includes('package-demo.py'))"), "提交面板没有列出任务改过的文件")
     .catch(async (error) => { throw new Error(`${await evaluate("document.querySelector('.product-dialog')?.innerText ?? ''")}\n${error.message}`); });
   await captureLayouts(command, evaluate, "review");
+  await evaluate("document.querySelector('.diff-mode button[data-mode=split]').click()");
+  const splitDiff = await evaluate(`(() => { const view=document.querySelector('.change-entry .diff-view[data-mode=split]'), row=view?.querySelector('tr:not(.diff-banner)');
+    return row ? { left:row.cells[1].dataset.empty, right:row.cells[3].textContent, number:row.cells[2].textContent } : null; })()`);
+  assert.deepEqual(splitDiff, { left:"true", right:"print('package fixture')", number:"1" }, "并排差异没有把新增放在右侧");
+  await captureLayouts(command, evaluate, "review-split");
+  await evaluate("document.querySelector('.diff-mode button[data-mode=unified]').click()");
   // 用随包附带的 Git 提交：验收进程的 PATH 里没有系统 Git。
   await evaluate("const t=document.querySelector('.git-message textarea');t.value='PACKAGE-COMMIT';t.dispatchEvent(new Event('input'));document.querySelector('.git-actions .button-primary').click()");
   await check(() => evaluate("Boolean(document.querySelector('.product-feedback[data-kind=success]')?.textContent.includes('已提交'))"), "界面提交到 Git 没有成功");
@@ -620,6 +632,8 @@ try {
   await evaluate("document.querySelector('#objective').value='PACKAGE-MARKDOWN';document.querySelector('#objective').dispatchEvent(new Event('input'));document.querySelector('#run').click()");
   await check(() => evaluate("document.body.dataset.busy==='false' && document.querySelector('#current-turn').textContent.includes('PACKAGED_STREAM_END')"), "Markdown 验收回复没有完成");
   const markdownRendering = await verifyMarkdown(evaluate, check);
+  markdownRendering.copy = await verifyCopy({ command, evaluate, check,
+    main:expression=>evaluateMain(mainInspectorUrl,expression) });
   await captureLayouts(command, evaluate, "markdown");
   await evaluate("document.querySelector('.history-item[data-active=true]').click()");
   await check(() => evaluate("document.body.dataset.busy==='false'"), "Markdown 历史回放没有完成");
@@ -652,13 +666,14 @@ try {
   const imageInput = await verifyImageInput({command,evaluate,check,requests,directory,screenshot:captureScreenshot,
     main:expression=>evaluateMain(mainInspectorUrl,expression),
     captureLayouts:stage=>captureLayouts(command,evaluate,stage)});
+  const rewind = await verifyRewind({ evaluate, check, requests });
   assert(await evaluate("!document.querySelector('#raw-result,.raw-section,.tool-raw,.event-payload')"), "正式界面仍包含原始结果或原始事件展示");
   await close();
   writeFileSync(join(directory, "result.json"), JSON.stringify({ passed: true, executable,
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,
     allToolsCollapsible: true, noEmptyTextRows: true, userMessagesRightAligned: true, agentMessagesLeftAligned: true,
     messageBackgroundMatchesTheme: true, longMultilineMessagesContained: true, sidebarOrder,
-    markdownRendering, workspaceOrder, sidebarResize, imageInput,
+    markdownRendering, workspaceOrder, sidebarResize, imageInput, rewind,
     rawDebugDataAbsentFromUi:true,
     unauthorizedGatewayRejected: true, automaticLocalGateway: true, connectionStatusDotOnly: true, explicitNewChatWorkspace: true, workspaceBindings, noGatewayConnectionSettings: true, staleGatewayAddressIgnored: true, restartAndContinue: true, stopAndSteer: true, immediateStop: true, titlebarBorder: true, offlineRepositoryIcons: true, startupComposer: true, noDuplicateProfileTheme: true, windowsExecutableIcon: { orangePixels:windowsIcon.orange, whitePixels:windowsIcon.white, size:windowsIcon.size }, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, gitCommit: true, sessionSearchRenameDelete: true, externalMcpTools: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
   }, null, 2));

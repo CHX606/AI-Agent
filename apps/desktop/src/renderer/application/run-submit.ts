@@ -53,6 +53,8 @@ async function createAndWatch(app: RendererApp, message: ComposerMessage, worksp
   if (context.generation !== app.viewGeneration) return;
   if (typeof task.task_id !== "string") throw new Error("Gateway 没有返回 task_id");
   app.activeTaskId = task.task_id;
+  // 新的一轮开始执行时保存快照；在开始前就停止的一轮，服务端会拒绝编辑并说明原因。
+  app.rewindableTaskId = task.task_id;
   app.activeSessionId = typeof task.session_id === "string" ? task.session_id : null;
   app.interactionView?.update(task);
   app.taskIdText.title = `任务 ID：${app.activeTaskId}`;

@@ -156,6 +156,23 @@ class ChangeJournal:
                 )
         return {"changes": result}
 
+    def undo_all(self) -> list[str]:
+        """撤销这一轮的全部改动：先核对每个文件仍是最后一次改动后的样子，再从新到旧撤销。"""
+        active = [entry for entry in self.entries if entry["status"] != "undone"]
+        if any(entry["status"] == "pending" for entry in active):
+            raise InteractionError("这一轮有改动缺少完成快照，需要手动检查，不能自动撤销")
+        latest: dict[str, dict] = {}
+        for entry in reversed(active):
+            for name, record in entry["files"].items():
+                if not record.get("undone"):
+                    latest.setdefault(name, record["after"])
+        for name, after in latest.items():
+            if file_image(self.root, name) != after:
+                raise InteractionError(f"文件后来已被修改，不能撤销这一轮：{name}")
+        for entry in reversed(active):
+            self.review(entry["id"], "undo")
+        return sorted(latest)
+
     def review(self, change_id: str, action: str) -> dict:
         entry = next((item for item in self.entries if item["id"] == change_id), None)
         if entry is None:

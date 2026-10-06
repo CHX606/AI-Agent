@@ -63,6 +63,8 @@ class TaskExecution(TaskRunConfiguration):
 
         task_id = task["task_id"]
         await self.storage.call("update_task", task_id, {"status": "RUNNING", "started_at": now()})
+        # 开始前保存上下文快照，之后才能“编辑并重发”或“重新生成”这一轮。
+        await self.storage.call("checkpoint_turn", task["session_id"], task_id)
         options, journal = await self._task_run_options(task, control)
         timeout = float(os.getenv("BIT_AGENT_TASK_TIMEOUT_SECONDS", "3600"))
         if timeout <= 0:

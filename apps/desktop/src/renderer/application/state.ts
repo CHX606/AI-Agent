@@ -100,6 +100,8 @@ function initializeConversation(app: RendererApp): void {
   app.activeObjective = "";
   app.activeImages = [];
   app.composerImages = null;
+  app.rewindableTaskId = null;
+  app.refreshTurnActions = null;
   app.replaying = false;
   app.history = loadHistory().map((entry) => ({ ...entry, gatewayUrl: app.gatewayUrl }));
   app.conversationScroller = element<HTMLElement>("#conversation");

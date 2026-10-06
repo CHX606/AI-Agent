@@ -17,6 +17,12 @@ export function registerSessionIpc(services: DesktopServices, handle: IpcHandler
   handle("sessions:delete", (_event, input: SessionRequestInput) =>
     requestJson(input.gatewayUrl, `/v1/sessions/${encodeURIComponent(input.sessionId)}`, { method: "DELETE" }),
   );
+  handle("sessions:rewind", (_event, input: SessionRequestInput & { taskId: string }) => {
+    if (typeof input?.taskId !== "string" || !input.taskId) throw new Error("这一轮的编号无效");
+    return requestJson(input.gatewayUrl, `/v1/sessions/${encodeURIComponent(input.sessionId)}/rewind`, {
+      method: "POST", body: JSON.stringify({ task_id: input.taskId }),
+    });
+  });
   handle("sessions:get", (_event, input: SessionRequestInput) =>
     requestJson(input.gatewayUrl, `/v1/sessions/${encodeURIComponent(input.sessionId)}`),
   );

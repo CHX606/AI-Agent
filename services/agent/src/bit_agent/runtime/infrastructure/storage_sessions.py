@@ -83,7 +83,11 @@ class SessionRecords:
                     **({"images": task["images"]} if task.get("images") else {}),
                 }
             )
-        return {"session": session, "turns": turns}
+        return {
+            "session": session,
+            "turns": turns,
+            "rewindable_task_id": self._rewindable_task(session_id),
+        }
 
     def _set_mode(self, session_id: str, mode: str) -> dict[str, Any] | None:
         self._db.execute("UPDATE sessions SET mode=? WHERE id=?", (mode, session_id))
@@ -106,6 +110,7 @@ class SessionRecords:
         self._db.execute("DELETE FROM tasks WHERE session_id=?", (session_id,))
         self._db.execute("DELETE FROM context_state WHERE session_id=?", (session_id,))
         self._db.execute("DELETE FROM working_memory WHERE thread_id=?", (session_id,))
+        self._db.execute("DELETE FROM turn_checkpoints WHERE session_id=?", (session_id,))
         self._db.execute("DELETE FROM sessions WHERE id=?", (session_id,))
         return task_ids
 

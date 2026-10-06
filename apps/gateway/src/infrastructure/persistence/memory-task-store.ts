@@ -45,6 +45,10 @@ export class MemoryTaskStore implements TaskStore {
     throw notFound("对话不存在");
   }
 
+  async rewindTurn(_sessionId: string, _taskId: string): Promise<Record<string, unknown>> {
+    throw notFound("对话不存在");
+  }
+
   async getSession(_sessionId: string): Promise<Record<string, unknown> | null> {
     return null;
   }

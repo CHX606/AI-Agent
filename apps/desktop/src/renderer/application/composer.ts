@@ -96,6 +96,7 @@ function paintComposer(app: RendererApp): void {
   app.composerContext.dataset.choosing = String(choosing);
   app.paintRunButton();
   app.composerImages?.refresh();
+  app.refreshTurnActions?.();
   const approval = app.interactionView?.pendingKind() === "approval";
   app.objectiveInput.placeholder = mode === "answer"
     ? approval ? "不批准？写下原因按 Enter，Agent 会按你的意见调整…" : "直接写下你的回答，按 Enter 提交…"

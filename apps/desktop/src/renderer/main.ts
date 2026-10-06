@@ -9,6 +9,7 @@ import { createProcessesController } from "./application/processes";
 import { createQueueController } from "./application/queue";
 import { createResultController } from "./application/result";
 import { createRunController } from "./application/run";
+import { mountTurnActions } from "./application/rewind";
 import { createShellController } from "./application/shell";
 import { initializeState } from "./application/state";
 import "./composer.css";
@@ -39,6 +40,7 @@ Object.assign(app,
   createResultController(app),
   createRunController(app), createStopController(app));
 initializeState(app);
+app.refreshTurnActions = mountTurnActions(app);
 mountSidebarResize(app.shell);
 app.composerImages = new ComposerImages(element<HTMLElement>(".composer-card"), app.objectiveInput,
   element<HTMLElement>(".composer-actions"), {

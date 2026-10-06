@@ -225,6 +225,10 @@ export class LocalTaskStore implements TaskStore {
     return this.call("delete_session", { session_id: sessionId });
   }
 
+  rewindTurn(sessionId: string, taskId: string): Promise<Record<string, unknown>> {
+    return this.call("rewind_turn", { session_id: sessionId, task_id: taskId });
+  }
+
   getSession(sessionId: string): Promise<Record<string, unknown> | null> {
     return this.call("get_session", { session_id: sessionId });
   }

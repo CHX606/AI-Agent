@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 from bit_agent.observability.diagnostics import (
@@ -14,6 +15,8 @@ from bit_agent.runtime.application.delegation import (
 from bit_agent.runtime.application.interaction import (
     InteractionError,
 )
+
+from .service_protocol import TERMINAL
 
 
 class SessionCommands:
@@ -83,6 +86,34 @@ class SessionCommands:
             self._session_approvals.pop(session_id, None)
         await self.storage.call("remove_artifacts", task_ids)
         return {"deleted": True, "session_id": session_id, "tasks": len(task_ids)}
+
+    async def rewind_turn(self, session_id: str, task_id: str) -> dict[str, Any]:
+        """回到最后一轮开始前：撤销这一轮的文件改动、恢复上下文、删除这一轮的记录。
+
+        返回原来的要求和图片，界面放回输入框，用户修改后作为新一轮发送。
+        """
+        async with self._submission_lock:
+            if session_id in self._sessions:
+                raise InteractionError("这个对话还在执行，请先停止")
+            task = await self.get_task(task_id)
+            if task is None or task["session_id"] != session_id:
+                raise InteractionError("这一轮不存在", 404)
+            if task["status"] not in TERMINAL:
+                raise InteractionError("请先结束这一轮")
+            if await self.storage.call("rewindable_task", session_id) != task_id:
+                latest = (await self.storage.call("get_session", session_id) or {}).get("turns")
+                if latest and latest[-1]["task_id"] == task_id:
+                    raise InteractionError(
+                        "这一轮没有开始前的记录（还没开始执行，或由旧版本创建），不能编辑"
+                    )
+                raise InteractionError("只能修改这个对话的最后一轮")
+            root = Path(task["workspace_root"])
+            async with self._workspaces.hold(root, wait=False):
+                journal = self.journal_factory(root, self.storage.directory / "artifacts" / task_id)
+                undone = journal.undo_all()
+                original = await self.storage.call("rewind_turn", session_id, task_id)
+        await self.storage.call("remove_artifacts", [task_id])
+        return {**original, "undone_files": undone}
 
     async def get_session(self, session_id: str) -> dict[str, Any] | None:
         return await self.storage.call("get_session", session_id)

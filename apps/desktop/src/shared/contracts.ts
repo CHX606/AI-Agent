@@ -168,6 +168,10 @@ export interface DesktopApi {
   listSessions(gatewayUrl: string, offset?: number, query?: string): Promise<Record<string, unknown>>;
   renameSession(input: SessionRequestInput & { title: string }): Promise<Record<string, unknown>>;
   deleteSession(input: SessionRequestInput): Promise<Record<string, unknown>>;
+  /** 回到最后一轮开始前；返回 objective、images 和被撤销的文件。 */
+  rewindTurn(input: SessionRequestInput & { taskId: string }): Promise<Record<string, unknown>>;
+  /** 由主进程写入系统剪贴板；窗口没有焦点时也能复制。 */
+  copyText(text: string): Promise<void>;
   getSession(input: SessionRequestInput): Promise<Record<string, unknown>>;
   setSessionMode(input: SessionRequestInput & { mode: MultiAgentMode }): Promise<Record<string, unknown>>;
   listMemories(input: MemoryListInput): Promise<MemoryListResult>;

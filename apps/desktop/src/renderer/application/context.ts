@@ -76,6 +76,9 @@ export interface RendererApp {
   activeObjective: string;
   activeImages: ImageAttachment[];
   composerImages: ComposerImages | null;
+  /** 最后一轮有开始前的快照时，它的任务编号；只有这一轮能“编辑”或“重新生成”。 */
+  rewindableTaskId: string | null;
+  refreshTurnActions: (() => void) | null;
   replaying: boolean;
   history: TaskHistoryEntry[];
   conversationScroller: HTMLElement;

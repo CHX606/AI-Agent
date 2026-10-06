@@ -20,11 +20,14 @@ from bit_agent.runtime.infrastructure.storage_database import (
 )
 from bit_agent.runtime.infrastructure.storage_events import StorageEvents
 from bit_agent.runtime.infrastructure.storage_migration import LegacySessions
+from bit_agent.runtime.infrastructure.storage_rewind import TurnCheckpoints
 from bit_agent.runtime.infrastructure.storage_sessions import SessionRecords
 from bit_agent.runtime.infrastructure.storage_tasks import TaskRecords
 
 
-class LocalStorage(TaskRecords, SessionRecords, ContextRecords, StorageEvents, LegacySessions):
+class LocalStorage(
+    TaskRecords, SessionRecords, ContextRecords, StorageEvents, LegacySessions, TurnCheckpoints
+):
     """所有操作共享同一连接，由调用入口保证一次事务。"""
 
     def __init__(self, directory: Path) -> None:

@@ -55,6 +55,62 @@
   white-space: pre-wrap;
 }
 
+/* 用户消息和回答下面的图标行：复制，以及最后一轮的编辑、重新生成。 */
+.message-actions {
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.turn-user-actions {
+  justify-content: flex-end;
+}
+
+/* 与回答正文对齐：圆点列 18px + 间距 6px。 */
+.turn-reply-actions {
+  margin: 2px 0 0 24px;
+}
+
+.message-actions[hidden],
+.turn-action[hidden] {
+  display: none;
+}
+
+.turn-action {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.turn-action[data-state="done"] {
+  color: var(--green);
+}
+
+.turn-action[data-state="error"] {
+  color: var(--red);
+}
+
+.turn-action svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.turn-action:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 @media (max-width: 700px) {
   .turn-user,
   .stream-item.stream-user,

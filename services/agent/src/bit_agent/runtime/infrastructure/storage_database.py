@@ -35,6 +35,10 @@ SCHEMA = """
                 data TEXT NOT NULL, applied INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS user_answers_task ON user_answers(task_id);
+            CREATE TABLE IF NOT EXISTS turn_checkpoints (
+                session_id TEXT PRIMARY KEY, task_id TEXT NOT NULL,
+                context TEXT, memory TEXT
+            );
         """
 
 

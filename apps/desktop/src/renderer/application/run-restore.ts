@@ -14,6 +14,7 @@ export async function restoreTask(app: RendererApp, entry: TaskHistoryEntry): Pr
       const saved = await window.bitAgent.getSession({ gatewayUrl: app.gatewayUrl, sessionId: entry.sessionId });
       if (generation !== app.viewGeneration) return;
       currentUpdates = savedCurrentUpdates(saved, entry.taskId);
+      app.rewindableTaskId = typeof saved.rewindable_task_id === "string" ? saved.rewindable_task_id : null;
       renderPreviousTurns(saved, entry.taskId, app.previousTurnOptions());
       app.streamView.scrollToEnd();
       setAgentMode(object(saved.session)?.multi_agent_mode);
@@ -68,6 +69,7 @@ function prepareRestore(app: RendererApp, entry: TaskHistoryEntry): number {
   app.activeTaskId = entry.taskId;
   app.stoppedTaskId = app.stoppedTasks.has(entry.taskId) ? entry.taskId : null;
   app.activeSessionId = entry.sessionId ?? null;
+  app.rewindableTaskId = null;
   app.activeObjective = entry.objective;
   app.activeImages = [];
   app.objectiveInput.value = "";
@@ -98,6 +100,7 @@ export function resetTask(app: RendererApp): void {
   app.activeTaskId = null;
   app.stoppedTaskId = null;
   app.activeSessionId = null;
+  app.rewindableTaskId = null;
   setAgentMode("auto");
   app.dropProcesses();
   app.clearQueue();

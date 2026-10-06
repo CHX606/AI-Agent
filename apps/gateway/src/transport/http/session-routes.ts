@@ -25,4 +25,10 @@ export function registerSessionRoutes(app: FastifyInstance, taskStore: TaskStore
       return session ?? reply.code(404).send({ error: "SESSION_NOT_FOUND" });
     });
   app.delete<{ Params: { sessionId: string } }>("/v1/sessions/:sessionId", async request => taskStore.deleteSession(request.params.sessionId));
+  app.post<{ Params: { sessionId: string }; Body: { task_id?: unknown } }>(
+    "/v1/sessions/:sessionId/rewind", async (request, reply) => {
+      const taskId = request.body?.task_id;
+      if (typeof taskId !== "string" || !taskId) return reply.code(400).send({ error: "INVALID_TASK_ID" });
+      return taskStore.rewindTurn(request.params.sessionId, taskId);
+    });
 }
