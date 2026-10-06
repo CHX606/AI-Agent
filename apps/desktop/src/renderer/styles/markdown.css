@@ -1,10 +1,21 @@
+@import "../repository/syntax.css";
+
+.markdown-body {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .markdown-body > * + * {
   margin-top: 10px;
 }
 
 .markdown-body h1,
 .markdown-body h2,
-.markdown-body h3 {
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
   color: var(--text);
   font-weight: 600;
   letter-spacing: -0.015em;
@@ -23,6 +34,10 @@
   font-size: 15px;
 }
 
+.markdown-body h4 { font-size: 14px; }
+.markdown-body h5 { font-size: 13px; }
+.markdown-body h6 { color: var(--text-muted); font-size: 13px; }
+
 .markdown-body p,
 .markdown-body li {
   color: var(--text-soft);
@@ -37,6 +52,87 @@
 .markdown-body li + li {
   margin-top: 3px;
 }
+
+.markdown-body li > ul,
+.markdown-body li > ol,
+.markdown-body li > p + p,
+.markdown-body blockquote > * + *,
+.markdown-body details > * + * {
+  margin-top: 6px;
+}
+
+.markdown-body a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.markdown-body hr {
+  height: 1px;
+  border: 0;
+  background: var(--border);
+}
+
+.markdown-body img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 6px 0;
+  border-radius: 5px;
+}
+
+.markdown-body .markdown-task-item {
+  list-style: none;
+}
+
+.markdown-task-checkbox {
+  width: 13px;
+  height: 13px;
+  margin-right: 6px;
+  accent-color: var(--brand);
+  vertical-align: -1px;
+  opacity: 1 !important;
+}
+
+.markdown-body details {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.markdown-body summary { cursor: pointer; }
+
+.markdown-table {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.markdown-table table {
+  min-width: 100%;
+  border-collapse: collapse;
+  color: var(--text-soft);
+  font-size: inherit;
+  line-height: 1.6;
+}
+
+.markdown-table th,
+.markdown-table td {
+  min-width: 110px;
+  padding: 7px 10px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.markdown-table [align="center"] { text-align: center; }
+.markdown-table [align="right"] { text-align: right; }
+.markdown-table th { background: var(--bg-panel); color: var(--text); font-weight: 600; }
+.markdown-table tr:nth-child(even) td { background: var(--bg-panel); }
+.markdown-table th:last-child,
+.markdown-table td:last-child { border-right: 0; }
+.markdown-table tr:last-child td { border-bottom: 0; }
 
 .markdown-body code:not(.code-block code) {
   padding: 1px 4px;
@@ -79,6 +175,11 @@
   color: var(--text-soft);
   font: 12px/1.65 var(--font-mono);
   white-space: pre;
+}
+
+.markdown-body .code-block code > span[class^="tok-"] {
+  display: inline;
+  min-height: 0;
 }
 
 .diff-add {

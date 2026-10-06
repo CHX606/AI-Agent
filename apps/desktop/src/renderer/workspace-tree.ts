@@ -4,45 +4,13 @@
  */
 import { projectName } from "./dom";
 import type { TaskHistoryEntry } from "./task-history";
+import { bindConversationDrag } from "./conversation-drag";
+import { orderedConversations } from "./conversation-order";
+import { bindWorkspaceDrag } from "./workspace-drag";
+import { orderedWorkspaceRoots } from "./workspace-order";
+import { collapsedWorkspaces, forgetWorkspace, knownWorkspaces, toggleCollapsed, workspaceKey } from "./workspace-state";
 import "./sidebar.css";
-
-const COLLAPSED_KEY = "bit-agent.collapsed-workspaces.v1";
-const KNOWN_KEY = "bit-agent.workspaces.v1";
-const MAX_KNOWN = 30;
-
-/** Windows 路径大小写、分隔符与末尾斜杠不改变同一个目录的身份。 */
-export function workspaceKey(root: string): string {
-  return root.trim().replace(/\\/gu, "/").replace(/\/+$/u, "").toLowerCase();
-}
-
-function readList(key: string): string[] {
-  try {
-    const value = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown;
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-  } catch { return []; }
-}
-
-function writeList(key: string, values: string[]): void {
-  try { localStorage.setItem(key, JSON.stringify(values)); } catch { /* 只影响下次打开时的列表 */ }
-}
-
-export function knownWorkspaces(): string[] { return readList(KNOWN_KEY); }
-
-/** 记住用户添加或切换到的工作区，最近的排在前面。 */
-export function rememberWorkspace(root: string): void {
-  if (!root.trim()) return;
-  const known = knownWorkspaces().filter(item => workspaceKey(item) !== workspaceKey(root));
-  writeList(KNOWN_KEY, [root.trim(), ...known].slice(0, MAX_KNOWN));
-}
-
-export function forgetWorkspace(root: string): void {
-  writeList(KNOWN_KEY, knownWorkspaces().filter(item => workspaceKey(item) !== workspaceKey(root)));
-}
-
-function toggleCollapsed(root: string, collapsed: boolean): void {
-  const rest = readList(COLLAPSED_KEY).filter(item => item !== workspaceKey(root));
-  writeList(COLLAPSED_KEY, collapsed ? [...rest, workspaceKey(root)] : rest);
-}
+export { forgetWorkspace, knownWorkspaces, rememberWorkspace, workspaceKey } from "./workspace-state";
 
 export interface WorkspaceTreeOptions {
   entries: TaskHistoryEntry[];
@@ -51,6 +19,8 @@ export interface WorkspaceTreeOptions {
   disabled: boolean;
   renderEntry(entry: TaskHistoryEntry): HTMLElement;
   onNewConversation(root: string): void;
+  onReorder(root: string, ids: string[]): void;
+  onWorkspaceReorder(roots: string[]): void;
   onChange(): void;
 }
 interface WorkspaceGroup { root: string; entries: TaskHistoryEntry[] }
@@ -68,9 +38,9 @@ function workspaceGroups(options: WorkspaceTreeOptions): Map<string, WorkspaceGr
     if (!groups.has(key)) groups.set(key, { root, entries: [] });
     return groups.get(key)!;
   };
-  if (!options.searching && options.activeWorkspace) add(options.activeWorkspace);
-  for (const entry of options.entries) add(entry.workspaceRoot)?.entries.push(entry);
   if (!options.searching) for (const root of knownWorkspaces()) add(root);
+  for (const entry of options.entries) add(entry.workspaceRoot)?.entries.push(entry);
+  if (!options.searching && options.activeWorkspace) add(options.activeWorkspace);
   return groups;
 }
 
@@ -116,7 +86,14 @@ function groupItems(group: WorkspaceGroup, collapsed: boolean, options: Workspac
   items.className = "workspace-group-items";
   items.hidden = collapsed;
   if (group.entries.length) {
-    for (const entry of group.entries) items.append(options.renderEntry(entry));
+    const entries = orderedConversations(group.entries);
+    for (const entry of entries) {
+      const row = options.renderEntry(entry);
+      bindConversationDrag(row, entry, entries, {
+        disabled: options.disabled || options.searching, onReorder: options.onReorder,
+      });
+      items.append(row);
+    }
   } else {
     const empty = document.createElement("p");
     empty.className = "workspace-group-empty";
@@ -127,13 +104,16 @@ function groupItems(group: WorkspaceGroup, collapsed: boolean, options: Workspac
 }
 
 function groupSection(group: WorkspaceGroup, collapsed: boolean, active: boolean,
-  options: WorkspaceTreeOptions): HTMLElement {
+  roots: string[], options: WorkspaceTreeOptions): HTMLElement {
   const section = document.createElement("section");
   section.className = "workspace-group";
   section.dataset.root = group.root;
   section.dataset.active = String(active);
   const header = document.createElement("div");
   header.className = "workspace-group-header";
+  bindWorkspaceDrag(header, group.root, roots, {
+    disabled: options.disabled || options.searching, onReorder: options.onWorkspaceReorder,
+  });
   header.append(groupToggle(group.root, collapsed, options.onChange), newConversationButton(group.root, options));
   if (!group.entries.length && !active) header.append(removeWorkspaceButton(group.root, options.onChange));
   section.append(header, groupItems(group, collapsed, options));
@@ -141,10 +121,13 @@ function groupSection(group: WorkspaceGroup, collapsed: boolean, active: boolean
 }
 
 export function renderWorkspaceTree(container: HTMLElement, options: WorkspaceTreeOptions): void {
-  const collapsed = new Set(readList(COLLAPSED_KEY));
+  const collapsed = collapsedWorkspaces();
   const activeKey = workspaceKey(options.activeWorkspace);
+  const groups = workspaceGroups(options);
+  const roots = orderedWorkspaceRoots([...groups.values()].map(group => group.root));
   container.replaceChildren();
-  for (const [key, group] of workspaceGroups(options)) {
-    container.append(groupSection(group, !options.searching && collapsed.has(key), key === activeKey, options));
+  for (const root of roots) {
+    const key = workspaceKey(root), group = groups.get(key)!;
+    container.append(groupSection(group, !options.searching && collapsed.has(key), key === activeKey, roots, options));
   }
 }

@@ -1,5 +1,7 @@
 import { element,errorText,formatHistoryTime,object } from "../dom";
-import { saveHistory,type TaskHistoryEntry } from "../task-history";
+import { conversationId, mergeHistoryEntry, saveHistory,type TaskHistoryEntry } from "../task-history";
+import { registerNewConversation, saveConversationOrder } from "../conversation-order";
+import { saveWorkspaceOrder } from "../workspace-order";
 import { renderWorkspaceTree } from "../workspace-tree";
 import type { RendererApp } from "./context";
 function renderHistory(app: RendererApp): void {
@@ -11,6 +13,8 @@ function renderHistory(app: RendererApp): void {
     disabled: app.submitting,
     renderEntry: app.historyRow,
     onNewConversation: app.newConversationIn,
+    onReorder: (root, ids) => reorderHistory(app, root, ids),
+    onWorkspaceReorder: roots => reorderWorkspaceHistory(app, roots),
     onChange: app.renderHistory,
   });
   // 标题旁的数字是工作区个数，悬停时显示对话数。
@@ -26,6 +30,24 @@ function newConversationIn(app: RendererApp, root: string): void {
   if (app.submitting) return;
   app.resetTask();
   app.setWorkspace(root);
+}
+function reorderHistory(app: RendererApp, root: string, ids: string[]): void {
+  try {
+    saveConversationOrder(root, ids);
+  } catch (error) {
+    app.connectionDot.title = `保存对话顺序失败：${errorText(error)}`;
+  }
+  app.renderHistory();
+}
+function reorderWorkspaceHistory(app: RendererApp, roots: string[]): void {
+  try {
+    saveWorkspaceOrder(roots);
+  } catch (error) {
+    const message = `保存工作区顺序失败：${errorText(error)}`;
+    app.connectionDot.title = message;
+    throw new Error(message, { cause: error });
+  }
+  app.renderHistory();
 }
 function historyRow(app: RendererApp, entry: TaskHistoryEntry): HTMLElement {
   const row = document.createElement("div");
@@ -139,8 +161,14 @@ async function searchSessions(app: RendererApp, query: string): Promise<void> {
   app.renderHistory();
 }
 function upsertHistory(app: RendererApp, entry: TaskHistoryEntry): void {
-  app.history = [entry, ...app.history.filter((item) => item.taskId !== entry.taskId
-    && !(entry.sessionId && item.sessionId === entry.sessionId && item.gatewayUrl === entry.gatewayUrl))];
+  if (!app.history.some(item => conversationId(item) === conversationId(entry))) {
+    try {
+      registerNewConversation(entry);
+    } catch (error) {
+      app.connectionDot.title = `保存对话顺序失败：${errorText(error)}`;
+    }
+  }
+  app.history = mergeHistoryEntry(app.history, entry);
   saveHistory(app.history);
   app.renderHistory();
 }
@@ -160,7 +188,9 @@ function sessionEntries(app: RendererApp, payload: Record<string, unknown>, gate
       taskId: task.task_id, sessionId: session.session_id,
       objective: String(session.title ?? task.objective ?? "对话"),
       workspaceRoot: String(session.workspace_root ?? ""), gatewayUrl,
-      status: String(task.status ?? "UNKNOWN"), createdAt: String(session.updated_at ?? ""),
+      status: String(task.status ?? "UNKNOWN"),
+      createdAt: String(task.created_at ?? session.created_at ?? ""),
+      activityAt: String(task.created_at ?? session.created_at ?? ""),
       multiAgentMode: session.multi_agent_mode === "on" || session.multi_agent_mode === "off"
         ? session.multi_agent_mode : "auto",
     });
@@ -176,9 +206,12 @@ async function refreshSessions(app: RendererApp, append = false): Promise<void> 
   app.nextSessionOffset = typeof payload.next_offset === "number" ? payload.next_offset : null;
   element<HTMLButtonElement>("#more-sessions").hidden = app.nextSessionOffset === null || app.searchResults !== null;
   if (!Array.isArray(payload.sessions)) return;
-  const loaded = app.sessionEntries(payload, gatewayUrl);
-  const identifiers = new Set(loaded.map((entry) => entry.sessionId));
-  const remaining = app.history.filter((entry) => entry.gatewayUrl !== gatewayUrl || !identifiers.has(entry.sessionId));
+  const loaded = app.sessionEntries(payload, gatewayUrl).map(entry => {
+    const prior = app.history.find(item => item.sessionId === entry.sessionId);
+    return prior ? mergeHistoryEntry([prior], entry)[0]! : entry;
+  });
+  const identifiers = new Set(loaded.map(conversationId));
+  const remaining = app.history.filter(entry => !identifiers.has(conversationId(entry)));
   app.history = append ? [...remaining, ...loaded] : [...loaded, ...remaining];
   saveHistory(app.history);
   app.renderHistory();

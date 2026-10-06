@@ -202,3 +202,11 @@
   top: 50%;
   transform: translateY(-50%);
 }
+
+.history-row[data-dragging="true"] { opacity: 0.45; }
+.history-row[data-drop-position="before"] { box-shadow: 0 -2px 0 var(--brand); }
+.history-row[data-drop-position="after"] { box-shadow: 0 2px 0 var(--brand); }
+
+.workspace-group-header[data-workspace-dragging="true"] { opacity: 0.45; }
+.workspace-group-header[data-workspace-drop-position="before"] { box-shadow: 0 -2px 0 var(--brand); }
+.workspace-group-header[data-workspace-drop-position="after"] { box-shadow: 0 2px 0 var(--brand); }

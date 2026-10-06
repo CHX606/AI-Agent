@@ -80,6 +80,10 @@ body[data-resizing="true"] {
     display: none;
   }
 
+  .sidebar-resize {
+    display: none;
+  }
+
   .sidebar-left {
     grid-template-columns: 48px;
   }

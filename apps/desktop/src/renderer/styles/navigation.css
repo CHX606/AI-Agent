@@ -1,4 +1,5 @@
 .sidebar-left {
+  position: relative;
   display: grid;
   grid-template-columns: var(--rail-width) minmax(0, 1fr);
   min-width: 0;
@@ -6,6 +7,34 @@
   overflow: hidden;
   border-right: 1px solid var(--border);
   background: var(--bg-sidebar);
+}
+
+.sidebar-resize {
+  position: absolute;
+  z-index: 12;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebar-resize:hover::after,
+.sidebar-resize:focus-visible::after,
+body[data-sidebar-resizing="true"] .sidebar-resize::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 1px;
+  background: var(--brand);
+  content: "";
+}
+
+body[data-sidebar-resizing="true"] {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .app-rail {

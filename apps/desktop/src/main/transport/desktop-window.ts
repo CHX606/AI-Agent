@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, nativeImage } from "electron";
 import { join } from "node:path";
 import { publicError, type DiagnosticService } from "@bit-agent/diagnostics";
 import type { ColorTheme } from "../../shared/contracts.js";
+import { configureExternalNavigation } from "./external-navigation.js";
 
 export function themeBackground(theme: ColorTheme): string {
   return theme === "dark" ? "#181817" : "#f2f2ef";
@@ -34,6 +35,7 @@ function windowOptions(currentDirectory: string, theme: ColorTheme): Electron.Br
 }
 
 function configureWindow(window: BrowserWindow, diagnostics: DiagnosticService): void {
+  configureExternalNavigation(window.webContents, diagnostics);
   if (process.platform === "win32") window.setAppDetails({
     appId: "BitAgent.Desktop",
     appIconPath: app.isPackaged ? app.getPath("exe") : join(app.getAppPath(), "assets/icon.ico"),

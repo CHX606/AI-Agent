@@ -78,7 +78,8 @@ svg {
 
 .shell {
   display: grid;
-  grid-template-columns: var(--sidebar-width) minmax(480px, 1fr) var(--inspector-width);
+  grid-template-columns: var(--sidebar-width) minmax(480px, 1fr)
+    min(var(--inspector-width), calc(100vw - var(--sidebar-width) - 480px));
   width: 100vw;
   height: var(--app-height);
   overflow: hidden;
