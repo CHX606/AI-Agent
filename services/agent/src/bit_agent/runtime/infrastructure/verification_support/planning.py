@@ -95,27 +95,36 @@ def _collect_projects(root: Path, changed: list[str], config: dict) -> tuple[dic
     return projects, skipped, unverifiable
 
 
-def _project_plan(root: Path, project: dict) -> dict:
+def _project_plan(root: Path, project: dict, environment_root: Path | None) -> dict:
     relative = project["root"].relative_to(root).as_posix()
+    if environment_root is not None:
+        project = {
+            **project,
+            "environment": environment_root / relative,
+            "environment_root": environment_root,
+        }
     commands = project.get("commands") or default_commands(project, project["paths"])
     return {
         "root": "" if relative == "." else relative,
         "language": project["language"],
-        "commands": [local_command(project["root"], command) for command in commands],
+        "commands": [local_command(project, command) for command in commands],
         "timeout": project.get("timeout", DEFAULT_TIMEOUT_SECONDS),
         "configured": project.get("configured", False),
         "paths": project["paths"],
     }
 
 
-def verification_plan(root: Path, changed: list[str]) -> dict:
-    """区分需要检查、不需要检查和不能自动验证的文件。"""
+def verification_plan(root: Path, changed: list[str], environment_root: Path | None = None) -> dict:
+    """区分需要检查、不需要检查和不能自动验证的文件。
+
+    environment_root 是在副本里检查时的原工作区，项目的 .venv 只在那里。
+    """
     root = root.resolve()
     projects, skipped, unverifiable = _collect_projects(root, changed, load_config(root))
     plans = []
     for project in projects.values():
         try:
-            plans.append(_project_plan(root, project))
+            plans.append(_project_plan(root, project, environment_root))
         except ProjectEnvironmentError as exc:
             unverifiable.setdefault(f"{exc}。{UNSUPPORTED_HINT}", []).extend(project["paths"])
     return {

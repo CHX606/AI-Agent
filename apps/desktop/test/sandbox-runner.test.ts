@@ -39,7 +39,7 @@ beforeEach(() => {
   mocks.release.mockResolvedValue(undefined); mocks.lock.mockResolvedValue(mocks.release);
 });
 afterEach(() => { vi.unstubAllEnvs(); rmSync(directory, { recursive: true, force: true }); });
-const request = () => ({ workspace, command: [process.execPath, "-e", "process.exit(0)"], readPaths: [] });
+const request = () => ({ workspace, command: [process.execPath, "-e", "process.exit(0)"], readPaths: [], pythonPath: [] as string[] });
 
 it("runs the verified helper with the official argv API then resets without reinstalling", async () => {
   expect(await runSandbox(request(), broker, new AbortController().signal)).toBe(0);
@@ -105,8 +105,22 @@ it("resets after initialization, wrapping or child failure and preserves child e
   expect(mocks.reset).toHaveBeenCalledTimes(4);
 });
 
+it("accepts python import roots only inside the workspace and passes them as PYTHONPATH", () => {
+  const source = join(workspace, "src");
+  expect(parseSandboxRequest(JSON.stringify({ ...request(), pythonPath: [source, workspace] })).pythonPath).toEqual([source, workspace]);
+  expect(() => parseSandboxRequest(JSON.stringify({ ...request(), pythonPath: [directory] }))).toThrow("inside the workspace");
+  expect(() => parseSandboxRequest(JSON.stringify({ ...request(), pythonPath: [join(workspace, "..", "other")] }))).toThrow("inside the workspace");
+  const invocation = sandboxCommand({ workspace, pythonPath: [source, workspace], command: [
+    process.execPath, "-e", "process.stdout.write(process.env.PYTHONPATH ?? '')",
+  ] });
+  const result = spawnSync(invocation.shell.exe, [...invocation.shell.args, invocation.command], { encoding: "utf8" });
+  expect(result.stdout).toBe(`${source};${workspace}`);
+});
+
 it("validates the complete request and rejects batch shell metacharacters", () => {
   expect(parseSandboxRequest(JSON.stringify(request()))).toEqual(request());
+  const { pythonPath: _omitted, ...older } = request();
+  expect(parseSandboxRequest(JSON.stringify(older))).toEqual(request());
   expect(() => parseSandboxRequest(JSON.stringify({ ...request(), command: "python" }))).toThrow();
   expect(() => parseSandboxRequest(JSON.stringify({ ...request(), readPaths: [3] }))).toThrow();
   expect(() => parseSandboxRequest(JSON.stringify({ ...request(), extra: true }))).toThrow("fields");

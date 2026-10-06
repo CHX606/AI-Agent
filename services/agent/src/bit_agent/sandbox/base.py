@@ -27,5 +27,6 @@ class Sandbox(Protocol):
         workspace_root: Path,
         command: list[str],
         timeout_seconds: float,
+        python_path: list[Path] | None = None,
     ) -> SandboxResult:
         """在隔离环境中运行一个由 Worker 构造的命令。"""

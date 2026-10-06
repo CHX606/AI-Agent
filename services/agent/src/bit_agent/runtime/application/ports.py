@@ -54,6 +54,8 @@ class ProjectVerifier(Protocol):
         changed: list[str],
         call_id: str,
         originals: dict[str, str | None] | None = None,
+        *,
+        environment_root: Path | None = None,
     ) -> ToolResult: ...
 
 

@@ -1,7 +1,8 @@
 import { realpathSync, statSync } from "node:fs";
 import { win32 as path } from "node:path";
 
-export interface SandboxRequest { workspace: string; command: string[]; readPaths: string[] }
+// pythonPath: import roots inside the workspace, ahead of an external venv's editable install.
+export interface SandboxRequest { workspace: string; command: string[]; readPaths: string[]; pythonPath: string[] }
 
 function strings(value: unknown, name: string): string[] {
   if (!Array.isArray(value) || value.length > 128
@@ -23,7 +24,9 @@ export function parseSandboxRequest(source: string | undefined): SandboxRequest 
   const value: unknown = JSON.parse(source);
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid sandbox request");
   const input = value as Record<string, unknown>;
-  if (Object.keys(input).sort().join(",") !== "command,readPaths,workspace" || typeof input.workspace !== "string") {
+  const fields = Object.keys(input).sort().join(",");
+  if ((fields !== "command,readPaths,workspace" && fields !== "command,pythonPath,readPaths,workspace")
+    || typeof input.workspace !== "string") {
     throw new Error("Invalid sandbox request fields");
   }
   const workspace = realpathSync(localPath(input.workspace, "workspace"));
@@ -35,7 +38,15 @@ export function parseSandboxRequest(source: string | undefined): SandboxRequest 
     throw new Error("Batch command arguments cannot contain shell metacharacters");
   }
   const readPaths = strings(input.readPaths, "readPaths").map(item => localPath(item, "read path"));
-  return { workspace, command, readPaths: [...new Set(readPaths)] };
+  const pythonPath = strings(input.pythonPath ?? [], "pythonPath").map(item => insideWorkspace(workspace, item));
+  return { workspace, command, readPaths: [...new Set(readPaths)], pythonPath: [...new Set(pythonPath)] };
+}
+
+function insideWorkspace(workspace: string, target: string): string {
+  const resolved = localPath(target, "python path");
+  const relative = path.relative(workspace, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("Sandbox python path must be inside the workspace");
+  return resolved;
 }
 
 export function outsideWorkspace(workspace: string, target: string): string {

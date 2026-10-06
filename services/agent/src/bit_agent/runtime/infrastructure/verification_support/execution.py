@@ -4,7 +4,7 @@ from pathlib import Path
 
 from bit_agent.sandbox import OSSandbox, sandbox_status
 from bit_agent.security.paths import PathSecurityError, resolve_workspace_path
-from bit_agent.tools.command_runtime import command_dependency_error
+from bit_agent.tools.command_runtime import command_dependency_error, python_import_roots
 
 from .baseline import write_baseline
 from .comparison import _kind, _passed, compare_with_baseline
@@ -12,7 +12,10 @@ from .comparison import _kind, _passed, compare_with_baseline
 
 async def _run(directory: Path, project: dict, command: list[str], call_id: str) -> dict:
     sandbox = OSSandbox(task_id="verification", tool_call_id=call_id)
-    outcome = await sandbox.run(directory, command, project["timeout"])
+    python_path = (
+        python_import_roots(directory, command[0]) if project["language"] == "python" else []
+    )
+    outcome = await sandbox.run(directory, command, project["timeout"], python_path=python_path)
     return {
         "exit_code": outcome.exit_code,
         "stdout": outcome.stdout,

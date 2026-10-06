@@ -48,7 +48,7 @@ def test_decision_follows_mode_and_change_size(mode, paths, lines, required) -> 
     assert decided is required and reason
 
 
-async def passed(root, changed, call_id, originals=None) -> ToolResult:
+async def passed(root, changed, call_id, originals=None, *, environment_root=None) -> ToolResult:
     return ToolResult(
         tool_call_id=call_id,
         tool_name="verify_project",

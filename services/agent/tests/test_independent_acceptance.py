@@ -44,7 +44,7 @@ def project(tmp_path):
 def sandbox(monkeypatch):
     commands = []
 
-    async def run(self, root, command, timeout):
+    async def run(self, root, command, timeout, python_path=None):
         commands.append((root, command, timeout))
         return SandboxResult(exit_code=0, stdout="1 passed")
 
@@ -351,7 +351,7 @@ async def test_cancellation_saves_evidence_and_cleans_workspace(project, tmp_pat
     cleaned = asyncio.Event()
     roots = []
 
-    async def blocked(self, root, command, timeout):
+    async def blocked(self, root, command, timeout, python_path=None):
         roots.append(root)
         entered.set()
         try:

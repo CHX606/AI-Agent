@@ -45,18 +45,44 @@ def command_arguments(command: list[str]) -> list[str]:
     return resolved
 
 
-def arguments(root: Path, command: list[str], nonce: str) -> list[str]:
+def _virtual_environment(program: Path) -> list[str]:
+    """A venv interpreter also needs its site-packages and the base Python named in pyvenv.cfg."""
+    root = program.parent.parent
+    try:
+        config = (root / "pyvenv.cfg").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    paths = [str(root)]
+    for line in config.splitlines():
+        key, _, value = line.partition("=")
+        home = Path(value.strip())
+        if key.strip().casefold() == "home" and home.is_absolute() and home.is_dir():
+            paths.append(str(home))
+    return paths
+
+
+def arguments(
+    root: Path, command: list[str], nonce: str, python_path: list[Path] | None = None
+) -> list[str]:
     node, broker, _ = runtime_paths()
     resolved = command_arguments(command)
+    program = Path(resolved[0])
     payload = dict(
         workspace=str(root),
         command=resolved,
         readPaths=list(
             dict.fromkeys(
-                [str(Path(sys.base_prefix)), str(Path(sys.prefix)), str(Path(resolved[0]).parent)]
+                [
+                    str(Path(sys.base_prefix)),
+                    str(Path(sys.prefix)),
+                    str(program.parent),
+                    *_virtual_environment(program),
+                ]
             )
         ),
     )
+    if python_path:
+        payload["pythonPath"] = [str(path) for path in python_path]
     return [str(node), str(broker), json.dumps(payload, ensure_ascii=True), nonce]
 
 
@@ -105,19 +131,25 @@ class OSSandbox:
         self.max_output_bytes = max_output_bytes
 
     async def run(
-        self, workspace_root: Path, command: list[str], timeout_seconds: float
+        self,
+        workspace_root: Path,
+        command: list[str],
+        timeout_seconds: float,
+        python_path: list[Path] | None = None,
     ) -> SandboxResult:
         _validate_command(command, timeout_seconds)
         root = resolve_workspace_path(workspace_root, "", allow_root=True)
         async with _run_lock():
-            return await self._run_exclusive(root, command, float(timeout_seconds))
+            return await self._run_exclusive(root, command, float(timeout_seconds), python_path)
 
-    async def _run_exclusive(self, root: Path, command: list[str], timeout: float) -> SandboxResult:
+    async def _run_exclusive(
+        self, root: Path, command: list[str], timeout: float, python_path: list[Path] | None
+    ) -> SandboxResult:
         started, nonce = perf_counter(), secrets.token_hex(16)
         try:
             validate_locations(root, *runtime_paths())
             result = await execute(
-                arguments(root, command, nonce),
+                arguments(root, command, nonce, python_path),
                 root,
                 environment(),
                 timeout,

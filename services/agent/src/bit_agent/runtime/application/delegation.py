@@ -349,7 +349,11 @@ class DelegatingToolProvider(LocalToolProvider):
                         self.root, self.artifacts / ("baseline-" + uuid4().hex[:12])
                     ) as workspace:
                         self.baseline = await self.verifier(
-                            workspace.root, sorted(self.changed_paths), tool_call_id, originals
+                            workspace.root,
+                            sorted(self.changed_paths),
+                            tool_call_id,
+                            originals,
+                            environment_root=self.root,
                         )
                         if not await workspace.unchanged():
                             self.baseline = None

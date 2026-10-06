@@ -18,9 +18,16 @@ def _has_ruff_config(directory: Path) -> bool:
         return False
 
 
+def project_python(project: dict) -> str:
+    """副本里的检查用原工作区（environment）的虚拟环境，副本不复制 .venv。"""
+    environment: Path = project.get("environment") or project["root"]
+    workspace: Path = project.get("environment_root") or project["workspace"]
+    return python_executable(environment, workspace)
+
+
 def _python_commands(project: dict, paths: list[str]) -> list[list[str]]:
     directory: Path = project["root"]
-    python = python_executable(directory)
+    python = project_python(project)
     commands = [[python, "-m", "pytest", "-q", "-rfE"]]
     files = set()
     for name in paths:
@@ -44,9 +51,9 @@ def _python_commands(project: dict, paths: list[str]) -> list[list[str]]:
     return commands
 
 
-def local_command(directory: Path, command: list[str]) -> list[str]:
+def local_command(project: dict, command: list[str]) -> list[str]:
     if command[0] in {"python", "python3"}:
-        return [python_executable(directory), *command[1:]]
+        return [project_python(project), *command[1:]]
     return list(command)
 
 

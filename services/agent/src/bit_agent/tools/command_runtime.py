@@ -5,16 +5,34 @@ import sys
 from pathlib import Path
 
 
-def python_executable(workspace_root: Path) -> str:
-    """优先使用工作区虚拟环境，否则使用当前 Agent 的 Python。"""
-    candidates = (
-        workspace_root / ".venv" / "Scripts" / "python.exe",
-        workspace_root / ".venv" / "bin" / "python",
+def python_executable(workspace_root: Path, fallback_root: Path | None = None) -> str:
+    """优先使用项目目录的虚拟环境，其次是工作区根目录的，否则使用当前 Agent 的 Python。"""
+    roots = (
+        [workspace_root]
+        if fallback_root in {None, workspace_root}
+        else [workspace_root, fallback_root]
     )
-    for candidate in candidates:
-        if candidate.is_file():
-            return str(candidate)
+    for root in roots:
+        for candidate in (
+            root / ".venv" / "Scripts" / "python.exe",
+            root / ".venv" / "bin" / "python",
+        ):
+            if candidate.is_file():
+                return str(candidate)
     return sys.executable
+
+
+def python_import_roots(directory: Path, interpreter: str) -> list[Path]:
+    """副本里用原工作区的虚拟环境时，让副本的源码排在可编辑安装指向的原目录之前。"""
+    program = Path(interpreter)
+    if (
+        interpreter == sys.executable
+        or program.is_relative_to(directory)
+        or not (program.parent.parent / "pyvenv.cfg").is_file()
+    ):
+        return []
+    source = directory / "src"
+    return [source, directory] if source.is_dir() else [directory]
 
 
 def command_dependency_error(command: list[str], stdout: str, stderr: str) -> str:

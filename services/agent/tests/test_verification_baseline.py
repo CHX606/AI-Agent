@@ -78,13 +78,14 @@ def sandbox(monkeypatch):
     calls: list[dict] = []
     behaviour: dict = {}
 
-    async def run(self, root, command, timeout):
+    async def run(self, root, command, timeout, python_path=None):
         source = (root / "app.py").read_text() if (root / "app.py").exists() else ""
         calls.append(
             {
                 "root": root,
                 "command": command,
                 "source": source,
+                "python_path": python_path,
             }
         )
         handler = behaviour.get("handler")
@@ -505,7 +506,7 @@ async def test_approve_for_task_skips_later_questions_of_same_kind(tmp_path):
 
 
 async def test_acceptance_requires_passed_baseline(tmp_path):
-    async def unverified(root, changed, call_id, originals=None):
+    async def unverified(root, changed, call_id, originals=None, *, environment_root=None):
         return ToolResult(
             tool_call_id=call_id,
             tool_name="verify_project",
@@ -667,6 +668,46 @@ async def test_baseline_copy_failure_cannot_report_success(python_project, sandb
     assert result.output["outcome"] == "UNVERIFIED"
     assert "copy denied" in result.error.message
     assert result.output["verified"] is False
+
+
+async def test_check_in_a_copy_uses_the_original_venv_and_the_copys_sources(
+    python_project, tmp_path, sandbox
+):
+    """副本不复制 .venv：仍用原工作区的解释器，PYTHONPATH 指向副本，避免可编辑安装读到原目录。"""
+    calls, _ = sandbox
+    venv = python_project / ".venv"
+    interpreter = venv / "Scripts" / "python.exe"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.write_bytes(b"fixture")
+    (venv / "pyvenv.cfg").write_text("home = C:\\Python\n")
+    copy = tmp_path / "copy"
+    copy.mkdir()
+    for name in ("pyproject.toml", "app.py"):
+        (copy / name).write_text((python_project / name).read_text())
+    (copy / "src").mkdir()
+    result = await verify_project(copy, ["app.py"], "call", environment_root=python_project)
+    assert result.output["outcome"] == "PASSED"
+    assert calls and all(call["command"][0] == str(interpreter) for call in calls)
+    assert all(call["python_path"] == [copy.resolve() / "src", copy.resolve()] for call in calls)
+
+
+async def test_check_without_any_venv_keeps_the_agent_python_and_no_python_path(
+    python_project, sandbox
+):
+    calls, _ = sandbox
+    await verify_project(python_project, ["app.py"], "call")
+    assert calls and all(call["command"][0] == python_executable(python_project) for call in calls)
+    assert all(call["python_path"] == [] for call in calls)
+
+
+def test_python_executable_falls_back_to_the_workspace_root_venv(tmp_path):
+    project = tmp_path / "packages" / "core"
+    project.mkdir(parents=True)
+    interpreter = tmp_path / ".venv" / "Scripts" / "python.exe"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.write_bytes(b"fixture")
+    assert python_executable(project, tmp_path) == str(interpreter)
+    assert python_executable(project) != str(interpreter)
 
 
 def test_verification_plan_selects_local_python_and_drops_image(python_project):

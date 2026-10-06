@@ -253,6 +253,28 @@ def test_broker_receives_workspace_and_literal_arguments_as_json(
     assert arguments[3] == nonce and nonce not in arguments[2]
 
 
+def test_venv_interpreter_can_read_its_environment_and_base_python(
+    tmp_path: Path,
+    sdk_paths: tuple[Path, Path, Path],
+) -> None:
+    home = tmp_path / "base-python"
+    home.mkdir()
+    venv = tmp_path / "project" / ".venv"
+    interpreter = venv / "Scripts" / "python.exe"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.write_bytes(b"fixture")
+    (venv / "pyvenv.cfg").write_text(f"home = {home}\ninclude-system-site-packages = false\n")
+    workspace = tmp_path / "copy"
+    workspace.mkdir()
+    payload = json.loads(
+        native.arguments(workspace, [str(interpreter), "-m", "pytest"], "ab" * 16, [workspace])[2]
+    )
+    assert str(venv) in payload["readPaths"] and str(home) in payload["readPaths"]
+    assert payload["pythonPath"] == [str(workspace)]
+    plain = json.loads(native.arguments(workspace, [str(interpreter)], "ab" * 16)[2])
+    assert "pythonPath" not in plain
+
+
 @pytest.mark.parametrize("limit", [1, 15, 64, 4096])
 @pytest.mark.parametrize("chunk", [b"ascii output\n", "中🙂文\n".encode()])
 def test_output_buffer_bounds_bytes_and_remains_valid_utf8(limit: int, chunk: bytes) -> None:

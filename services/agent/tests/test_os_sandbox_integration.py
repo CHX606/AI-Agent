@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from bit_agent.sandbox import OSSandbox, configuration, sandbox_status
+from bit_agent.tools.command_runtime import python_executable, python_import_roots
 from bit_agent.tools.context import ToolContext
 from bit_agent.tools.models import ToolStatus
 from bit_agent.tools.run_checks import run_checks
@@ -351,6 +352,35 @@ async def test_timeout_kills_a_child_tree_that_actually_started(
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
+
+
+@pytest.mark.asyncio
+async def test_copy_runs_with_the_original_venv_and_imports_the_copys_sources(
+    tmp_path: Path, sandbox: OSSandbox
+) -> None:
+    """基础检查在副本里跑：解释器和依赖来自原工作区 .venv，被测代码必须来自副本。"""
+    original, copy = tmp_path / "original", tmp_path / "copy"
+    for root, value in ((original, "original"), (copy, "copy")):
+        package = root / "src" / "demo"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text(f"VALUE = {value!r}\n", encoding="utf-8")
+    venv = original / ".venv"
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(venv)], check=True)
+    site = venv / "Lib" / "site-packages"
+    (site / "only_in_venv.py").write_text("READY = True\n", encoding="utf-8")
+    # 与 uv/hatchling 的可编辑安装相同：.pth 指向原工作区的 src。
+    (site / "_demo.pth").write_text(str(original / "src") + "\n", encoding="utf-8")
+    interpreter = python_executable(copy, original)
+    assert interpreter == str(venv / "Scripts" / "python.exe")
+    code = "import only_in_venv, demo; print(only_in_venv.READY, demo.VALUE)"
+    roots = python_import_roots(copy, interpreter)
+    result = await sandbox.run(copy, [interpreter, "-c", code], 30, python_path=roots)
+    assert result.start_error is None, result
+    assert result.exit_code == 0, result.stderr
+    assert result.stdout.strip() == "True copy"
+    # 不加 PYTHONPATH 时，可编辑安装会让副本里的检查读到原目录的代码。
+    unprotected = await sandbox.run(copy, [interpreter, "-c", code], 30)
+    assert unprotected.stdout.strip() == "True original", unprotected.stderr
 
 
 @pytest.mark.asyncio

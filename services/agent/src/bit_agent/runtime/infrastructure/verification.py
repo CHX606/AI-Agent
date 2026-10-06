@@ -24,9 +24,9 @@ from .verification_support.planning import (
 from .verification_support.report import verification_report
 
 
-def _plan(root: Path, changed: list[str]) -> tuple[dict, list[dict]]:
+def _plan(root: Path, changed: list[str], environment_root: Path | None) -> tuple[dict, list[dict]]:
     try:
-        return verification_plan(root, changed), []
+        return verification_plan(root, changed, environment_root), []
     except (VerificationConfigError, PathSecurityError, OSError) as exc:
         return {"projects": [], "skipped": [], "unverifiable": []}, [
             {"paths": list(changed), "reason": f"验证配置无效：{exc}"}
@@ -34,11 +34,17 @@ def _plan(root: Path, changed: list[str]) -> tuple[dict, list[dict]]:
 
 
 async def verify_project(
-    root: Path, changed: list[str], call_id: str, originals: dict[str, str | None] | None = None
+    root: Path,
+    changed: list[str],
+    call_id: str,
+    originals: dict[str, str | None] | None = None,
+    *,
+    environment_root: Path | None = None,
 ) -> ToolResult:
+    """environment_root：root 是工作区副本时的原工作区，用来找项目自己的 .venv。"""
     started = time.monotonic()
     root = root.resolve()
-    plan, errors = _plan(root, changed)
+    plan, errors = _plan(root, changed, environment_root and environment_root.resolve())
     comparable = (
         originals is not None
         and bool(originals)

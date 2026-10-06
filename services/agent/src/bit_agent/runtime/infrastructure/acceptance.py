@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from bit_agent.sandbox import OSSandbox
 from bit_agent.security.paths import resolve_workspace_path
+from bit_agent.tools.command_runtime import python_import_roots
 
 from .acceptance_commands import acceptance_command
 from .verification_support.baseline import copy_workspace
@@ -107,7 +108,8 @@ class AcceptanceWorkspace:
         directory = self._project(project)
         command = acceptance_command(directory, self.source / project, target, language)
         sandbox = OSSandbox(task_id="acceptance", tool_call_id=call_id)
-        result = await sandbox.run(directory, command, 300)
+        python_path = python_import_roots(directory, command[0]) if language == "python" else []
+        result = await sandbox.run(directory, command, 300, python_path=python_path)
         return {
             "project": project,
             "target": target,
