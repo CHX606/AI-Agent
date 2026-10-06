@@ -142,6 +142,18 @@ export async function auditLayouts({ command, evaluate, check, main }) {
       }
     }
   }
+  // 应用界面放大到 125%：等于窗口变窄，几种常用组合再检查一遍。
+  await command("Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false });
+  await evaluate("if(document.documentElement.dataset.theme!=='light')document.querySelector('#theme-toggle').click()");
+  await evaluate("window.bitAgent.setZoom('in').then(() => window.bitAgent.setZoom('in'))");
+  for (const combo of combos.filter((item) => ["tasks-terminal-browser", "repository-terminal-browser", "tasks-inspector-terminal"].includes(item.name))) {
+    await ensure(combo);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    results.push({ combo: combo.name, width: 1280, theme: "light-zoom-125", issues: await evaluate(AUDIT) });
+    await shoot(`audit-${combo.name}-zoom125-1280.png`);
+  }
+  await evaluate("window.bitAgent.setZoom('reset')");
+
   // 收拾：关掉多余的终端和浏览器标签，恢复默认状态。
   await command("Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false });
   await ensure({ view: "tasks", terminal: true, browser: true, sidebarCollapsed: false });

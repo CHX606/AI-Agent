@@ -1,9 +1,9 @@
 @import "./stream/messages.css";
 
-/* Agent 的对话执行流：等宽工具行、彩色圆点、底部状态行。 */
+/* Agent 的对话执行流：回答正文、灰色工具行、底部状态行。 */
 
 .turn {
-  width: min(820px, calc(100% - 56px));
+  width: min(var(--content-width), calc(100% - 2 * var(--content-gutter)));
   margin: 0 auto;
   padding: 18px 0 10px;
 }
@@ -24,26 +24,14 @@
   display: none;
 }
 
+/* 参照 Claude Code：回答正文、工具行前面都不加圆点，工具行是一行灰色小字。 */
 .stream-item {
-  display: grid;
+  display: block;
   min-width: 0;
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: 6px;
 }
 
 .stream-item[data-nested="true"] {
-  margin-left: 24px;
-}
-
-.stream-bullet {
-  color: var(--text-muted);
-  font-size: 10px;
-  line-height: 25px;
-  text-align: center;
-}
-
-.stream-text .stream-bullet {
-  color: var(--text);
+  margin-left: 16px;
 }
 
 .stream-text .markdown-body {
@@ -54,47 +42,38 @@
   overflow-wrap: anywhere;
 }
 
-/* 工具行：● 动作 目标 / ⎿ 结果 */
-
-.stream-tool {
-  display: block;
-}
+/* 工具行：动作 目标，下面一行结果 */
 
 .tool-head {
-  display: grid;
-  width: 100%;
+  display: flex;
+  max-width: 100%;
   min-width: 0;
-  grid-template-columns: 18px auto minmax(0, 1fr);
   gap: 6px;
-  align-items: center;
+  align-items: baseline;
   padding: 0;
   border: 0;
   border-radius: 5px;
   background: none;
-  color: var(--text);
-  font: 13px/1.7 var(--font-mono);
+  color: var(--text-muted);
+  font: 14px/1.7 var(--font-sans);
   text-align: left;
   cursor: pointer;
 }
 
-.tool-head:hover .tool-label,
-.tool-head:focus-visible .tool-label {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.tool-head .stream-bullet {
-  line-height: 22px;
+.tool-head:hover,
+.tool-head:focus-visible {
+  color: var(--text);
 }
 
 .tool-label {
-  font-weight: 600;
+  flex: none;
   white-space: nowrap;
 }
 
 .tool-target {
+  min-width: 0;
   overflow: hidden;
-  color: var(--text-muted);
+  color: var(--text-soft);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -103,9 +82,12 @@
   display: flex;
   min-width: 0;
   gap: 8px;
-  padding-left: 24px;
   color: var(--text-muted);
-  font: 12px/1.6 var(--font-mono);
+  font: 12.5px/1.6 var(--font-sans);
+}
+
+.tool-result:has(.tool-summary:empty) {
+  display: none;
 }
 
 .tool-summary {
@@ -114,44 +96,32 @@
 }
 
 .tool-branch {
-  flex: none;
-  color: var(--text-faint);
+  display: none;
 }
 
-/* 只给这一行自己的圆点和结果上色；子 Agent 的步骤嵌在里面，不能跟着父行变红。 */
-.stream-tool[data-tone="success"] > .tool-head > .stream-bullet {
-  color: var(--green);
-}
-
-.stream-tool[data-tone="error"] > .tool-head > .stream-bullet,
+/* 只给这一行自己的结果上色；子 Agent 的步骤嵌在里面，不能跟着父行变红。 */
 .stream-tool[data-tone="error"] > .tool-result > .tool-summary {
   color: var(--red);
 }
 
-.stream-tool[data-tone="neutral"] > .tool-head > .stream-bullet {
-  color: var(--text-faint);
-}
-
-.stream-tool[data-tone="warning"] > .tool-head > .stream-bullet,
 .stream-tool[data-tone="warning"] > .tool-result > .tool-summary {
   color: var(--amber);
 }
 
-.stream-tool[data-tone="running"] > .tool-head > .stream-bullet {
-  color: var(--text-muted);
-  animation: stream-blink 1s steps(2, start) infinite;
+/* 进行中：文字明暗起伏，代替原来闪烁的圆点。 */
+.stream-tool[data-tone="running"] > .tool-head {
+  animation: stream-pulse 1.4s ease-in-out infinite;
 }
 
-@keyframes stream-blink {
-  to { visibility: hidden; }
+@keyframes stream-pulse {
+  50% { opacity: 0.45; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stream-tool[data-tone="running"] > .tool-head > .stream-bullet { animation: none; }
+  .stream-tool[data-tone="running"] > .tool-head { animation: none; }
 }
-
 .tool-diff {
-  margin: 6px 0 2px 24px;
+  margin: 6px 0 2px;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -197,7 +167,7 @@
 .diff-more:hover { color: var(--text); }
 
 .tool-detail {
-  margin: 6px 0 2px 24px;
+  margin: 6px 0 2px;
 }
 
 .tool-detail dl {
@@ -215,23 +185,18 @@
 
 .stream-note {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.7;
 }
 
 .stream-note-mark {
-  color: var(--text-faint);
-  text-align: center;
+  display: none;
 }
 
 .stream-note[data-tone="error"] { color: var(--red); }
 
-.stream-error .stream-bullet,
 .stream-error strong {
   color: var(--red);
-}
-
-.stream-error strong {
   font-size: 14px;
   line-height: 25px;
 }
@@ -267,5 +232,5 @@
 .status-line[data-state="waiting"] { color: var(--amber); }
 
 .turn .error-actions {
-  margin: 10px 0 0 24px;
+  margin: 10px 0 0;
 }

@@ -125,6 +125,8 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scroll-behavior: smooth;
+  /* 滚动条位置始终预留；它的实际宽度由脚本量出来写进 --scrollbar-size，输入框区域右边多留同样宽度，
+     对话列和输入框以同一块区域居中，左右边缘对齐。 */
   scrollbar-gutter: stable;
 }
 

@@ -26,6 +26,7 @@ const api: DesktopApi = {
   getExecutionSettings: () => ipcRenderer.invoke("execution:get"),
   saveExecutionSettings: (input) => ipcRenderer.invoke("execution:save", input),
   setTheme: (theme) => ipcRenderer.send("theme:set", theme),
+  setZoom: (action) => ipcRenderer.invoke("zoom:set", action),
   selectWorkspace: () => ipcRenderer.invoke("workspace:select") as Promise<string | null>,
   setRepositoryWorkspace: (workspaceRoot) =>
     ipcRenderer.invoke("repository:set-workspace", workspaceRoot) as Promise<string>,

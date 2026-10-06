@@ -4,7 +4,7 @@ import { object } from "./dom";
 import { eventPresentation, isMainAgentText } from "./presentation";
 import { StreamStatusLine } from "./stream/status-line";
 import { stopEvents } from "./stream/run-status";
-import { StreamToolRows, streamBullet } from "./stream/tool-row";
+import { StreamToolRows } from "./stream/tool-row";
 import { StreamTextBlock } from "./stream/text-block";
 import { renderMessageImages } from "./attachments/message-images";
 import type { FileDiff } from "./stream/tool-diff";
@@ -221,7 +221,7 @@ class StreamRenderer {
     const copy = document.createElement("p");
     copy.textContent = message;
     body.append(title, copy);
-    item.append(streamBullet(), body);
+    item.append(body);
     this.append(item);
     this.status.paint();
   }

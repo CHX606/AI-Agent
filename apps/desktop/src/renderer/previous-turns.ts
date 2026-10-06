@@ -81,14 +81,10 @@ function appendAnswer(stream: HTMLOListElement, answer: string): void {
   if (!answer) return;
   const item = document.createElement("li");
   item.className = "stream-item stream-text";
-  const mark = document.createElement("span");
-  mark.className = "stream-bullet";
-  mark.setAttribute("aria-hidden", "true");
-  mark.textContent = "●";
   const response = document.createElement("div");
   response.className = "markdown-body";
   renderMarkdown(response, answer);
-  item.append(mark, response);
+  item.append(response);
   registerMarkdown(item, () => answer);
   stream.append(item);
 }

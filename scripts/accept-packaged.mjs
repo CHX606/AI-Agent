@@ -700,7 +700,8 @@ try {
   const { shots:collapseShots, ...sidebarCollapse } = await verifySidebarCollapse(command, evaluate, check, captureScreenshot);
   for (const shot of collapseShots) writeFileSync(join(directory, shot.name), Buffer.from(shot.data, "base64"));
   console.log("SIDEBAR_COLLAPSE_PASSED", collapseShots.map(shot => shot.name).join(" "));
-  const { result:terminal, shots:terminalShots } = await verifyTerminal({ command, evaluate, check, screenshot:captureScreenshot });
+  const { result:terminal, shots:terminalShots } = await verifyTerminal({ command, evaluate, check, screenshot:captureScreenshot,
+    main:expression=>evaluateMain(mainInspectorUrl,expression) });
   for (const shot of terminalShots) writeFileSync(join(directory, shot.name), Buffer.from(shot.data, "base64"));
   console.log("TERMINAL_PASSED", terminalShots.map(shot => shot.name).join(" "));
   const { result:browser, shots:browserShots } = await verifyBrowser({ command, evaluate, check, screenshot:captureScreenshot,

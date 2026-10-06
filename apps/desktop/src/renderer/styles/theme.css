@@ -1,5 +1,9 @@
 :root {
   color-scheme: light;
+  /* 对话列：和 Claude Code 一样最宽 768px（48rem），在主区域里居中；窄时两边各留 --content-gutter。
+     对话内容、输入框、排队消息都用它，左右边缘对齐。 */
+  --content-width: 768px;
+  --content-gutter: 28px;
   --inspector-width: 320px;
   --rail-width: 48px;
   --sidebar-width: 260px;

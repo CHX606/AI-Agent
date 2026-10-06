@@ -25,7 +25,7 @@ export interface SessionHooks {
   workspace(): string;
   openUrl(url: string): void;
   /** 终端里按下、需要交给面板处理的快捷键。 */
-  shortcut(name: "find" | "new" | "zoom-in" | "zoom-out" | "zoom-reset" | "toggle"): void;
+  shortcut(name: "find" | "new"): void;
   changed(): void;
 }
 
@@ -80,9 +80,9 @@ export class TerminalSession {
     if (key === "c" && (event.shiftKey || this.terminal.hasSelection())) { void this.copySelection(); return false; }
     if (key === "v") return false;
     if (key === "`") return false;
-    const shortcut = event.shiftKey
-      ? ({ f: "find", t: "new" } as const)[key as "f"]
-      : ({ "=": "zoom-in", "+": "zoom-in", "-": "zoom-out", "0": "zoom-reset" } as const)[key as "="];
+    // Ctrl+= / Ctrl+- / Ctrl+0 交给应用缩放整个界面（终端跟着放大缩小），不当成 Shell 的按键。
+    if (["=", "+", "-", "_", "0"].includes(key) || event.code === "NumpadAdd" || event.code === "NumpadSubtract") return false;
+    const shortcut = event.shiftKey ? ({ f: "find", t: "new" } as const)[key as "f"] : undefined;
     if (shortcut) { event.preventDefault(); this.hooks.shortcut(shortcut); return false; }
     return true;
   }
@@ -117,11 +117,6 @@ export class TerminalSession {
     if (!this.host.isConnected || !this.host.clientWidth || !this.host.clientHeight) return;
     this.fit.fit();
     if (this.sessionId) window.bitAgent.resizeTerminal(this.sessionId, this.terminal.cols, this.terminal.rows);
-  }
-
-  setFontSize(size: number): void {
-    this.terminal.options.fontSize = size;
-    this.resize();
   }
 
   async start(): Promise<void> {

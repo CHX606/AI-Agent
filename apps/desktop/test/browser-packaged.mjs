@@ -62,9 +62,11 @@ export async function verifyBrowser({ command, evaluate, check, main, screenshot
   const clickInPage = (selector) => inPage(`document.querySelector(${JSON.stringify(selector)}).click()`, true);
   const stage = () => evaluate(`(() => { const r=document.querySelector('#browser-pane .browser-stage').getBoundingClientRect();
     return { x:Math.round(r.left), y:Math.round(r.top), width:Math.round(r.width), height:Math.round(r.height) }; })()`);
+  // 页面坐标是 CSS 像素；应用界面缩放后，原生视图的窗口坐标是它乘以缩放倍数。
+  const appZoom = () => main(`${electron}.BrowserWindow.getAllWindows()[0].webContents.getZoomFactor()`);
   const aligned = async () => {
-    const [view, rect] = [await native(), await stage()];
-    return view.visible && ["x", "y", "width", "height"].every(key => Math.abs(view.bounds[key] - rect[key]) <= 1);
+    const [view, rect, zoom] = [await native(), await stage(), await appZoom()];
+    return view.visible && ["x", "y", "width", "height"].every(key => Math.abs(view.bounds[key] - rect[key] * zoom) <= 2);
   };
   const ui = (expression) => evaluate(`(() => { const pane=document.querySelector('#browser-pane'); return ${expression}; })()`);
   const tabs = () => ui("[...pane.querySelectorAll('.browser-tab')].map(tab => ({ title:tab.querySelector('.browser-tab-title').textContent, active:tab.getAttribute('aria-selected')==='true' }))");
@@ -94,6 +96,11 @@ export async function verifyBrowser({ command, evaluate, check, main, screenshot
     await go(host);
     await check(async () => await title() === "Fixture Home", "地址栏导航没有打开测试页");
     await check(aligned, "原生网页视图没有对齐浏览器区域");
+    // 应用界面放大到 125% 后，原生视图按新的倍数重新对齐；恢复 100% 后也对齐。
+    await evaluate("window.bitAgent.setZoom('in').then(() => window.bitAgent.setZoom('in'))");
+    await check(async () => Math.abs(await appZoom() - 1.25) < 0.001 && await aligned(), "应用界面缩放后原生网页视图没有对齐");
+    await evaluate("window.bitAgent.setZoom('reset')");
+    await check(async () => Math.abs(await appZoom() - 1) < 0.001 && await aligned(), "恢复 100% 后原生网页视图没有对齐");
     assert.equal(await ui("pane.querySelector('.browser-address input').value"), host);
     await check(async () => JSON.stringify(await tabs()) === JSON.stringify([{ title:"Fixture Home", active:true }]), "标签栏没有显示网页标题");
     shots.push({ name:"browser-open.png", data:(await screenshot()).data });
@@ -245,7 +252,11 @@ export async function verifyBrowser({ command, evaluate, check, main, screenshot
     // 先变窄再恢复：窗口不宽时变宽会碰到“对话区至少 420px”的上限。
     const widthBefore = (await stage()).width;
     await ui("pane.querySelector('.browser-resize').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',shiftKey:true,bubbles:true}))");
-    await check(async () => Math.abs((await stage()).width - (widthBefore - 80)) <= 2 && await aligned(), "调整宽度后原生视图没有跟上");
+    let seen = null;
+    await check(async () => {
+      seen = { widthBefore, stage: await stage(), view: (await native()).bounds, zoom: await appZoom(), inner: await evaluate("innerWidth") };
+      return Math.abs(seen.stage.width - (widthBefore - 80)) <= 2 && await aligned();
+    }, "调整宽度后原生视图没有跟上").catch((error) => { throw new Error(`${error.message} ${JSON.stringify(seen)}`); });
     await ui("pane.querySelector('.browser-resize').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',shiftKey:true,bubbles:true}))");
     await check(async () => Math.abs((await stage()).width - widthBefore) <= 2 && await aligned(), "恢复宽度后原生视图没有跟上");
 

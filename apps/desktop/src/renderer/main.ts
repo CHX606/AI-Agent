@@ -157,8 +157,15 @@ const browserPane = mountBrowserPane({
     else if (shortcut === "toggle-terminal") terminalPanel.toggle();
   },
 });
+// 对话区滚动条的实际宽度（随系统、缩放而变）：输入框区域右边多留同样宽度，两者居中对齐。
+const conversation = element<HTMLElement>("#conversation");
+const measureScrollbar = () => {
+  document.documentElement.style.setProperty("--scrollbar-size", `${Math.max(0, conversation.offsetWidth - conversation.clientWidth)}px`);
+};
+new ResizeObserver(measureScrollbar).observe(conversation);
+measureScrollbar();
 // 对话里的网页链接在内置浏览器的新标签页打开；按住 Ctrl/Shift 点击时仍交给系统浏览器。
-element<HTMLElement>("#conversation").addEventListener("click", (event) => {
+conversation.addEventListener("click", (event) => {
   if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
   const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
   if (!link || !/^https?:$/u.test(link.protocol)) return;
@@ -167,6 +174,30 @@ element<HTMLElement>("#conversation").addEventListener("click", (event) => {
 });
 // Ctrl+B 收起/展开左侧栏，Ctrl+` 打开/隐藏终端，和 VS Code、Claude Code 一致。
 // 焦点在终端里时 Ctrl+B 留给 Shell。
+// Ctrl+= / Ctrl+- / Ctrl+0、Ctrl+滚轮：缩放整个应用界面（和 Claude Code 一样，重启后保留）。
+// 焦点在内置浏览器的网页里时由网页自己缩放（主进程处理），不会走到这里。
+const zoomAction = (event: KeyboardEvent): "in" | "out" | "reset" | null => {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing) return null;
+  if (event.key === "=" || event.key === "+" || event.code === "NumpadAdd") return "in";
+  if (event.key === "-" || event.key === "_" || event.code === "NumpadSubtract") return "out";
+  if (!event.shiftKey && (event.key === "0" || event.code === "Numpad0")) return "reset";
+  return null;
+};
+document.addEventListener("keydown", (event) => {
+  const zoom = zoomAction(event);
+  if (!zoom) return;
+  event.preventDefault();
+  void window.bitAgent.setZoom(zoom);
+});
+let wheelZoomAt = 0;
+document.addEventListener("wheel", (event) => {
+  if (!event.ctrlKey || event.deltaY === 0) return;
+  event.preventDefault();
+  // 触控板一次滑动会连发很多滚轮事件，间隔太短的只算一次。
+  if (event.timeStamp - wheelZoomAt < 120) return;
+  wheelZoomAt = event.timeStamp;
+  void window.bitAgent.setZoom(event.deltaY < 0 ? "in" : "out");
+}, { passive: false });
 document.addEventListener("keydown", (event) => {
   if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return;
   if (event.isComposing || document.querySelector("dialog[open]")) return;

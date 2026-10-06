@@ -142,7 +142,7 @@
 
 .queued-messages {
   display: grid;
-  width: min(820px, 100%);
+  width: min(var(--content-width), 100%);
   gap: 4px;
   margin: 0 auto 8px;
   padding: 0;

@@ -150,9 +150,17 @@ body[data-resizing="true"] .browser-resize::after {
   white-space: nowrap;
 }
 
+/* 关闭按钮浮在标签右端，不占位置：没悬停的后台标签，标题能用满整个宽度。 */
+.browser-tab {
+  position: relative;
+  padding-right: 8px;
+}
+
 .browser-tab-close {
+  position: absolute;
+  top: 50%;
+  right: 4px;
   display: grid;
-  flex: none;
   width: 20px;
   height: 20px;
   place-items: center;
@@ -160,6 +168,13 @@ body[data-resizing="true"] .browser-resize::after {
   background: transparent;
   color: var(--text-muted);
   opacity: 0;
+  transform: translateY(-50%);
+}
+
+.browser-tab:hover .browser-tab-title,
+.browser-tab[aria-selected="true"] .browser-tab-title,
+.browser-tab:focus-within .browser-tab-title {
+  margin-right: 18px;
 }
 
 .browser-tab-close svg {
@@ -171,6 +186,11 @@ body[data-resizing="true"] .browser-resize::after {
 .browser-tab[aria-selected="true"] .browser-tab-close,
 .browser-tab-close:focus-visible {
   opacity: 1;
+}
+
+/* 没显示时也点不到，免得误关后台标签。 */
+.browser-tab:not(:hover, [aria-selected="true"], :focus-within) .browser-tab-close {
+  pointer-events: none;
 }
 
 .browser-tab-close:hover {

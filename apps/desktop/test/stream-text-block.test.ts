@@ -20,9 +20,8 @@ vi.mock("../src/renderer/stream/status-line", () => ({
     dispose(): void {}
   },
 }));
-vi.mock("../src/renderer/stream/tool-row", async () => {
-  const { streamBullet } = await import("../src/renderer/stream/bullet");
-  return { streamBullet, StreamToolRows: class {
+vi.mock("../src/renderer/stream/tool-row", () => {
+  return { StreamToolRows: class {
     constructor(private readonly options: { append(item: HTMLElement): void }) {}
     handle(): void {
       const item = document.createElement("li");
@@ -64,7 +63,7 @@ function paint(): void {
 }
 function contents(): string[] {
   return stream.children.map(item => item.className.includes("stream-text")
-    ? item.children[1]!.textContent : item.textContent);
+    ? item.children[0]!.textContent : item.textContent);
 }
 
 beforeEach(() => {
@@ -86,7 +85,7 @@ beforeEach(() => {
 afterEach(() => { view.dispose(); vi.unstubAllGlobals(); });
 
 describe("streamed assistant text boundaries", () => {
-  it("does not create an empty bullet for empty or whitespace-only deltas", () => {
+  it("does not create an empty block for empty or whitespace-only deltas", () => {
     for (const text of ["", " ", "\n", "\r\n\t"]) delta(text);
     paint();
     expect(stream.children).toHaveLength(0);
@@ -145,14 +144,14 @@ describe("streamed assistant text boundaries", () => {
     view.setStatus("CANCELLED");
     delta("停止后不显示。");
     paint();
-    expect(stream.children[0]!.children[1]!.textContent).toBe("停止前的说明。");
+    expect(stream.children[0]!.children[0]!.textContent).toBe("停止前的说明。");
     expect(mocks.render).toHaveBeenCalledTimes(1);
   });
 
-  it("flushes detached history synchronously instead of leaving an empty bullet", () => {
+  it("flushes detached history synchronously instead of leaving an empty block", () => {
     delta("保留到历史的文字。");
     const saved = view.detach() as unknown as TestElement[];
-    expect(saved[0]!.children[1]!.textContent).toBe("保留到历史的文字。");
+    expect(saved[0]!.children[0]!.textContent).toBe("保留到历史的文字。");
     expect(stream.children).toHaveLength(0);
     expect(frames.size).toBe(0);
   });

@@ -74,7 +74,10 @@ export function mountBrowserPane(options: {
   let syncing: Promise<void> = Promise.resolve();
 
   // ---- 宽度 ----
-  const applyWidth = (width: number) => {
+  // 用户想要的宽度单独记着：窗口变窄或界面放大时临时收窄，恢复后回到原来的宽度。
+  let preferredWidth = 0;
+  const applyWidth = (width: number, remember = true) => {
+    if (remember) preferredWidth = width;
     const sidebar = document.querySelector(".sidebar-left")?.getBoundingClientRect().width ?? 260;
     const clamped = Math.round(Math.min(Math.max(MIN_WIDTH, width), Math.max(MIN_WIDTH, window.innerWidth - sidebar - MAIN_MIN_WIDTH)));
     document.documentElement.style.setProperty("--browser-width", `${clamped}px`);
@@ -406,8 +409,7 @@ export function mountBrowserPane(options: {
     localStorage.setItem(WIDTH_KEY, String(applyWidth(pane.getBoundingClientRect().width + delta)));
   });
   window.addEventListener("resize", () => {
-    const current = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--browser-width"));
-    if (Number.isFinite(current)) applyWidth(current);
+    if (preferredWidth) applyWidth(preferredWidth, false);
   });
 
   // ---- 打开和关闭 ----

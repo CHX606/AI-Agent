@@ -7,7 +7,8 @@ import { ExecutionSettingsController } from "./product/execution-controller.js";
 import "./execution-settings.css";
 
 export function mountExecutionSettings(): void {
-  const icon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>`;
+  // 仪表盘：执行预算和验收方式。
+  const icon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 17a8 8 0 1 1 15 0"/><path d="m12 13 3.5-4"/><circle cx="12" cy="13" r="1"/></svg>`;
   const trigger = document.createElement("button");
   trigger.type = "button";
   trigger.id = "execution-settings";

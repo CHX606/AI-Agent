@@ -19,7 +19,7 @@ async function typeLine(command, evaluate, text) {
 }
 
 /** 内置终端：打开、运行命令、配色生效（CSP 下的样式镜像）、隐藏后保留、重新启动。 */
-export async function verifyTerminal({ command, evaluate, check, screenshot }) {
+export async function verifyTerminal({ command, evaluate, check, screenshot, main }) {
   const shots = [];
   const capture = async (name) => {
     await new Promise(resolve => setTimeout(resolve, 200));
@@ -81,12 +81,16 @@ export async function verifyTerminal({ command, evaluate, check, screenshot }) {
     throw new Error(`重新启动没有开启新的会话：${JSON.stringify(screen)}`, { cause:error });
   }
 
-  // 字号：Ctrl+= 放大、Ctrl+0 恢复，记在本机。
+  // 焦点在终端里按 Ctrl+= / Ctrl+0：缩放整个应用界面（终端跟着放大），按键不进 Shell。
+  const zoom = () => main(`process.getBuiltinModule('module').createRequire(process.resourcesPath+'/app/package.json')('electron')
+    .BrowserWindow.getAllWindows()[0].webContents.getZoomFactor()`);
+  const before = await evaluate(rows);
   await evaluate(`document.querySelector('${current} .xterm-helper-textarea').focus()`);
   await key(command, { key:"=", code:"Equal", windowsVirtualKeyCode:187, modifiers:2 });
-  await check(() => evaluate("localStorage.getItem('bit-agent.terminal-font.v1')==='13.5'"), "Ctrl+= 没有放大终端字号");
+  await check(async () => Math.abs(await zoom() - 1.1) < 0.001, "Ctrl+= 没有放大应用界面");
   await key(command, { key:"0", code:"Digit0", windowsVirtualKeyCode:48, modifiers:2 });
-  await check(() => evaluate("localStorage.getItem('bit-agent.terminal-font.v1')==='12.5'"), "Ctrl+0 没有恢复终端字号");
+  await check(async () => Math.abs(await zoom() - 1) < 0.001, "Ctrl+0 没有恢复应用界面大小");
+  assert.equal(await evaluate(rows), before, "缩放快捷键被当成按键发给了 Shell");
 
   // 查找：同一行出现两次的词，计数显示“第几个/共几个”。
   await typeLine(command, evaluate, "Write-Output 'needle-one needle-one'");
@@ -156,5 +160,5 @@ export async function verifyTerminal({ command, evaluate, check, screenshot }) {
   await evaluate("document.querySelector('#terminal-toggle').click()");
   assert.equal(await evaluate("document.querySelector('#terminal-panel').hidden"), true);
   return { result:{ prompt:true, commandOutput:true, cwd:opened.cwd, themedByConstructedSheets:true, keptWhenHidden:true, restart:true,
-    fontSize:true, find:true, quoteToConversation:true, linkOpensBrowser:true, multipleTerminals:true, followsRepositoryView:true }, shots };
+    appZoom:true, find:true, quoteToConversation:true, linkOpensBrowser:true, multipleTerminals:true, followsRepositoryView:true }, shots };
 }

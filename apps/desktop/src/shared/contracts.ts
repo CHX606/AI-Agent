@@ -247,6 +247,8 @@ export interface DesktopApi {
   getExecutionSettings(): Promise<ExecutionSettings>;
   saveExecutionSettings(input: ExecutionSettings): Promise<ExecutionSettings>;
   setTheme(theme: ColorTheme): void;
+  /** 整个应用界面放大、缩小或恢复 100%，返回新的缩放倍数。 */
+  setZoom(action: "in" | "out" | "reset"): Promise<number>;
   selectWorkspace(): Promise<string | null>;
   setRepositoryWorkspace(workspaceRoot: string): Promise<string>;
   listRepositoryDirectory(input: RepositoryPathInput): Promise<RepositoryDirectoryResult>;

@@ -1,14 +1,11 @@
 import type { TaskEvent } from "../../shared/contracts";
 import { object } from "../dom";
 import { eventPresentation, type ActivityPresentation } from "../presentation";
-import { streamBullet } from "./bullet";
 import { formatDuration } from "./run-status";
 import { renderDiff, type FileDiff } from "./tool-diff";
 import { ToolGroup } from "./tool-group";
 import { toolGroupKind } from "./tool-group-summary";
 import { patchDiffSummary, patchPaths } from "./patch-summary";
-
-export { streamBullet } from "./bullet";
 
 function operationLabel(presentation: ActivityPresentation, payload: Record<string, unknown>): string {
   const operation = object(payload.operation);
@@ -36,7 +33,7 @@ function toolItem(label: string, target: string, toolName: string, agent: string
   const destination = document.createElement("span");
   destination.className = "tool-target";
   destination.textContent = target;
-  head.append(streamBullet(), name, destination);
+  head.append(name, destination);
   head.addEventListener("click", () => {
     const detail = item.querySelector<HTMLElement>(".tool-detail")!;
     detail.hidden = !detail.hidden;

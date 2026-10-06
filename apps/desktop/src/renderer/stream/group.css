@@ -1,9 +1,4 @@
-/* 工具分组（参照 Claude Code）：一行摘要，点开是带边框的逐条列表。 */
-
-/* 分组本身也是 .stream-item（两列网格）；这里要压过它，否则摘要会挤进 18px 的圆点列。 */
-.stream-item.stream-group {
-  display: block;
-}
+/* 工具分组（参照 Claude Code）：一行灰色摘要，不加圆点、不加粗；修改文件带绿/红增删行数标签。点开是带边框的逐条列表。 */
 
 .group-head {
   display: inline-flex;
@@ -15,16 +10,9 @@
   border-radius: 5px;
   background: none;
   color: var(--text-muted);
-  font: 13px/1.7 var(--font-mono);
+  font: 14px/1.7 var(--font-sans);
   text-align: left;
   cursor: pointer;
-}
-
-.group-head > .stream-bullet {
-  width: 18px;
-  flex: none;
-  color: var(--text-faint);
-  line-height: 22px;
 }
 
 .group-summary {
@@ -46,27 +34,42 @@
   display: none;
 }
 
-.stream-group:not([data-kind="read"]) > .group-head > .group-summary {
-  color: var(--text);
+.group-outcome[data-kind="lines"] {
+  display: inline-flex;
+  flex: none;
+  gap: 0;
+  overflow: visible;
+  border-radius: 4px;
+  font: 12px/1 var(--font-mono);
 }
 
-.stream-group[data-tone="success"]:not([data-kind="read"]) > .group-head > .stream-bullet {
+.line-count {
+  padding: 3px 5px;
+}
+
+.line-count.add {
+  border-radius: 4px 0 0 4px;
+  background: var(--diff-add-bg);
   color: var(--green);
 }
 
-.stream-group[data-tone="error"] > .group-head > .stream-bullet,
-.stream-group[data-tone="error"] > .group-head > .group-outcome {
+.line-count.remove {
+  border-radius: 0 4px 4px 0;
+  background: var(--diff-remove-bg);
   color: var(--red);
 }
 
-.stream-group[data-tone="warning"] > .group-head > .stream-bullet,
-.stream-group[data-tone="warning"] > .group-head > .group-outcome,
+.stream-group[data-tone="error"] > .group-head > .group-outcome:not([data-kind="lines"]) {
+  color: var(--red);
+}
+
+.stream-group[data-tone="warning"] > .group-head > .group-outcome:not([data-kind="lines"]),
 .group-failures[data-tone="warning"] {
   color: var(--amber);
 }
 
-.group-head:hover .group-summary,
-.group-head:focus-visible .group-summary {
+.group-head:hover,
+.group-head:focus-visible {
   color: var(--text);
 }
 
@@ -89,14 +92,13 @@
   transform: rotate(90deg);
 }
 
-.stream-group[data-tone="running"] > .group-head > .stream-bullet {
-  color: var(--text-muted);
-  animation: stream-blink 1s steps(2, start) infinite;
+/* 进行中：摘要文字明暗起伏（动画定义在 transcript.css）。 */
+.stream-group[data-tone="running"] > .group-head > .group-summary {
+  animation: stream-pulse 1.4s ease-in-out infinite;
 }
-
 /* 展开后的列表：每条一行“动作 目标 · 结果”，点一行再看详情。 */
 .group-list {
-  margin: 6px 0 2px 24px;
+  margin: 6px 0 2px;
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -126,12 +128,6 @@
   gap: 6px;
 }
 
-.group-list > .stream-tool > .tool-head > .stream-bullet {
-  width: 12px;
-  flex: none;
-  font-size: 8px;
-}
-
 .group-list > .stream-tool > .tool-result {
   min-width: 0;
   flex: 1 1 120px;
@@ -145,7 +141,7 @@
 .group-list > .stream-tool > .tool-detail,
 .group-list > .stream-tool > .tool-diff,
 .group-list > .stream-tool > .tool-children {
-  margin-left: 18px;
+  margin-left: 0;
   flex-basis: 100%;
 }
 
@@ -153,7 +149,7 @@
 .tool-children {
   display: grid;
   gap: 6px;
-  margin: 6px 0 0 24px;
+  margin: 6px 0 0 16px;
   padding: 0;
   list-style: none;
 }
@@ -163,6 +159,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stream-group[data-tone="running"] > .group-head > .stream-bullet { animation: none; }
+  .stream-group[data-tone="running"] > .group-head > .group-summary { animation: none; }
   .group-chevron { transition: none; }
 }

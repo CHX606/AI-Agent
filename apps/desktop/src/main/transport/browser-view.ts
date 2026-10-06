@@ -92,9 +92,11 @@ function browserSession(): Session {
   return browser;
 }
 
+/** 页面给的是 CSS 像素；应用界面缩放后要乘以缩放倍数才是窗口坐标。 */
 function cleanBounds(bounds: BrowserBounds, window: BrowserWindow): Electron.Rectangle {
   const [maxWidth = 0, maxHeight = 0] = window.getContentSize();
-  const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? Math.round(value) : 0);
+  const zoom = window.webContents.getZoomFactor?.() || 1;
+  const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? Math.round(value * zoom) : 0);
   const x = Math.min(Math.max(0, number(bounds.x)), maxWidth);
   const y = Math.min(Math.max(0, number(bounds.y)), maxHeight);
   return { x, y, width: Math.min(Math.max(0, number(bounds.width)), maxWidth - x), height: Math.min(Math.max(0, number(bounds.height)), maxHeight - y) };
@@ -162,7 +164,8 @@ export class BrowserPane {
   private readonly tabs: Tab[] = [];
   private activeId: string | null = null;
   private visible = false;
-  private bounds: Electron.Rectangle = { x: 0, y: 0, width: 0, height: 0 };
+  // 页面给的位置（CSS 像素）；真正放视图时再按应用界面缩放换算。
+  private bounds: BrowserBounds = { x: 0, y: 0, width: 0, height: 0 };
   private readonly downloads = new Map<string, Electron.DownloadItem>();
   private readonly prompts = new Map<string, PendingPrompt>();
   private fullscreen = false;
@@ -399,13 +402,18 @@ export class BrowserPane {
       const active = tab.id === this.activeId;
       // 全屏时即使面板被弹窗遮住也照样铺满窗口显示：用户正在看视频。
       const show = active && (this.visible || this.fullscreen);
-      if (show) tab.view.setBounds(this.fullscreen ? { x: 0, y: 0, width, height } : this.bounds);
+      if (show) tab.view.setBounds(this.fullscreen ? { x: 0, y: 0, width, height } : cleanBounds(this.bounds, this.window));
       tab.view.setVisible(show);
     }
   }
 
+  /** 应用界面缩放变化后，按新的倍数重新对齐（页面给的位置不变，换算成窗口坐标变了）。 */
+  relayout(): void {
+    this.layout();
+  }
+
   async show(bounds: BrowserBounds, url?: string): Promise<BrowserState> {
-    this.bounds = cleanBounds(bounds, this.window);
+    this.bounds = bounds;
     this.visible = true;
     this.layout();
     if (url) await this.navigate(url);
@@ -413,8 +421,8 @@ export class BrowserPane {
   }
 
   setBounds(bounds: BrowserBounds): void {
-    this.bounds = cleanBounds(bounds, this.window);
-    if (!this.fullscreen) this.active?.view.setBounds(this.bounds);
+    this.bounds = bounds;
+    if (!this.fullscreen) this.active?.view.setBounds(cleanBounds(bounds, this.window));
   }
 
   async hide(snapshot: boolean): Promise<string | null> {

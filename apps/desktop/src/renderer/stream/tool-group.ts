@@ -1,5 +1,4 @@
 /** 工具操作默认收起；查看类合并，其他操作按工具分别汇总。 */
-import { streamBullet } from "./bullet";
 import { summarizeToolGroup, type ToolRowSummary } from "./tool-group-summary";
 import type { PatchSummary } from "./patch-summary";
 import "./group.css";
@@ -35,7 +34,7 @@ export class ToolGroup {
     chevron.className = "group-chevron";
     chevron.setAttribute("aria-hidden", "true");
     chevron.textContent = "›";
-    this.head.append(streamBullet(), this.text, this.result, this.failures, chevron);
+    this.head.append(this.text, this.result, this.failures, chevron);
     this.list = document.createElement("ol");
     this.list.className = "group-list";
     this.list.id = `tool-group-${++groups}`;
@@ -73,7 +72,15 @@ export class ToolGroup {
     this.element.dataset.tone = summary.tone;
     this.text.textContent = summary.text;
     this.text.title = summary.text;
-    this.result.textContent = summary.result ? `· ${summary.result}` : "";
+    // 增删行数像 Claude Code 一样显示成绿色、红色的小标签；其他结果是一段灰字。
+    const lines = /^\+(\d+) −(\d+)$/u.exec(summary.result);
+    this.result.dataset.kind = lines ? "lines" : "text";
+    if (lines) {
+      const count = (tone: string, text: string) => Object.assign(document.createElement("span"), { className: `line-count ${tone}`, textContent: text });
+      this.result.replaceChildren(count("add", `+${lines[1]}`), " ", count("remove", `−${lines[2]}`));
+    } else {
+      this.result.textContent = summary.result ? `· ${summary.result}` : "";
+    }
     this.result.title = summary.result;
     this.failures.textContent = [summary.failed ? `· ${summary.failed} 个未通过` : "",
       summary.warning ? `· ${summary.warning} 个未完成` : ""].filter(Boolean).join(" ");

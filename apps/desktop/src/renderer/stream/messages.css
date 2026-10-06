@@ -66,9 +66,9 @@
   justify-content: flex-end;
 }
 
-/* 与回答正文对齐：圆点列 18px + 间距 6px。 */
+/* 与回答正文左边对齐；图标按钮自带内边距，往左挪一点让图标本身对齐。 */
 .turn-reply-actions {
-  margin: 2px 0 0 24px;
+  margin: 2px 0 0 -6px;
 }
 
 .message-actions[hidden],

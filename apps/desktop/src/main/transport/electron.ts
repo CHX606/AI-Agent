@@ -19,6 +19,7 @@ import { registerBrowserIpc } from "./browser-ipc.js";
 import { BrowserAgent } from "./browser-agent.js";
 import { BROWSER_READ_TOOLS, BROWSER_SERVER_NAME, startBrowserMcpServer } from "./browser-mcp-server.js";
 import { mainBrowserPane } from "./browser-panes.js";
+import { registerDesktopZoom } from "./desktop-zoom.js";
 
 export function startDesktop(services: DesktopServices, currentDirectory: string): void {
   installDesktopDiagnostics(services);
@@ -68,7 +69,12 @@ async function initializeDesktop(services: DesktopServices, currentDirectory: st
   registerTerminalIpc(services, handle);
   registerBrowserIpc(services, handle);
   watches.register();
-  const createWindow = () => createDesktopWindow(services.diagnostics, currentDirectory, theme());
+  const attachZoom = registerDesktopZoom(services);
+  const createWindow = () => {
+    const window = createDesktopWindow(services.diagnostics, currentDirectory, theme());
+    attachZoom(window);
+    return window;
+  };
   createWindow();
   app.on("second-instance", () => {
     const existing = BrowserWindow.getAllWindows()[0];

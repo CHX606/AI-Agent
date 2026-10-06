@@ -5,7 +5,8 @@ import { mirrorInjectedStyles } from "./style-mirror.js";
 import { TerminalSession, themeFromPage } from "./terminal-session.js";
 
 const HEIGHT_KEY = "bit-agent.terminal-height.v1";
-const FONT_KEY = "bit-agent.terminal-font.v1";
+// 字号固定；放大缩小用应用的整体缩放（Ctrl+= / Ctrl+-）。
+const FONT_SIZE = 12.5;
 const MIN_HEIGHT = 120;
 const MAX_SESSIONS = 8;
 const icon = (path: string) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
@@ -60,17 +61,14 @@ export function mountTerminalPanel(options: {
 
   const sessions: TerminalSession[] = [];
   let active: TerminalSession | null = null;
-  let fontSize = Math.min(24, Math.max(9, Number(localStorage.getItem(FONT_KEY)) || 12.5));
 
   // ---- 会话 ----
   const hooks = {
     workspace: options.workspace,
     openUrl: options.openUrl,
-    shortcut: (name: "find" | "new" | "zoom-in" | "zoom-out" | "zoom-reset" | "toggle") => {
+    shortcut: (name: "find" | "new") => {
       if (name === "find") openFind();
-      else if (name === "new") void createSession();
-      else if (name === "toggle") setOpen(false);
-      else setFont(name === "zoom-reset" ? 12.5 : fontSize + (name === "zoom-in" ? 1 : -1));
+      else void createSession();
     },
     changed: () => renderTabs(),
   };
@@ -112,7 +110,7 @@ export function mountTerminalPanel(options: {
 
   async function createSession(): Promise<void> {
     if (sessions.length >= MAX_SESSIONS) return;
-    const session = new TerminalSession(hooks, fontSize);
+    const session = new TerminalSession(hooks, FONT_SIZE);
     sessions.push(session);
     watchResults(session);
     host.append(session.host);
@@ -137,12 +135,6 @@ export function mountTerminalPanel(options: {
 
   window.bitAgent.onTerminalOutput(({ id, data }) => sessions.find((session) => session.sessionId === id)?.write(data));
   window.bitAgent.onTerminalExit(({ id, exitCode }) => sessions.find((session) => session.sessionId === id)?.exit(exitCode));
-
-  function setFont(size: number): void {
-    fontSize = Math.min(24, Math.max(9, size));
-    localStorage.setItem(FONT_KEY, String(fontSize));
-    for (const session of sessions) session.setFontSize(fontSize);
-  }
 
   let resizeQueued = false;
   function requestResize(): void {

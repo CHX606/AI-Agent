@@ -10,6 +10,3 @@
 /* 已完成的轮次与当前轮次同样式（见 transcript.css），这里只给轮次之间加分隔线。 */
 .saved-turn { border-bottom: 1px solid var(--border); }
 .saved-turn + .turn { border-top: 0; }
-@media (max-width: 720px) {
-  .turn { width: calc(100% - 30px); }
-}

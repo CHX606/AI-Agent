@@ -36,6 +36,9 @@ export interface RuntimePort {
 export interface PreferencesPort {
   loadTheme(): ColorTheme;
   saveTheme(theme: ColorTheme): void;
+  /** 界面缩放倍数，1 为 100%。 */
+  loadZoom(): number;
+  saveZoom(zoom: number): void;
   readExecutionSettings(directory: string): ExecutionSettings;
   writeExecutionSettings(directory: string, input: unknown): ExecutionSettings;
 }
