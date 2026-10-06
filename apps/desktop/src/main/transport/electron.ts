@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog } from "electron";
-import { publicError } from "@bit-agent/diagnostics";
+import { publicError, registerSecret } from "@bit-agent/diagnostics";
 import type { DesktopServices } from "../application/ports.js";
 import { installDesktopDiagnostics, registerDesktopLifecycle } from "./desktop-lifecycle.js";
 import { createDesktopWindow } from "./desktop-window.js";
@@ -16,6 +16,9 @@ import { registerClipboardIpc } from "./clipboard-ipc.js";
 import { createTaskWatches } from "./task-watches.js";
 import { registerTerminalIpc } from "./terminal-ipc.js";
 import { registerBrowserIpc } from "./browser-ipc.js";
+import { BrowserAgent } from "./browser-agent.js";
+import { BROWSER_READ_TOOLS, BROWSER_SERVER_NAME, startBrowserMcpServer } from "./browser-mcp-server.js";
+import { mainBrowserPane } from "./browser-panes.js";
 
 export function startDesktop(services: DesktopServices, currentDirectory: string): void {
   installDesktopDiagnostics(services);
@@ -31,8 +34,26 @@ export function startDesktop(services: DesktopServices, currentDirectory: string
   registerDesktopLifecycle(services, () => watches.stopAll());
 }
 
+/** 给 Agent 用的内置浏览器工具：先启动，运行服务启动时就把它当作外部工具 browser 接上。 */
+async function startBrowserTools(services: DesktopServices): Promise<void> {
+  try {
+    const endpoint = await startBrowserMcpServer(new BrowserAgent(mainBrowserPane));
+    // 令牌出现在交给运行服务的环境变量里，诊断日志一律打码。
+    registerSecret(endpoint.token);
+    services.setBuiltinMcpServers([{
+      name: BROWSER_SERVER_NAME, type: "http", url: endpoint.url, headers: { Authorization: `Bearer ${endpoint.token}` },
+      enabled: true, auto_approve: false, builtin: true, read_tools: BROWSER_READ_TOOLS,
+    }]);
+    app.once("will-quit", () => { void endpoint.close(); });
+  } catch (error) {
+    // 浏览器工具起不来不影响应用其余部分。
+    services.diagnostics.failure("browser_tools_failed", error);
+  }
+}
+
 async function initializeDesktop(services: DesktopServices, currentDirectory: string,
   watches: ReturnType<typeof createTaskWatches>): Promise<void> {
+  await startBrowserTools(services);
   if (!await startRuntime(services)) return;
   const handle = createIpcHandler(services.diagnostics);
   registerDiagnosticsIpc(services, handle);

@@ -21,6 +21,7 @@ from .run_protocol import (
     _EXPECTED_REFUSALS,
     _SKIPPED_OUTPUT,
 )
+from .tool_images import split_tool_images, tool_image_message
 
 
 class RunTools:
@@ -40,7 +41,7 @@ class RunTools:
 
         operation_display = tool_operation(tool_call.name, tool_call.arguments)
         await self._tool_requested(tool_call, operation_display)
-        tool_result = await self._call_tool(tool_call)
+        tool_result, images = split_tool_images(await self._call_tool(tool_call))
         record = ToolCallRecord.from_tool_result(
             round_number=self.completed_rounds,
             raw_arguments=tool_call.arguments,
@@ -57,7 +58,13 @@ class RunTools:
         self.conversation.append(
             {"type": "function_call_output", "call_id": tool_call.call_id, "output": output}
         )
-        await self.archive([self.conversation[-1]])
+        appended = 1
+        if images:
+            # 工具结果只能是文字；截图紧跟在后面作为一条带图片的消息交给模型
+            # （工具逐个执行，不会打乱调用和结果的配对）。
+            self.conversation.append(tool_image_message(tool_call.name, images))
+            appended = 2
+        await self.archive(self.conversation[-appended:])
         await self.persist()
         return output
 

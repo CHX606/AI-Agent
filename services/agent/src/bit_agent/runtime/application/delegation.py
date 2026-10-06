@@ -79,6 +79,24 @@ DELEGATION_SCHEMA: dict[str, Any] = {
 }
 
 
+# 内置浏览器会改变网页状态的工具，在确认框标题里的说法。
+_BROWSER_ACTIONS = {
+    "open": "打开网页",
+    "click": "点击页面元素",
+    "type": "在页面输入文字",
+    "select": "选择下拉选项",
+    "press": "在页面按键",
+    "navigate": "后退、前进或刷新",
+}
+
+
+def _shown_arguments(raw_arguments: str) -> str:
+    try:
+        return json.dumps(json.loads(raw_arguments), ensure_ascii=False, indent=2)
+    except (ValueError, TypeError):
+        return raw_arguments
+
+
 def auxiliary_model() -> str | None:
     """配置了辅助模型时返回它的名字；没有配置（或测试替换了模型配置）时返回 None，沿用主模型。"""
     try:
@@ -116,8 +134,12 @@ class DelegatingToolProvider(LocalToolProvider):
         inherited_changed_lines: int = 0,
     ) -> None:
         super().__init__(root, execute_tool)
-        # 只读模式不连接外部工具：它们可能写文件、联网或改动外部系统。
-        self.external = external if permission_mode != "read_only" else None
+        # 只读模式不连接用户配置的外部工具：它们可能写文件、联网或改动外部系统。
+        # 应用自带的内置浏览器例外：只读模式下保留它的只读工具（读页面、截图、控制台）。
+        if permission_mode == "read_only":
+            self.external = external.read_only() if external is not None else None
+        else:
+            self.external = external
         self.report = report
         self.root = root
         self.mode = mode
@@ -226,10 +248,13 @@ class DelegatingToolProvider(LocalToolProvider):
     async def __aenter__(self) -> "DelegatingToolProvider":
         if self.external is not None:
             await self.external.__aenter__()
-            if self.report is not None and (self.external.connected or self.external.failed):
+            # 应用自带的服务（内置浏览器）连上了不必提示；连不上照样提示。
+            builtin = {server.name for server in self.external.servers if server.builtin}
+            connected = [item for item in self.external.connected if item["name"] not in builtin]
+            if self.report is not None and (connected or self.external.failed):
                 await self.report(
                     "EXTERNAL_TOOLS_LOADED",
-                    {"connected": self.external.connected, "failed": self.external.failed},
+                    {"connected": connected, "failed": self.external.failed},
                 )
         return self
 
@@ -240,7 +265,12 @@ class DelegatingToolProvider(LocalToolProvider):
     async def model_tools(self) -> list[dict[str, object]]:
         tools = list(await super().model_tools())
         if self.external is not None:
-            tools.extend(self.external.model_tools())
+            external_tools = self.external.model_tools()
+            if self.permission_mode == "read_only":
+                external_tools = [
+                    tool for tool in external_tools if self.external.is_read_tool(str(tool["name"]))
+                ]
+            tools.extend(external_tools)
         tools.append(VERIFY_SCHEMA)
         if self._acceptance_available() and self.acceptance_mode != "off":
             tools.append(VERIFY_TASK_SCHEMA)
@@ -256,15 +286,34 @@ class DelegatingToolProvider(LocalToolProvider):
         assert self.external is not None
         server = self.external.server_for(tool_name)
         assert server is not None
-        # “允许修改”且用户把这个服务标为自动批准时才不问；其他情况逐次确认，可按服务整轮批准。
-        if not (self.permission_mode == "edit" and server.auto_approve):
-            try:
-                shown = json.dumps(json.loads(raw_arguments), ensure_ascii=False, indent=2)
-            except (ValueError, TypeError):
-                shown = raw_arguments
+        reading = self.external.is_read_tool(tool_name)
+        if self.permission_mode == "read_only" and not reading:
+            return tool_error_result(
+                tool_call_id,
+                tool_name,
+                "PERMISSION_DENIED",
+                "本轮只读：只能读取网页，不能打开、点击或输入",
+            )
+        if server.builtin and not reading:
+            # 内置浏览器的操作（打开、点击、输入）：逐次确认，可选本对话内都批准。
+            action = _BROWSER_ACTIONS.get(self.external.original_name(tool_name), "操作")
+            approved, feedback = await self._approve(
+                f"在内置浏览器中{action}",
+                "Agent 只在自己的标签页里操作，你能在右侧浏览器里看到。"
+                "网页和你登录的网站共用同一个浏览器，请留意它要访问和提交的内容。\n"
+                + _shown_arguments(raw_arguments),
+                f"mcp:{server.name}",
+            )
+            if not approved:
+                return self._denied(tool_call_id, tool_name, "未批准在浏览器中操作", feedback)
+            return await self.external.call(tool_name, tool_call_id, raw_arguments)
+        # “允许修改”且用户把这个服务标为自动批准时才不问；只读工具不问；
+        # 其他情况逐次确认，可按服务整轮批准。
+        if not reading and not (self.permission_mode == "edit" and server.auto_approve):
             approved, feedback = await self._approve(
                 f"调用外部工具 {server.name} · {self.external.original_name(tool_name)}",
-                "外部工具在本机或远程服务上运行，不在隔离环境中，也不会进入改动审阅。\n" + shown,
+                "外部工具在本机或远程服务上运行，不在隔离环境中，也不会进入改动审阅。\n"
+                + _shown_arguments(raw_arguments),
                 f"mcp:{server.name}",
             )
             if not approved:

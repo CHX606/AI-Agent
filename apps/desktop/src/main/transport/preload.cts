@@ -97,6 +97,11 @@ const api: DesktopApi = {
     ipcRenderer.on("browser:state", handler);
     return () => ipcRenderer.removeListener("browser:state", handler);
   },
+  onBrowserReveal: (listener) => {
+    const handler = () => listener();
+    ipcRenderer.on("browser:reveal", handler);
+    return () => ipcRenderer.removeListener("browser:reveal", handler);
+  },
   onBrowserShortcut: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: BrowserShortcut) => listener(payload);
     ipcRenderer.on("browser:shortcut", handler);

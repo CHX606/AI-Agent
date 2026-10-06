@@ -177,6 +177,8 @@ export interface BrowserTab {
   url: string;
   loading: boolean;
   favicon: string | null;
+  /** Agent 正在使用的标签页。 */
+  agent?: boolean;
 }
 
 /** 整个浏览器的状态；url 等字段描述当前标签页。 */
@@ -303,5 +305,7 @@ export interface DesktopApi {
   /** 探测本机常见端口上正在运行的开发服务器。 */
   detectLocalServers(): Promise<number[]>;
   onBrowserState(listener: (state: BrowserState) => void): () => void;
+  /** Agent 开始使用浏览器时，要求页面打开浏览器面板。 */
+  onBrowserReveal(listener: () => void): () => void;
   onBrowserShortcut(listener: (shortcut: BrowserShortcut) => void): () => void;
 }

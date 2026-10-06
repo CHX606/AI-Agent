@@ -30,6 +30,7 @@ from .run_protocol import (
     _ContinueTask,
     _ProductHooks,
 )
+from .tool_images import limit_tool_images
 
 
 class RunModel:
@@ -65,7 +66,10 @@ class RunModel:
                 "tool_count": len(self.model_tools),
             },
         )
-        return ModelInputData(input=to_json_value(prepared.items), instructions=None)
+        # 工具截图只把最近几张作为图片发给模型，更早的换成文字说明，避免撑满上下文。
+        return ModelInputData(
+            input=to_json_value(limit_tool_images(prepared.items)), instructions=None
+        )
 
     async def on_model_response(self, response) -> None:
         self.usage.add("main", response.usage)

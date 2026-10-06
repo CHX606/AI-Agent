@@ -166,10 +166,17 @@ async function postManaged(path: string, body: unknown, timeout: number): Promis
 
 export function mcpServers(): Record<string, unknown>[] { return mcpServerList(); }
 
+// 应用自带的 MCP 服务（内置浏览器）：每次把外部工具交给运行服务时都放在最前面；不显示在设置里，也不写盘。
+let builtinMcp: Record<string, unknown>[] = [];
+
+export function setBuiltinMcpServers(servers: Record<string, unknown>[]): void {
+  builtinMcp = servers;
+}
+
 /** 先让运行服务校验并启用，成功后才写入本机（环境变量加密）。 */
 export async function saveMcpServers(input: unknown): Promise<Record<string, unknown>[]> {
   const { plain, encrypted } = resolveMcpServers(input);
-  await postManaged("/v1/mcp", { servers: plain }, 15_000);
+  await postManaged("/v1/mcp", { servers: [...builtinMcp, ...plain] }, 15_000);
   writeMcpServers(encrypted);
   return mcpServerList();
 }
@@ -192,8 +199,8 @@ export async function startManagedRuntime(): Promise<void> {
     startupError = publicError(diagnostics.failure("settings_decryption_failed", error), "已存密钥不能解密，请重新配置模型");
   }
   if (settings.apiKey) registerSecret(String(settings.apiKey));
-  let mcp: unknown[] = [];
-  try { mcp = decryptedMcpServers(); } catch (error) {
+  let mcp: unknown[] = [...builtinMcp];
+  try { mcp = [...builtinMcp, ...decryptedMcpServers()]; } catch (error) {
     diagnostics.failure("mcp_settings_decryption_failed", error);
   }
   const env = await createGatewayEnvironment({

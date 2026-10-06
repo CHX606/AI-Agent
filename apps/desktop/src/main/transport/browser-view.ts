@@ -142,6 +142,15 @@ interface Tab {
   pending: { url: string; title: string } | null;
   /** 最近一次被拒绝的证书，用户确认后据此信任。 */
   certificate: { key: string } | null;
+  /** 最近的控制台消息（给 Agent 看），最多保留 200 条。 */
+  console: ConsoleEntry[];
+}
+
+export interface ConsoleEntry {
+  level: "info" | "warning" | "error" | "debug";
+  message: string;
+  source: string;
+  line: number;
 }
 
 interface PendingPrompt {
@@ -180,7 +189,7 @@ export class BrowserPane {
     } });
     view.setBackgroundColor("#ffffff");
     view.setVisible(false);
-    const tab: Tab = { id: randomUUID(), view, favicon: null, error: null, pending: null, certificate: null };
+    const tab: Tab = { id: randomUUID(), view, favicon: null, error: null, pending: null, certificate: null, console: [] };
     const contents = view.webContents;
     paneByContents.set(contents.id, this);
     // 新窗口（target=_blank、window.open、中键点击）在新标签页打开；后台标签页的请求不切换过去。
@@ -241,6 +250,10 @@ export class BrowserPane {
       tab.error = { code: -1, description: `页面进程已退出（${details.reason}）`, url: contents.getURL() };
       this.emit();
     });
+    contents.on("console-message", (event) => {
+      tab.console.push({ level: event.level, message: event.message.slice(0, 2000), source: event.sourceId, line: event.lineNumber });
+      if (tab.console.length > 200) tab.console.splice(0, tab.console.length - 200);
+    });
     contents.on("zoom-changed", (_event, direction) => { this.zoom(tab, nextZoom(contents.getZoomFactor(), direction)); });
     contents.on("context-menu", (_event, params) => this.contextMenu(tab, params));
     contents.on("before-input-event", (event, input) => {
@@ -273,7 +286,56 @@ export class BrowserPane {
     const url = tab.pending?.url ?? (contents.isDestroyed() ? "" : contents.getURL());
     const title = tab.pending?.title ?? (contents.isDestroyed() ? "" : contents.getTitle());
     return { id: tab.id, url: url === "about:blank" ? "" : url, title: title === "about:blank" ? "" : title,
-      loading: !tab.pending && !contents.isDestroyed() && contents.isLoading(), favicon: tab.favicon };
+      loading: !tab.pending && !contents.isDestroyed() && contents.isLoading(), favicon: tab.favicon,
+      ...(tab.id === this.agentTabId ? { agent: true } : {}) };
+  }
+
+  // ---- 给 Agent 用：它只在自己的标签页里操作，不动用户正在看的页面 ----
+  private agentTabId: string | null = null;
+
+  /** Agent 的标签页；没有（或被用户关掉了）就新建一个并切过去，同时让页面打开浏览器面板。 */
+  agentTab(): { id: string; contents: Electron.WebContents; console: ConsoleEntry[] } {
+    let tab = this.tabs.find((item) => item.id === this.agentTabId);
+    if (!tab) {
+      this.agentTabId = this.newTab(undefined, { activate: true });
+      tab = this.tabs.find((item) => item.id === this.agentTabId)!;
+    } else if (this.activeId !== tab.id) {
+      this.select(tab.id);
+    }
+    this.reveal();
+    return { id: tab.id, contents: tab.view.webContents, console: tab.console };
+  }
+
+  /** 用户当前看的标签页（只读：Agent 可以看，不能操作）。 */
+  currentTab(): { id: string; contents: Electron.WebContents; console: ConsoleEntry[] } | null {
+    const tab = this.active;
+    return tab && !tab.pending ? { id: tab.id, contents: tab.view.webContents, console: tab.console } : null;
+  }
+
+  isAgentTab(id: string): boolean { return id === this.agentTabId; }
+
+  tabList(): (BrowserTab & { active: boolean })[] {
+    return this.tabs.map((tab) => ({ ...this.tabState(tab), active: tab.id === this.activeId }));
+  }
+
+  /** 让页面打开浏览器面板（用户能看到 Agent 在做什么）。 */
+  reveal(): void {
+    if (!this.window.isDestroyed()) this.window.webContents.send("browser:reveal");
+  }
+
+  /** 等当前页面加载结束（最多 timeoutMs）；返回是否按时加载完。 */
+  waitForLoad(contents: Electron.WebContents, timeoutMs = 20_000): Promise<boolean> {
+    if (!contents.isLoading()) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const done = (value: boolean) => { clearTimeout(timer); contents.off("did-stop-loading", stopped); resolve(value); };
+      const stopped = () => done(true);
+      const timer = setTimeout(() => done(false), timeoutMs);
+      contents.on("did-stop-loading", stopped);
+    });
+  }
+
+  errorOf(id: string): BrowserState["error"] {
+    return this.tabs.find((tab) => tab.id === id)?.error ?? null;
   }
 
   state(): BrowserState {

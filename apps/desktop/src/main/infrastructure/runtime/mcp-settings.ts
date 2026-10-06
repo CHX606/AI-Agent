@@ -73,6 +73,7 @@ export function resolveMcpServers(input: unknown): { plain: McpServerInput[]; en
   const encrypted: StoredServer[] = [];
   for (const raw of input as McpServerInput[]) {
     if (!raw || typeof raw !== "object" || typeof raw.name !== "string") throw new UserFacingError("外部工具配置格式错误");
+    if (raw.name.toLowerCase() === "browser") throw new UserFacingError("browser 是内置浏览器使用的名字，请换一个服务名");
     const field = secretField(raw.type);
     const label = field === "env" ? "环境变量" : "请求头";
     const { env: _env, headers: _headers, ...rest } = raw;

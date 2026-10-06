@@ -376,6 +376,8 @@ export function mountBrowserPane(options: {
     shortcut(name);
   });
   window.bitAgent.onBrowserShortcut((name) => shortcut(name));
+  // Agent 开始用浏览器时打开面板，让用户看得到它在做什么。
+  window.bitAgent.onBrowserReveal(() => { if (!open) void setOpen(true); });
 
   // ---- 拖动左边调整宽度：拖动期间用截图代替原生视图，鼠标事件才不会被网页吃掉 ----
   const handle = $(".browser-resize");

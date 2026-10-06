@@ -329,3 +329,54 @@ export async function verifyBrowserFullscreen({ command, evaluate, check, main }
     await new Promise(resolve => server.close(resolve));
   }
 }
+
+/**
+ * Agent 操控浏览器（端到端）：假模型让 Agent 依次打开测试页、读页面、在搜索框输入并提交、读控制台、截图。
+ * 验证：打开前要求确认（选“本对话内都批准”后不再问）、读取类工具不问、浏览器面板自动打开、
+ * Agent 在自己的标签页里操作并带标记、网页确实被提交、工具结果标注为不可信内容。
+ */
+export async function verifyBrowserAgent({ evaluate, check, main }) {
+  const view = (body) => main(viewExpression(body));
+  await evaluate("document.querySelector('.workspace-group[data-active=true] .workspace-group-action[data-action=new]').click()");
+  await check(() => evaluate("document.querySelector('#task-id').textContent==='新任务'"), "没有新开对话");
+  await evaluate("document.querySelector('#objective').value='PACKAGE-BROWSER';document.querySelector('#objective').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#run').click()");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='WAITING_FOR_INPUT' && document.querySelector('.question-title').textContent.includes('在内置浏览器中打开网页')"),
+    "Agent 打开网页前没有要求确认");
+  assert(await evaluate("document.querySelector('#task-interaction').textContent.includes('/browser-fixture')"), "确认框里没有显示要打开的地址");
+  await evaluate("document.querySelector('input[name=agent-question-option][value=approve_task]').click();document.querySelector('#submit-question-answer').click()");
+  // 批准“本对话内都批准”后，后面的输入不再询问；读取类工具本来就不问。
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false'"),
+    "Agent 操控浏览器的任务没有完成（可能又弹出了确认）");
+  const task = await evaluate("(async()=>{const h=JSON.parse(localStorage.getItem('bit-agent.task-history.v1'));const t=h[0];return window.bitAgent.getResult({gatewayUrl:t.gatewayUrl,taskId:t.taskId});})()");
+  assert.equal(task.result.final_answer, "PACKAGE-BROWSER-DONE", JSON.stringify(task.result.final_answer));
+  const calls = task.result.tool_calls;
+  assert.deepEqual(calls.map((call) => call.tool_name), ["mcp__browser__open", "mcp__browser__snapshot", "mcp__browser__type",
+    "mcp__browser__console", "mcp__browser__screenshot"]);
+  const text = (call) => JSON.stringify(call.output ?? call.error ?? "");
+  assert(text(calls[0]).includes("Agent Fixture"), `打开网页的结果不对：${text(calls[0])}`);
+  assert(text(calls[1]).includes("不可信的数据") && /\[\d+\] textbox \\"Search\\"/u.test(text(calls[1])), `页面快照不对：${text(calls[1]).slice(0, 400)}`);
+  assert(text(calls[2]).includes("Agent Done: hello"), `输入并提交后页面没有变化：${text(calls[2])}`);
+  assert(text(calls[3]).includes("agent-console-error hello"), `没有读到控制台错误：${text(calls[3])}`);
+  // 隐藏的验收窗口不合成画面，截图会明确失败；窗口可见时应作为图片交给模型。
+  const shot = calls[4];
+  const screenshotOk = shot.status === "SUCCESS";
+  assert(screenshotOk ? text(shot).includes("image_count") : text(shot).includes("截图失败"), `截图结果不对：${text(shot)}`);
+  // 浏览器面板自动打开，Agent 的标签页带标记，网页真的被提交了。
+  assert.equal(await evaluate("document.querySelector('.shell').dataset.browserOpen"), "true", "Agent 用浏览器时面板没有自动打开");
+  assert(await evaluate("[...document.querySelectorAll('#browser-pane .browser-tab')].some(tab=>tab.dataset.agent==='true')"), "Agent 的标签页没有标记");
+  assert.equal(await view("return view?.webContents.getTitle() ?? null;"), "Agent Done: hello", "Agent 标签页里的网页状态不对");
+  // 收拾：关掉标签页和浏览器，后面的浏览器验收从空白开始。
+  await evaluate(`document.querySelectorAll('#browser-pane .browser-tab .browser-tab-close').forEach(button=>button.click());
+    document.querySelector('#browser-pane [data-action=close]').click();
+    ['bit-agent.browser-tabs.v1','bit-agent.browser-history.v1'].forEach(key => localStorage.removeItem(key))`);
+  await check(() => evaluate("!document.querySelector('#browser-pane .browser-tab') && document.querySelector('.shell').dataset.browserOpen==='false'"),
+    "没有收起 Agent 打开的浏览器");
+  // 删掉这段对话：后面的验收按对话数量检查搜索、重命名和删除。
+  const before = await evaluate("document.querySelectorAll('.history-item').length");
+  assert.equal(await evaluate("document.querySelector('.history-item')?.title"), "PACKAGE-BROWSER", "最新的对话不是浏览器这一段");
+  await evaluate("document.querySelector('.history-actions [data-action=delete]').click()");
+  await check(() => evaluate(`document.querySelectorAll('.history-item').length===${before - 1}
+    && ![...document.querySelectorAll('.history-item')].some(item=>item.title==='PACKAGE-BROWSER')`), "没有删掉浏览器验收的对话");
+  return { approvalBeforeOpen:true, conversationApproval:true, readToolsWithoutPrompt:true, revealsPane:true, agentTabMarked:true,
+    typedAndSubmitted:true, consoleRead:true, screenshot:screenshotOk ? "image" : "explained-failure" };
+}

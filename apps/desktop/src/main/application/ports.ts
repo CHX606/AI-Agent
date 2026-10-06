@@ -27,6 +27,8 @@ export interface RuntimePort {
   mcpServers(): Record<string, unknown>[];
   saveMcpServers(input: unknown): Promise<Record<string, unknown>[]>;
   testMcpServer(input: unknown): Promise<Record<string, unknown>>;
+  /** 应用自带的 MCP 服务（例如内置浏览器），每次连同用户配置一起交给运行服务。 */
+  setBuiltinMcpServers(servers: Record<string, unknown>[]): void;
   startManagedRuntime(): Promise<void>;
   stopManagedRuntime(): Promise<void>;
 }

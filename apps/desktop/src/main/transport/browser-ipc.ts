@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain, type WebContents } from "electron";
 import type { DesktopServices } from "../application/ports.js";
 import type { BrowserAction, BrowserBounds, BrowserPromptAnswer } from "../../shared/contracts.js";
-import { BrowserPane } from "./browser-view.js";
+import { browserPaneFor } from "./browser-panes.js";
 import type { IpcHandler } from "./ipc-handler.js";
 
 const ACTIONS = new Set<BrowserAction>(["back", "forward", "reload", "stop", "devtools", "external",
@@ -10,16 +10,10 @@ const DOWNLOAD_ACTIONS = new Set(["open", "show", "cancel"] as const);
 type DownloadAction = "open" | "show" | "cancel";
 
 export function registerBrowserIpc(services: DesktopServices, handle: IpcHandler): void {
-  const panes = new WeakMap<BrowserWindow, BrowserPane>();
   const pane = (sender: WebContents) => {
     const window = BrowserWindow.fromWebContents(sender);
     if (!window) throw new Error("窗口不存在");
-    let existing = panes.get(window);
-    if (!existing) {
-      existing = new BrowserPane(window);
-      panes.set(window, existing);
-    }
-    return existing;
+    return browserPaneFor(window);
   };
   const bounds = (value: unknown): BrowserBounds => {
     const input = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;

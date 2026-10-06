@@ -182,6 +182,13 @@ it("presents external MCP connections and calls", () => {
   expect(eventPresentation({ id: "5-0", event_type: "TOOL_COMPLETED", data: { payload: {
     tool_name: "mcp__docs__search_pages", tool_call_id: "m1", status: "SUCCESS" } } }))
     .toMatchObject({ title: "外部工具已返回 docs · search_pages", tone: "success" });
+  // 内置浏览器：说人话。
+  expect(eventPresentation({ id: "6-0", event_type: "TOOL_REQUESTED", data: { payload: {
+    tool_name: "mcp__browser__open", tool_call_id: "b1" } } }))
+    .toMatchObject({ title: "正在使用 浏览器 · 打开网页", tone: "running" });
+  expect(eventPresentation({ id: "6-1", event_type: "TOOL_COMPLETED", data: { payload: {
+    tool_name: "mcp__browser__snapshot", tool_call_id: "b2", status: "SUCCESS" } } }))
+    .toMatchObject({ title: "已完成 浏览器 · 读取页面", tone: "success" });
 });
 
 it("names the project instruction files that were read", () => {

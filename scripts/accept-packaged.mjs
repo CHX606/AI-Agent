@@ -10,7 +10,7 @@ import { markdownFixture, verifyCopy, verifyMarkdown } from "../apps/desktop/tes
 import { verifyRewind } from "../apps/desktop/test/rewind-packaged.mjs";
 import { verifySidebarCollapse, verifySidebarResize, verifyWorkspaceOrder } from "../apps/desktop/test/workspace-sidebar-packaged.mjs";
 import { verifyTerminal } from "../apps/desktop/test/terminal-packaged.mjs";
-import { verifyBrowser, verifyBrowserFullscreen } from "../apps/desktop/test/browser-packaged.mjs";
+import { verifyBrowser, verifyBrowserAgent, verifyBrowserFullscreen } from "../apps/desktop/test/browser-packaged.mjs";
 import { evaluateMain, verifyImageInput } from "../apps/desktop/test/image-input-packaged.mjs";
 
 const executable = resolve(process.argv[2] ?? "");
@@ -44,10 +44,25 @@ const model = createServer(async (request, response) => {
     response.end('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="40"><rect width="160" height="40" fill="#df7440"/><text x="8" y="25" fill="white">Markdown image</text></svg>');
     return;
   }
+  if (request.method === "GET" && request.url === "/browser-fixture") {
+    // Agent 操控浏览器的测试页：一个搜索框，提交后改标题并在控制台报一条错误。
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(`<title>Agent Fixture</title><body><h1>Agent fixture</h1>
+      <form id="f"><label>Search <input name="q"></label> <button>Go</button></form>
+      <script>document.getElementById('f').addEventListener('submit', (event) => { event.preventDefault();
+        const value = event.target.q.value; document.title = 'Agent Done: ' + value; console.error('agent-console-error ' + value);
+        document.body.append('submitted ' + value); });</script></body>`);
+    return;
+  }
   if (request.method === "GET" && request.url?.endsWith("/models")) {
     // “从服务获取”：向量模型应被过滤掉。
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ object: "list", data: ["local-fixture", "local-fixture-mini", "text-embedding-3-small"].map((id) => ({ id, object: "model" })) }));
+    return;
+  }
+  if (request.method === "GET") {
+    // 其他 GET（例如浏览器自动请求的 /favicon.ico）不是模型请求。
+    response.writeHead(404).end();
     return;
   }
   let raw = ""; for await (const chunk of request) raw += String(chunk);
@@ -79,6 +94,22 @@ const model = createServer(async (request, response) => {
     output = called || !offered
       ? [{ ...message, content: [{ type: "output_text", text: offered ? "PACKAGE-MCP-DONE" : "MCP-TOOL-MISSING", annotations: [] }] }]
       : [{ type: "function_call", call_id: "package-mcp", name: "mcp__self__list_files", arguments: JSON.stringify({ path: "", max_depth: 0 }) }];
+  }
+  if (users.at(-1) === "PACKAGE-BROWSER") {
+    // Agent 依次：打开测试页 → 读页面 → 在搜索框输入并提交 → 读控制台错误 → 截图 → 回答。
+    const outputs = Object.fromEntries(body.input.filter(item => item.type === "function_call_output")
+      .map(item => [item.call_id, (() => { try { return JSON.parse(item.output); } catch { return {}; } })()]));
+    const call = (id, name, args) => [{ type: "function_call", call_id: id, name, arguments: JSON.stringify(args) }];
+    const offered = (body.tools ?? []).some((tool) => tool.name === "mcp__browser__open");
+    const snapshotText = String(outputs["browser-snapshot"]?.output ?? "");
+    const searchRef = Number(snapshotText.match(/\[(\d+)\] textbox "Search"/u)?.[1] ?? 0);
+    output = !offered ? [{ ...message, content: [{ type: "output_text", text: "BROWSER-TOOLS-MISSING", annotations: [] }] }]
+      : !outputs["browser-open"] ? call("browser-open", "mcp__browser__open", { url: `http://127.0.0.1:${model.address().port}/browser-fixture` })
+      : !outputs["browser-snapshot"] ? call("browser-snapshot", "mcp__browser__snapshot", {})
+      : !outputs["browser-type"] ? call("browser-type", "mcp__browser__type", { ref: searchRef, text: "hello", clear: true, submit: true })
+      : !outputs["browser-console"] ? call("browser-console", "mcp__browser__console", { level: "error" })
+      : !outputs["browser-screenshot"] ? call("browser-screenshot", "mcp__browser__screenshot", {})
+      : [{ ...message, content: [{ type: "output_text", text: "PACKAGE-BROWSER-DONE", annotations: [] }] }];
   }
   if (users.at(-1) === "PACKAGE-GROUP") {
     // 一次回复里查看目录、读两个文件：界面应合成一行可展开的分组。
@@ -596,6 +627,8 @@ try {
   await evaluate(`${group}.querySelector('.group-list > .stream-tool .tool-head').click()`);
   assert(await evaluate(`(() => { const d=${group}.querySelector('.group-list > .stream-tool .tool-detail'); return !d.hidden && d.textContent.includes('状态') && !d.querySelector('.tool-raw,.event-payload') && ![...d.querySelectorAll('dt')].some(term=>term.textContent==='工具'); })()`), "工具详情缺少可读信息或仍显示内部调试数据");
   writeFileSync(join(directory, "tool-group.png"), Buffer.from((await captureScreenshot()).data, "base64"));
+  const browserAgent = await verifyBrowserAgent({ evaluate, check, main:expression=>evaluateMain(mainInspectorUrl,expression) });
+  console.log("BROWSER_AGENT_PASSED", JSON.stringify(browserAgent));
   await evaluate("document.querySelector('#memory-settings').click()");
   const memoryTitles = "Array.from(document.querySelectorAll('.memory-entry strong')).map(item=>item.textContent)";
   await check(async () => JSON.stringify(await evaluate(memoryTitles)) === JSON.stringify(["PACKAGE-MEMORY-CANARY"]), "记忆面板没有只显示本项目的记忆");
@@ -689,7 +722,7 @@ try {
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,
     allToolsCollapsible: true, noEmptyTextRows: true, userMessagesRightAligned: true, agentMessagesLeftAligned: true,
     messageBackgroundMatchesTheme: true, longMultilineMessagesContained: true, sidebarOrder,
-    markdownRendering, workspaceOrder, sidebarResize, sidebarCollapse, terminal, browser, browserFullscreen, imageInput, rewind,
+    markdownRendering, workspaceOrder, sidebarResize, sidebarCollapse, terminal, browser, browserAgent, browserFullscreen, imageInput, rewind,
     rawDebugDataAbsentFromUi:true,
     unauthorizedGatewayRejected: true, automaticLocalGateway: true, connectionStatusDotOnly: true, explicitNewChatWorkspace: true, workspaceBindings, noGatewayConnectionSettings: true, staleGatewayAddressIgnored: true, restartAndContinue: true, stopAndSteer: true, immediateStop: true, titlebarBorder: true, offlineRepositoryIcons: true, startupComposer: true, noDuplicateProfileTheme: true, windowsExecutableIcon: { orangePixels:windowsIcon.orange, whitePixels:windowsIcon.white, size:windowsIcon.size }, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, gitCommit: true, sessionSearchRenameDelete: true, externalMcpTools: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
   }, null, 2));

@@ -12,6 +12,7 @@ export { streamBullet } from "./bullet";
 
 function operationLabel(presentation: ActivityPresentation, payload: Record<string, unknown>): string {
   const operation = object(payload.operation);
+  if (/^mcp__browser__/u.test(presentation.toolName ?? "")) return "浏览器";
   if (/^mcp__/u.test(presentation.toolName ?? "")) return "外部工具";
   return typeof operation?.label === "string" ? operation.label : presentation.toolName ?? "操作";
 }

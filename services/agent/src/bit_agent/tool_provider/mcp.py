@@ -152,8 +152,17 @@ class MCPToolProvider:
             for item in content
             if item.get("type") == "text" and isinstance(item.get("text"), str)
         ]
+        # 图片（例如浏览器截图）单独放在 images 里，由 Agent 循环作为图片输入交给模型，
+        # 不能当成 JSON 字符串塞进工具结果。
+        images = [
+            f"data:{item.get('mimeType', 'image/png')};base64,{item['data']}"
+            for item in content
+            if item.get("type") == "image" and isinstance(item.get("data"), str)
+        ]
         output: Any = payload
-        if output is None:
+        if output is None and images and len(text_parts) + len(images) == len(content):
+            output = {"text": "\n".join(text_parts), "images": images}
+        elif output is None:
             output = "\n".join(text_parts) if len(text_parts) == len(content) else content
 
         duration_ms = max(0, round((perf_counter() - started) * 1000))

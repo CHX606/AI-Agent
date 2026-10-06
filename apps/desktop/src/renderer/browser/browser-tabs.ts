@@ -34,7 +34,8 @@ export function renderTabs(container: HTMLElement, tabs: BrowserTab[], activeId:
     }
     const title = tabTitle(tab);
     element.querySelector(".browser-tab-title")!.textContent = title;
-    element.title = tab.url ? `${title}\n${tab.url}` : title;
+    element.title = (tab.agent ? "Agent 正在使用这个标签页\n" : "") + (tab.url ? `${title}\n${tab.url}` : title);
+    element.dataset.agent = String(Boolean(tab.agent));
     element.setAttribute("aria-selected", String(tab.id === activeId));
     element.tabIndex = tab.id === activeId ? 0 : -1;
     const iconSlot = element.querySelector<HTMLElement>(".browser-tab-icon")!;

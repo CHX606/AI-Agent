@@ -50,6 +50,9 @@ class ExternalServer:
     name: str
     transport: Any  # StdioServerParameters、URL 字符串，测试中也可以是进程内 Server
     auto_approve: bool = False
+    # 应用自带的服务（内置浏览器）。它的只读工具不需要确认，只读模式下也能用。
+    builtin: bool = False
+    read_tools: frozenset[str] = frozenset()
 
 
 def _strings(value: object, label: str, *, limit: int, size: int = 1000) -> list[str]:
@@ -80,6 +83,8 @@ def validate_servers(raw: object) -> list[dict[str, Any]]:
         "headers",
         "enabled",
         "auto_approve",
+        "builtin",
+        "read_tools",
     }
     for item in raw:
         if not isinstance(item, dict) or not set(item) <= allowed:
@@ -97,6 +102,11 @@ def validate_servers(raw: object) -> list[dict[str, Any]]:
             "enabled": item.get("enabled", True) is True,
             "auto_approve": item.get("auto_approve", False) is True,
         }
+        if item.get("builtin") is True:
+            server["builtin"] = True
+            server["read_tools"] = _strings(
+                item.get("read_tools"), f"{name} 的只读工具", limit=50, size=64
+            )
         if kind == "stdio":
             command = item.get("command")
             if not isinstance(command, str) or not command.strip() or len(command) > 500:
@@ -124,6 +134,7 @@ def validate_servers(raw: object) -> list[dict[str, Any]]:
             parsed = urlparse(url) if isinstance(url, str) else None
             if (
                 parsed is None
+                or not isinstance(url, str)
                 or len(url) > 2000
                 or parsed.username
                 or parsed.password
@@ -189,7 +200,15 @@ def build_servers(configs: list[dict[str, Any]], cwd: Path) -> list[ExternalServ
             transport = http_transport(config["url"], config["headers"])
         else:
             transport = config["url"]
-        servers.append(ExternalServer(config["name"], transport, config.get("auto_approve", False)))
+        servers.append(
+            ExternalServer(
+                config["name"],
+                transport,
+                config.get("auto_approve", False),
+                builtin=config.get("builtin", False),
+                read_tools=frozenset(config.get("read_tools", [])),
+            )
+        )
     return servers
 
 
@@ -260,6 +279,20 @@ class ExternalMcpTools:
 
     def original_name(self, tool_name: str) -> str:
         return self._routes[tool_name][2]
+
+    def is_read_tool(self, tool_name: str) -> bool:
+        """应用自带服务声明为只读的工具（例如浏览器的快照、截图）。"""
+        route = self._routes.get(tool_name)
+        return route is not None and route[0].builtin and route[2] in route[0].read_tools
+
+    def read_only(self) -> "ExternalMcpTools | None":
+        """只读模式用：只保留应用自带的服务，并且之后只暴露它们的只读工具。"""
+        builtin = [server for server in self.servers if server.builtin]
+        if not builtin:
+            return None
+        return ExternalMcpTools(
+            builtin, connect_timeout=self.connect_timeout, call_timeout=self.call_timeout
+        )
 
     async def call(self, tool_name: str, tool_call_id: str, raw_arguments: str) -> ToolResult:
         _server, provider, original = self._routes[tool_name]

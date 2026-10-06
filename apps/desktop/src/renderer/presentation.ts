@@ -134,6 +134,12 @@ export interface ActivityPresentation {
   remove?: boolean;
 }
 
+// Agent 操控内置浏览器的各个工具（mcp__browser__<工具>）在界面上的说法。
+const browserActions: Record<string, string> = {
+  open: "打开网页", snapshot: "读取页面", click: "点击", type: "输入文字", select: "选择选项", press: "按键",
+  navigate: "后退/前进/刷新", screenshot: "截图", console: "查看控制台", wait: "等待页面", tabs: "查看标签页",
+};
+
 const toolActions: Record<string, [string, string, string]> = {
   list_files: ["正在查看", "已查看", "查看失败"],
   read_file: ["正在读取", "已读取", "读取失败"],
@@ -216,9 +222,11 @@ export function eventPresentation(event: TaskEvent): ActivityPresentation | null
     const callId = String(payload.tool_call_id ?? event.id ?? `${agent}:${round}`);
     const toolName = String(payload.tool_name ?? "unknown");
     const operation = object(payload.operation);
-    // 外部工具名形如 mcp__服务__工具，显示成“服务 · 工具”。
+    // 外部工具名形如 mcp__服务__工具，显示成“服务 · 工具”；内置浏览器显示成“浏览器 · 打开网页”这样的说法。
     const external = /^mcp__([A-Za-z0-9_-]+?)__(.+)$/u.exec(toolName);
-    const target = external ? `${external[1]} · ${external[2]}`
+    const browser = external?.[1] === "browser";
+    const target = browser ? `浏览器 · ${browserActions[external[2]!] ?? external[2]}`
+      : external ? `${external[1]} · ${external[2]}`
       : typeof operation?.target === "string" ? operation.target : "";
     const finished = event.event_type === "TOOL_COMPLETED";
     const status = typeof payload.status === "string" ? payload.status.toUpperCase() : "";
@@ -229,7 +237,8 @@ export function eventPresentation(event: TaskEvent): ActivityPresentation | null
     const warning = finished && typeof payload.error_code === "string"
       ? warningOutcomes[payload.error_code] : undefined;
     const actions = toolActions[toolName]
-      ?? (external ? ["正在调用外部工具", "外部工具已返回", "外部工具调用失败"] : ["正在执行", "操作已完成", "操作失败"]);
+      ?? (browser ? ["正在使用", "已完成", "没有完成"]
+        : external ? ["正在调用外部工具", "外部工具已返回", "外部工具调用失败"] : ["正在执行", "操作已完成", "操作失败"]);
     const action = expected ? expected[0] : finished ? (succeeded ? actions[1] : actions[2]) : actions[0];
     return {
       key: `tool:${callId}`,

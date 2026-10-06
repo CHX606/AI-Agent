@@ -326,6 +326,120 @@ async def test_desktop_task_uses_configured_server(tmp_path, monkeypatch):
         await runtime.close()
 
 
+def browser_server() -> MCPServer:
+    """模拟桌面端的内置浏览器服务：snapshot、screenshot 只读，open 会改变网页。"""
+    from mcp.types import ImageContent, TextContent
+
+    server = MCPServer("browser")
+
+    @server.tool(name="snapshot", description="读页面")
+    async def snapshot() -> str:
+        return "page text"
+
+    @server.tool(name="screenshot", description="截图")
+    async def screenshot() -> list:
+        return [
+            TextContent(type="text", text="截图"),
+            ImageContent(type="image", data="QUJD", mime_type="image/jpeg"),
+        ]
+
+    @server.tool(name="open", description="打开网页")
+    async def open_page(url: str) -> str:
+        return f"opened {url}"
+
+    return server
+
+
+def browser_provider(tmp_path, mode, interaction=None, extra=()):
+    servers = [
+        ExternalServer(
+            "browser",
+            browser_server(),
+            builtin=True,
+            read_tools=frozenset({"snapshot", "screenshot"}),
+        ),
+        *extra,
+    ]
+    return DelegatingToolProvider(
+        tmp_path,
+        "off",
+        InMemoryEventSink(),
+        tmp_path / "artifacts",
+        interaction,
+        permission_mode=mode,
+        journal=ChangeJournal(tmp_path, tmp_path / "artifacts"),
+        verifier=verify_project,
+        external=ExternalMcpTools(servers),
+    )
+
+
+def test_builtin_config_keeps_read_tools():
+    [config] = validate_servers(
+        [
+            {
+                "name": "browser",
+                "type": "http",
+                "url": "http://127.0.0.1:5000/mcp",
+                "headers": {"Authorization": "Bearer t"},
+                "builtin": True,
+                "read_tools": ["snapshot", "screenshot"],
+            }
+        ]
+    )
+    assert config["builtin"] is True and config["read_tools"] == ["snapshot", "screenshot"]
+    [server] = build_servers([config], Path.cwd())
+    assert server.builtin and server.read_tools == frozenset({"snapshot", "screenshot"})
+    # 用户配置的服务即使写了 read_tools，不是 builtin 也不生效。
+    [plain] = validate_servers(
+        [{"name": "x", "type": "http", "url": "https://x.test", "read_tools": ["a"]}]
+    )
+    assert "read_tools" not in plain
+
+
+async def test_browser_reads_without_asking_but_asks_before_acting(tmp_path):
+    interaction = await control(tmp_path)
+    async with browser_provider(tmp_path, "confirm", interaction) as tools:
+        read = await tools.call_tool("mcp__browser__snapshot", "r1", "{}")
+        assert read.output == {"result": "page text"}
+        assert interaction.question is None
+        pending = asyncio.create_task(
+            tools.call_tool(
+                "mcp__browser__open", "a1", json.dumps({"url": "http://localhost:5173/"})
+            )
+        )
+        for _ in range(400):
+            if interaction.question is not None:
+                break
+            await asyncio.sleep(0.005)
+        question = interaction.question
+        assert question["question"].startswith("在内置浏览器中打开网页")
+        assert "http://localhost:5173/" in question["question"]
+        await interaction.request(
+            {"action": "answer", "question_id": question["id"], "option_id": "approve"}
+        )
+        assert (await pending).output == {"result": "opened http://localhost:5173/"}
+    interaction.storage.close()
+
+
+async def test_read_only_mode_keeps_only_the_browser_read_tools(tmp_path):
+    other = ExternalServer("demo", demo_server(), auto_approve=True)
+    async with browser_provider(tmp_path, "read_only", extra=[other]) as tools:
+        names = {tool["name"] for tool in await tools.model_tools()}
+        assert {"mcp__browser__snapshot", "mcp__browser__screenshot"} <= names
+        assert "mcp__browser__open" not in names
+        assert not any(name.startswith("mcp__demo__") for name in names)
+        denied = await tools.call_tool(
+            "mcp__browser__open", "a1", json.dumps({"url": "https://example.com"})
+        )
+        assert denied.error.code == "PERMISSION_DENIED"
+
+
+async def test_mcp_images_come_back_separately(tmp_path):
+    async with browser_provider(tmp_path, "edit") as tools:
+        shot = await tools.call_tool("mcp__browser__screenshot", "s1", "{}")
+        assert shot.output == {"text": "截图", "images": ["data:image/jpeg;base64,QUJD"]}
+
+
 async def test_connection_test_runs_a_real_stdio_server(tmp_path):
     from bit_agent.runtime.application.service import AgentRuntime
 
@@ -344,3 +458,24 @@ async def test_connection_test_runs_a_real_stdio_server(tmp_path):
         SimpleNamespace(), {"name": "missing", "type": "stdio", "command": "no-such-command-xyz"}
     )
     assert not failed["ok"] and failed["message"]
+
+
+async def test_builtin_browser_connection_is_not_announced(tmp_path):
+    reports = []
+
+    async def report(kind, data):
+        reports.append((kind, data))
+
+    provider = browser_provider(tmp_path, "edit", extra=[ExternalServer("demo", demo_server())])
+    provider.report = report
+    async with provider:
+        pass
+    assert reports == [
+        ("EXTERNAL_TOOLS_LOADED", {"connected": [{"name": "demo", "tools": 2}], "failed": []})
+    ]
+    reports.clear()
+    alone = browser_provider(tmp_path, "edit")
+    alone.report = report
+    async with alone:
+        pass
+    assert reports == []

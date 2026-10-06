@@ -130,6 +130,18 @@ body[data-resizing="true"] .browser-resize::after {
   to { transform: rotate(360deg); }
 }
 
+/* Agent 正在用的标签页：标题前有一个小标记。 */
+.browser-tab[data-agent="true"] .browser-tab-title::before {
+  margin-right: 5px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  content: "Agent";
+}
+
 .browser-tab-title {
   flex: 1;
   min-width: 0;
