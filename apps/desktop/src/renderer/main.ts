@@ -20,6 +20,7 @@ import { mountProductControls } from "./product-controls";
 import { mountProfileMenu } from "./profile-menu";
 import { mountWorkspaceChooser } from "./workspace-chooser";
 import { mountSidebarResize } from "./sidebar-resize";
+import { mountTerminalPanel } from "./terminal/terminal-panel";
 import { ComposerImages } from "./attachments/composer-images";
 import { hasComposerContent } from "./application/message";
 import {
@@ -122,12 +123,25 @@ app.inspectorClose.addEventListener("click", () => app.setInspectorCollapsed(tru
 
 const toggleSidebar = () => app.setSidebarCollapsed(app.shell.dataset.sidebarCollapsed !== "true");
 app.sidebarToggle.addEventListener("click", toggleSidebar);
-// Ctrl+B 收起/展开左侧栏，和 VS Code、Claude Code 一致。
+const terminalPanel = mountTerminalPanel({
+  panel: element<HTMLElement>("#terminal-panel"),
+  toggle: element<HTMLButtonElement>("#terminal-toggle"),
+  workspace: () => app.activeWorkspaceRoot,
+});
+// Ctrl+B 收起/展开左侧栏，Ctrl+` 打开/隐藏终端，和 VS Code、Claude Code 一致。
+// 焦点在终端里时 Ctrl+B 留给 Shell。
 document.addEventListener("keydown", (event) => {
-  if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== "b") return;
+  if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return;
   if (event.isComposing || document.querySelector("dialog[open]")) return;
-  event.preventDefault();
-  toggleSidebar();
+  const key = event.key.toLowerCase();
+  if (key === "`") {
+    if (app.activeView !== "tasks") return;
+    event.preventDefault();
+    terminalPanel.toggle();
+  } else if (key === "b" && !(event.target instanceof Element && event.target.closest(".terminal-panel"))) {
+    event.preventDefault();
+    toggleSidebar();
+  }
 });
 
 app.themeToggle.addEventListener("click", () => {

@@ -4,6 +4,8 @@ packages:
 
 allowBuilds:
   esbuild: true
+  # 用自带的 N-API 预编译文件（prebuilds/win32-x64），不需要本机编译。
+  node-pty: false
 
 # dependency-cruiser's optional parser must not resolve the applications' TS 7.
 packageExtensions:

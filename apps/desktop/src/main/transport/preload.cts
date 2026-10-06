@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 
-import type { ColorTheme, DesktopApi, TaskEvent } from "../../shared/contracts.js";
+import type { ColorTheme, DesktopApi, TaskEvent, TerminalExit, TerminalOutput } from "../../shared/contracts.js";
 
 const rawTheme: unknown = ipcRenderer.sendSync("theme:get");
 const colorTheme: ColorTheme = rawTheme === "dark" ? "dark" : "light";
@@ -52,6 +52,20 @@ const api: DesktopApi = {
     const handler = (_event: Electron.IpcRendererEvent, payload: TaskEvent) => listener(payload);
     ipcRenderer.on("task:event", handler);
     return () => ipcRenderer.removeListener("task:event", handler);
+  },
+  openTerminal: (input) => ipcRenderer.invoke("terminal:open", input),
+  writeTerminal: (id, data) => ipcRenderer.send("terminal:write", id, data),
+  resizeTerminal: (id, cols, rows) => ipcRenderer.send("terminal:resize", id, cols, rows),
+  closeTerminal: (id) => ipcRenderer.invoke("terminal:close", id),
+  onTerminalOutput: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: TerminalOutput) => listener(payload);
+    ipcRenderer.on("terminal:output", handler);
+    return () => ipcRenderer.removeListener("terminal:output", handler);
+  },
+  onTerminalExit: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: TerminalExit) => listener(payload);
+    ipcRenderer.on("terminal:exit", handler);
+    return () => ipcRenderer.removeListener("terminal:exit", handler);
   },
 };
 

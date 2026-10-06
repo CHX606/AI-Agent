@@ -1,0 +1,110 @@
+.terminal-panel {
+  position: relative;
+  display: grid;
+  grid-template-rows: 32px minmax(0, 1fr);
+  height: var(--terminal-height, 260px);
+  min-height: 120px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-main);
+}
+
+.terminal-resize {
+  position: absolute;
+  z-index: 2;
+  top: -3px;
+  right: 0;
+  left: 0;
+  height: 6px;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.terminal-resize:hover::after,
+.terminal-resize:focus-visible::after,
+body[data-resizing="true"] .terminal-resize::after {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--brand);
+  content: "";
+}
+
+.terminal-resize:focus-visible {
+  outline: none;
+}
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-title {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.terminal-cwd {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font: 11px var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.terminal-actions .icon-button {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--text-muted);
+}
+
+.terminal-actions .icon-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.terminal-actions .icon-button:hover,
+.terminal-actions .icon-button:focus-visible {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.terminal-host {
+  min-height: 0;
+  padding: 6px 4px 4px 14px;
+  overflow: hidden;
+}
+
+.terminal-host .xterm {
+  height: 100%;
+}
+
+/* xterm.css 给底层视口默认黑底；文字区比容器矮几个像素时会在底部露出一条黑边。 */
+.terminal-host .xterm .xterm-viewport {
+  background-color: var(--bg-main) !important;
+}
+
+/* 终端里的滚动条与页面其它区域一致，不显示两端的箭头。 */
+.terminal-host .xterm .xterm-scrollable-element > .scrollbar > .scra {
+  display: none;
+}
+
+.terminal-host .xterm .xterm-scrollable-element > .scrollbar > .slider {
+  border-radius: 8px;
+  background: var(--scroll-thumb);
+}

@@ -3,7 +3,7 @@
   display: grid;
   min-width: 0;
   height: var(--app-height);
-  grid-template-rows: 52px minmax(0, 1fr) auto;
+  grid-template-rows: 52px minmax(0, 1fr) auto auto;
   overflow: hidden;
   background: var(--bg-main);
 }
@@ -107,6 +107,10 @@
   width: 18px;
   height: 18px;
   stroke-width: 1.65;
+}
+
+.terminal-toggle.is-active {
+  color: var(--brand);
 }
 
 .inspector-toggle:hover,

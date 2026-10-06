@@ -9,6 +9,7 @@ import { verifyConversationLayout, verifyFoldedPatch, verifyNoEmptyText, verifyS
 import { markdownFixture, verifyCopy, verifyMarkdown } from "../apps/desktop/test/markdown-packaged.mjs";
 import { verifyRewind } from "../apps/desktop/test/rewind-packaged.mjs";
 import { verifySidebarCollapse, verifySidebarResize, verifyWorkspaceOrder } from "../apps/desktop/test/workspace-sidebar-packaged.mjs";
+import { verifyTerminal } from "../apps/desktop/test/terminal-packaged.mjs";
 import { evaluateMain, verifyImageInput } from "../apps/desktop/test/image-input-packaged.mjs";
 
 const executable = resolve(process.argv[2] ?? "");
@@ -664,6 +665,9 @@ try {
   const { shots:collapseShots, ...sidebarCollapse } = await verifySidebarCollapse(command, evaluate, check, captureScreenshot);
   for (const shot of collapseShots) writeFileSync(join(directory, shot.name), Buffer.from(shot.data, "base64"));
   console.log("SIDEBAR_COLLAPSE_PASSED", collapseShots.map(shot => shot.name).join(" "));
+  const { result:terminal, shots:terminalShots } = await verifyTerminal({ command, evaluate, check, screenshot:captureScreenshot });
+  for (const shot of terminalShots) writeFileSync(join(directory, shot.name), Buffer.from(shot.data, "base64"));
+  console.log("TERMINAL_PASSED", terminalShots.map(shot => shot.name).join(" "));
   const workspaceOrder = await verifyWorkspaceOrder(evaluate, check);
   const sidebarOrder = await verifySidebarOrder(evaluate, check);
   const imageInput = await verifyImageInput({command,evaluate,check,requests,directory,screenshot:captureScreenshot,
@@ -676,7 +680,7 @@ try {
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,
     allToolsCollapsible: true, noEmptyTextRows: true, userMessagesRightAligned: true, agentMessagesLeftAligned: true,
     messageBackgroundMatchesTheme: true, longMultilineMessagesContained: true, sidebarOrder,
-    markdownRendering, workspaceOrder, sidebarResize, sidebarCollapse, imageInput, rewind,
+    markdownRendering, workspaceOrder, sidebarResize, sidebarCollapse, terminal, imageInput, rewind,
     rawDebugDataAbsentFromUi:true,
     unauthorizedGatewayRejected: true, automaticLocalGateway: true, connectionStatusDotOnly: true, explicitNewChatWorkspace: true, workspaceBindings, noGatewayConnectionSettings: true, staleGatewayAddressIgnored: true, restartAndContinue: true, stopAndSteer: true, immediateStop: true, titlebarBorder: true, offlineRepositoryIcons: true, startupComposer: true, noDuplicateProfileTheme: true, windowsExecutableIcon: { orangePixels:windowsIcon.orange, whitePixels:windowsIcon.white, size:windowsIcon.size }, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, gitCommit: true, sessionSearchRenameDelete: true, externalMcpTools: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
   }, null, 2));

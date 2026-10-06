@@ -38,8 +38,24 @@ export interface PreferencesPort {
   writeExecutionSettings(directory: string, input: unknown): ExecutionSettings;
 }
 
+/** 一个正在运行的伪终端。 */
+export interface TerminalProcess {
+  readonly shell: string;
+  readonly cwd: string;
+  write(data: string): void;
+  resize(cols: number, rows: number): void;
+  kill(): void;
+  onData(listener: (data: string) => void): void;
+  onExit(listener: (exitCode: number) => void): void;
+}
+
+export interface TerminalPort {
+  /** cwd 为空时用用户目录。只启动系统 Shell。 */
+  spawnTerminal(input: { cwd: string; cols: number; rows: number }): TerminalProcess;
+}
+
 /** Services assembled by main.ts. IPC knows these contracts, never their adapters. */
-export interface DesktopServices extends RepositoryPort, RuntimePort, PreferencesPort {
+export interface DesktopServices extends RepositoryPort, RuntimePort, PreferencesPort, TerminalPort {
   gatewayClient: GatewayClientPort;
   diagnostics: DiagnosticService;
   saveDiagnosticBundle(snapshot?: unknown, unavailable?: boolean): Promise<

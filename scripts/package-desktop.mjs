@@ -33,9 +33,17 @@ const esbuild = await import(pathToFileURL(join(root, "node_modules", ".pnpm", e
 // Bundle main-process workspace adapters and their mature logging/ZIP dependencies as well.
 await esbuild.build({ entryPoints: [join(desktop, "src", "main", "main.ts")], bundle: true,
   outfile: join(app, "dist", "main", "main", "main.js"), platform: "node", format: "esm",
-  external: ["electron"], target: "node24",
+  external: ["electron", "node-pty"], target: "node24",
   banner: { js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);' },
 });
+// 内置终端的原生模块不能打进单文件，只复制运行需要的部分：JS、Windows x64 预编译文件（不含调试符号）。
+const nodePty = dirname(require.resolve("node-pty/package.json"));
+const packagedPty = join(app, "node_modules", "node-pty");
+cpSync(join(nodePty, "package.json"), join(packagedPty, "package.json"));
+cpSync(join(nodePty, "lib"), join(packagedPty, "lib"), { recursive: true,
+  filter: (path) => !/\.(test\.js|map)$/u.test(path) });
+cpSync(join(nodePty, "prebuilds", "win32-x64"), join(packagedPty, "prebuilds", "win32-x64"), { recursive: true,
+  filter: (path) => !path.endsWith(".pdb") });
 await esbuild.build({ entryPoints: [join(root, "scripts", "gateway-entry.ts")], bundle: true,
   outfile: join(resources, "gateway", "index.mjs"), platform: "node", format: "esm", target: "node24",
   banner: { js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);' },

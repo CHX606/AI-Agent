@@ -139,6 +139,29 @@ export interface TaskEvent {
 
 export type ColorTheme = "light" | "dark";
 
+/** 内置终端。workspaceRoot 为空时在用户目录打开。 */
+export interface TerminalOpenInput {
+  workspaceRoot: string;
+  cols: number;
+  rows: number;
+}
+
+export interface TerminalInfo {
+  id: string;
+  shell: string;
+  cwd: string;
+}
+
+export interface TerminalOutput {
+  id: string;
+  data: string;
+}
+
+export interface TerminalExit {
+  id: string;
+  exitCode: number;
+}
+
 export interface DesktopApi {
   reportClientError(input: { kind: "exception" | "rejection"; taskId?: string; line?: number }): Promise<string>;
   diagnosticStatus(input: { gatewayUrl?: string; taskId?: string }): Promise<Record<string, unknown>>;
@@ -188,4 +211,11 @@ export interface DesktopApi {
   watchTask(input: TaskRequestInput): void;
   unwatchTask(taskId: string): void;
   onTaskEvent(listener: (event: TaskEvent) => void): () => void;
+  /** 在主进程启动一个 PowerShell；只能启动系统 Shell，不能指定任意命令。 */
+  openTerminal(input: TerminalOpenInput): Promise<TerminalInfo>;
+  writeTerminal(id: string, data: string): void;
+  resizeTerminal(id: string, cols: number, rows: number): void;
+  closeTerminal(id: string): Promise<void>;
+  onTerminalOutput(listener: (output: TerminalOutput) => void): () => void;
+  onTerminalExit(listener: (exit: TerminalExit) => void): () => void;
 }

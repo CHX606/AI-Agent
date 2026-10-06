@@ -14,6 +14,7 @@ import { registerSessionIpc } from "./session-ipc.js";
 import { registerMemoryIpc } from "./memory-ipc.js";
 import { registerClipboardIpc } from "./clipboard-ipc.js";
 import { createTaskWatches } from "./task-watches.js";
+import { registerTerminalIpc } from "./terminal-ipc.js";
 
 export function startDesktop(services: DesktopServices, currentDirectory: string): void {
   installDesktopDiagnostics(services);
@@ -42,6 +43,7 @@ async function initializeDesktop(services: DesktopServices, currentDirectory: st
   registerSessionIpc(services, handle);
   registerMemoryIpc(services, handle);
   registerClipboardIpc(handle);
+  registerTerminalIpc(services, handle);
   watches.register();
   const createWindow = () => createDesktopWindow(services.diagnostics, currentDirectory, theme());
   createWindow();

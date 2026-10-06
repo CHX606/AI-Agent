@@ -159,6 +159,19 @@
           <div class="task-status-wrap">
             <span id="status" class="status-badge" data-status="IDLE">就绪</span>
             <button
+              id="terminal-toggle"
+              class="icon-button inspector-toggle terminal-toggle"
+              type="button"
+              aria-label="终端"
+              title="终端（Ctrl+`）"
+              aria-expanded="false"
+              aria-controls="terminal-panel"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m5 7 5 5-5 5M12 18h7" />
+              </svg>
+            </button>
+            <button
               id="inspector-toggle"
               class="icon-button inspector-toggle"
               type="button"
@@ -238,6 +251,9 @@
             </div>
           </div>
         </div>
+
+        <!-- 内置终端：主进程里的 PowerShell，在当前工作区打开。 -->
+        <section id="terminal-panel" class="terminal-panel" aria-label="终端" hidden></section>
       </section>
 
       <!-- bit-agent:inspector -->
