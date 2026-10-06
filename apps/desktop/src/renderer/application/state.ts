@@ -64,7 +64,6 @@ function initializeInputs(app: RendererApp): void {
   app.rounds = element<HTMLElement>("#rounds");
   app.usageState = element<HTMLElement>("#usage-state");
   app.usageCard = element<HTMLElement>("#usage-card");
-  app.rawResult = element<HTMLElement>("#raw-result");
   app.connectionDot = element<HTMLElement>("#connection-dot");
   app.taskHistory = element<HTMLElement>("#task-history");
   app.historyCount = element<HTMLElement>("#history-count");
@@ -99,6 +98,8 @@ function initializeConversation(app: RendererApp): void {
   app.viewGeneration = 0;
   app.nextSessionOffset = 0;
   app.activeObjective = "";
+  app.activeImages = [];
+  app.composerImages = null;
   app.replaying = false;
   app.history = loadHistory().map((entry) => ({ ...entry, gatewayUrl: app.gatewayUrl }));
   app.conversationScroller = element<HTMLElement>("#conversation");

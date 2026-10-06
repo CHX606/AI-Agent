@@ -18,6 +18,9 @@ import { mountModelMenu } from "./model-menu";
 import { mountProductControls } from "./product-controls";
 import { mountProfileMenu } from "./profile-menu";
 import { mountWorkspaceChooser } from "./workspace-chooser";
+import { mountSidebarResize } from "./sidebar-resize";
+import { ComposerImages } from "./attachments/composer-images";
+import { hasComposerContent } from "./application/message";
 import {
 onAgentModeChange
 } from "./session-view";
@@ -36,6 +39,11 @@ Object.assign(app,
   createResultController(app),
   createRunController(app), createStopController(app));
 initializeState(app);
+mountSidebarResize(app.shell);
+app.composerImages = new ComposerImages(element<HTMLElement>(".composer-card"), app.objectiveInput,
+  element<HTMLElement>(".composer-actions"), {
+    changed: () => app.paintComposer(), disabled: () => app.submitting || app.composerMode() === "locked",
+  });
 app.workspaceChooser = mountWorkspaceChooser(app.composerContext, {
   currentRoot: () => app.workspaceInput.value.trim(),
   historyRoots: () => app.history.map(entry => entry.workspaceRoot),
@@ -74,6 +82,7 @@ app.steerChoice.addEventListener("click", (event) => {
 
 app.retryButton.addEventListener("click", () => {
   app.objectiveInput.value = app.activeObjective || app.objectiveInput.value;
+  if (app.activeImages.length) app.composerImages?.set(app.activeImages);
   void app.runAgent();
 });
 
@@ -90,11 +99,11 @@ app.objectiveInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     // 空闲时发送；运行中是“引导”（立即交给正在运行的 Agent）；等回答时是回答。
     event.preventDefault();
-    if (!app.submitting && app.objectiveInput.value.trim()) void app.runAgent();
+    if (!app.submitting && hasComposerContent(app)) void app.runAgent();
   } else if (event.key === "Tab" && event.shiftKey) {
     event.preventDefault();
     app.cyclePermission();
-  } else if (event.key === "Tab" && app.composerMode() === "supplement" && app.objectiveInput.value.trim()) {
+  } else if (event.key === "Tab" && app.composerMode() === "supplement" && hasComposerContent(app)) {
     // 运行中按 Tab：排到这一轮结束后再发送。
     event.preventDefault();
     app.enqueue();

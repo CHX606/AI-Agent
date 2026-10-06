@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from agents.models.chatcmpl_converter import Converter
+
 from bit_agent.llm.client import model_api
 from bit_agent.observability.usage import record_usage
 
@@ -11,7 +13,7 @@ def create_text(
     *,
     model: str,
     instructions: str,
-    content: str,
+    content: str | list[dict[str, Any]],
     timeout: float,
     api: str | None = None,
 ) -> str:
@@ -19,10 +21,12 @@ def create_text(
     if (api or model_api()) == "chat_completions" and hasattr(client, "chat"):
         response = client.chat.completions.create(
             model=model,
-            messages=[
-                {"role": "system", "content": instructions},
-                {"role": "user", "content": content},
-            ],
+            messages=Converter.items_to_messages(
+                [
+                    {"role": "system", "content": instructions},
+                    {"role": "user", "content": content},
+                ]
+            ),
             timeout=timeout,
         )
         record_usage("auxiliary", getattr(response, "usage", None))

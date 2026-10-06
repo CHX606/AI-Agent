@@ -11,8 +11,11 @@ type PreviousTurnOptions
 import { type FileDiff,type StreamView } from "../stream-view";
 import { type TaskHistoryEntry } from "../task-history";
 import type { WorkspaceChooserControl } from "../workspace-chooser";
+import type { ImageAttachment } from "../../shared/image-input";
+import type { ComposerImages } from "../attachments/composer-images";
 
 export type RunState = "send" | "running" | "stopped" | "paused" | "waiting" | "stopping";
+export interface ComposerMessage { text: string; images: ImageAttachment[]; }
 
 /** 当前桌面视图的状态与各功能控制器；由 main.ts 组装。 */
 export interface RendererApp {
@@ -45,7 +48,6 @@ export interface RendererApp {
   rounds: HTMLElement;
   usageState: HTMLElement;
   usageCard: HTMLElement;
-  rawResult: HTMLElement;
   connectionDot: HTMLElement;
   taskHistory: HTMLElement;
   historyCount: HTMLElement;
@@ -72,6 +74,8 @@ export interface RendererApp {
   viewGeneration: number;
   nextSessionOffset: number | null;
   activeObjective: string;
+  activeImages: ImageAttachment[];
+  composerImages: ComposerImages | null;
   replaying: boolean;
   history: TaskHistoryEntry[];
   conversationScroller: HTMLElement;
@@ -95,7 +99,7 @@ export interface RendererApp {
   RUN_LABELS: Record<RunState, string>;
   steerChoice: HTMLElement;
   composerContext: HTMLElement;
-  queued: string[];
+  queued: ComposerMessage[];
   queuedList: HTMLOListElement;
   permissionOrder: readonly ["confirm", "edit", "read_only"];
   resizingInspector: boolean;
@@ -144,7 +148,7 @@ export interface RendererApp {
   refreshSessions: (append?: boolean) => Promise<void>;
   prepareRun: (objective: string, title?: string) => void;
   steer: (mode: "supplement" | "answer") => Promise<void>;
-  runAgent: (text?: string | undefined) => Promise<void>;
+  runAgent: (text?: string | undefined, images?: ImageAttachment[]) => Promise<void>;
   restoreTask: (entry: TaskHistoryEntry) => Promise<void>;
   resetTask: () => void;
   setInspectorCollapsed: (collapsed: boolean) => void;

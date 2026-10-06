@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from bit_agent.context.multimodal import IMAGE_TOKEN_ESTIMATE, image_blocks, text_projection
 from bit_agent.memory.budget import estimate_tokens
 
 
@@ -32,7 +33,9 @@ def to_json_value(value: Any) -> Any:
 
 
 def serialize_items(items: Sequence[Any]) -> str:
-    return json.dumps(to_json_value(items), ensure_ascii=False, separators=(",", ":"))
+    return json.dumps(
+        text_projection(to_json_value(items)), ensure_ascii=False, separators=(",", ":")
+    )
 
 
 def estimate_context_tokens(
@@ -40,4 +43,9 @@ def estimate_context_tokens(
     tools: Sequence[Mapping[str, Any]],
 ) -> int:
     """估算消息、响应项和 Tool Schema 共同占用的输入 Token。"""
-    return estimate_tokens(serialize_items(items)) + estimate_tokens(serialize_items(tools))
+    images = len(image_blocks(to_json_value(items)))
+    return (
+        estimate_tokens(serialize_items(items))
+        + estimate_tokens(serialize_items(tools))
+        + images * IMAGE_TOKEN_ESTIMATE
+    )

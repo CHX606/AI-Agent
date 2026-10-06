@@ -2,6 +2,7 @@ import { app } from "electron";
 import type { CreateTaskInput, TaskInteractionInput, TaskRequestInput } from "../../shared/contracts.js";
 import type { DesktopServices } from "../application/ports.js";
 import { taskRequestBody } from "../application/task-input.js";
+import { taskInteractionBody } from "../application/task-interaction-input.js";
 import type { IpcHandler } from "./ipc-handler.js";
 import { validateTaskRequest } from "./task-request.js";
 
@@ -43,12 +44,7 @@ function registerTaskInteraction(services: DesktopServices, handle: IpcHandler):
     const input = validateTaskRequest(raw);
     return requestJson(input.gatewayUrl, `/v1/tasks/${encodeURIComponent(input.taskId)}/interaction`, {
       method: "POST",
-      body: JSON.stringify({
-        action: raw.action,
-        ...(raw.text !== undefined ? { text: raw.text } : {}),
-        ...(raw.questionId !== undefined ? { question_id: raw.questionId } : {}),
-        ...(raw.optionId !== undefined ? { option_id: raw.optionId } : {}),
-      }),
+      body: JSON.stringify(taskInteractionBody(raw)),
     });
   });
 }

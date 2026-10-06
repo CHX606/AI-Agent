@@ -1,309 +1,37 @@
 import Fastify, { LogController, type FastifyInstance, type FastifyBaseLogger } from "fastify";
-import { createHash, timingSafeEqual } from "node:crypto";
-import { isAbsolute } from "node:path";
-
-import {
-    createTaskBodySchema,
-    taskInteractionSchema,
-    terminalTaskStatuses,
-} from "../../domain/protocol.js";
+import { diagnosticId, type DiagnosticService } from "@bit-agent/diagnostics";
 import type { TaskStore } from "../../application/ports/task-store.js";
-import { diagnosticId, publicError, type DiagnosticService } from "@bit-agent/diagnostics";
-
-/** 常量时间比较，避免按响应耗时逐字符猜出令牌；先哈希以统一长度。 */
-function tokenMatches(header: string | undefined, token: string): boolean {
-    const digest = (value: string) => createHash("sha256").update(value).digest();
-    return timingSafeEqual(digest(header ?? ""), digest(`Bearer ${token}`));
-}
+import { registerHttpSecurity } from "./security.js";
+import { registerRuntimeRoutes } from "./runtime-routes.js";
+import { registerSessionRoutes } from "./session-routes.js";
+import { registerConfigurationRoutes } from "./configuration-routes.js";
+import { registerChangeRoutes } from "./change-routes.js";
+import { registerTaskRoutes } from "./task-routes.js";
+import { registerTaskEvents } from "./task-events.js";
 
 export interface BuildAppOptions {
-    logger?: boolean;
-    taskStore: TaskStore;
-    diagnostics: DiagnosticService;
+  logger?: boolean;
+  taskStore: TaskStore;
+  diagnostics: DiagnosticService;
 }
 
-export function createHttpApp(
-    options: BuildAppOptions,
-): FastifyInstance {
-    const { taskStore, diagnostics } = options;
-    const app = Fastify({
-        ...(options.logger === false ? { logger: false } : { loggerInstance: diagnostics.logger as FastifyBaseLogger }),
-        logController: new LogController({ disableRequestLogging: true }),
-        genReqId: request => {
-            const id = request.headers["x-request-id"];
-            return typeof id === "string" && /^D-[a-f0-9]{16}$/u.test(id) ? id : diagnosticId();
-        },
-    });
-
-    app.setErrorHandler((error, request, reply) => {
-        const err = error as Error & { statusCode?: number; userMessage?: unknown };
-        const id = diagnosticId(err);
-        diagnostics.record((err.statusCode ?? 500) < 500 ? "warn" : "error", "http_failed", {
-            diagnostic_id: id,
-            request_id: request.id, route: request.routeOptions.url, method: request.method,
-            status_code: err.statusCode ?? 500,
-        });
-        // 只透传运行服务明确写给用户的说明；其他错误仍是通用提示加诊断编号。
-        const userMessage = typeof err.userMessage === "string" ? err.userMessage : undefined;
-        return reply.code(err.statusCode ?? 500).send({ error: "REQUEST_FAILED", diagnostic_id: id,
-            message: publicError(id, userMessage ?? "请求未完成，请检查输入和本地运行服务"),
-            ...(userMessage ? { user_message: userMessage } : {}) });
-    });
-    app.addHook("onResponse", async (request, reply) => {
-        const params = request.params as { taskId?: string; sessionId?: string } | undefined;
-        diagnostics.record(reply.statusCode >= 500 ? "error" : reply.statusCode >= 400 ? "warn" : "info",
-            "http_response", { request_id: request.id, method: request.method, route: request.routeOptions.url,
-                task_id: params?.taskId, session_id: params?.sessionId,
-                status_code: reply.statusCode, duration_ms: reply.elapsedTime });
-    });
-
-    app.get<{ Querystring: { task_id?: string } }>("/v1/diagnostics", async (request) => {
-        const snapshot = await taskStore.diagnosticSnapshot(request.query.task_id);
-        return { ...snapshot, available: diagnostics.available() && snapshot.available !== false };
-    });
-
-    app.get("/health", async (_request, reply) => {
-        const health = {
-            status: "ok",
-            service: "bit-agent-gateway",
-            version: "0.1.0",
-        };
-        const runtime = await taskStore.health();
-        if (runtime !== "ready") {
-            return reply.code(503).send({ ...health, status: "error", runtime_status: runtime,
-                restart_required: runtime === "stopped",
-                message: runtime === "stopped" ? "本地执行服务已退出，请重新启动应用" : "本地执行服务暂时无法响应" });
-        }
-        return health;
-    });
-
-    app.addHook("onRequest", async (request, reply) => {
-        const token = process.env.BIT_AGENT_GATEWAY_TOKEN;
-        if (token && !tokenMatches(request.headers.authorization, token)) {
-            return reply.code(401).send({ error: "UNAUTHORIZED" });
-        }
-        if (request.headers.origin) return reply.code(403).send({ error: "BROWSER_ORIGIN_NOT_ALLOWED" });
-    });
-
-    app.get<{ Querystring: { offset?: string; query?: string } }>("/v1/sessions", async (request, reply) => {
-        const offset = Number(request.query.offset ?? 0);
-        if (!Number.isSafeInteger(offset) || offset < 0) return reply.code(400).send({ error: "INVALID_OFFSET" });
-        const query = request.query.query ?? "";
-        if (typeof query !== "string" || query.length > 200) return reply.code(400).send({ error: "INVALID_QUERY" });
-        return taskStore.listSessions(offset, query.trim());
-    });
-
-    app.get<{ Params: { sessionId: string } }>("/v1/sessions/:sessionId", async (request, reply) => {
-        const session = await taskStore.getSession(request.params.sessionId);
-        return session ?? reply.code(404).send({ error: "SESSION_NOT_FOUND" });
-    });
-
-    app.patch<{ Params: { sessionId: string }; Body: { multi_agent_mode?: string; title?: unknown } }>(
-        "/v1/sessions/:sessionId", async (request, reply) => {
-            const { multi_agent_mode: mode, title } = request.body ?? {};
-            if (title !== undefined) {
-                if (typeof title !== "string" || mode !== undefined) return reply.code(400).send({ error: "INVALID_TITLE" });
-                return taskStore.renameSession(request.params.sessionId, title);
-            }
-            if (!mode || !["off", "on", "auto"].includes(mode)) return reply.code(400).send({ error: "INVALID_MODE" });
-            const session = await taskStore.setSessionMode(request.params.sessionId, mode);
-            return session ?? reply.code(404).send({ error: "SESSION_NOT_FOUND" });
-        },
-    );
-
-    app.delete<{ Params: { sessionId: string } }>("/v1/sessions/:sessionId", async (request) => {
-        return taskStore.deleteSession(request.params.sessionId);
-    });
-
-    app.get<{ Querystring: { workspace_root?: string } }>("/v1/memories", async (request, reply) => {
-        const workspaceRoot = request.query.workspace_root;
-        if (workspaceRoot !== undefined && !isAbsolute(workspaceRoot)) {
-            return reply.code(400).send({ error: "INVALID_WORKSPACE_ROOT" });
-        }
-        return taskStore.listMemories(workspaceRoot);
-    });
-
-    app.delete<{ Params: { memoryId: string } }>("/v1/memories/:memoryId", async (request) => {
-        return taskStore.deleteMemory(request.params.memoryId);
-    });
-
-    app.post<{ Body: Record<string, unknown> }>("/v1/model", async (request, reply) => {
-        // 模型密钥只接受桌面主进程的认证请求，不开放给旧的无认证网关。
-        if (!process.env.BIT_AGENT_GATEWAY_TOKEN) {
-            return reply.code(403).send({ error: "MANAGED_DESKTOP_REQUIRED" });
-        }
-        return taskStore.configureModel(request.body);
-    });
-    // 外部工具配置可能带密钥（环境变量），和模型设置一样只接受桌面主进程的认证请求。
-    app.post<{ Body: { servers?: unknown } }>("/v1/mcp", async (request, reply) => {
-        if (!process.env.BIT_AGENT_GATEWAY_TOKEN) return reply.code(403).send({ error: "MANAGED_DESKTOP_REQUIRED" });
-        const servers = request.body?.servers;
-        if (!Array.isArray(servers)) return reply.code(400).send({ error: "INVALID_SERVERS" });
-        return taskStore.configureMcp(servers);
-    });
-    app.post<{ Body: { server?: unknown } }>("/v1/mcp/test", async (request, reply) => {
-        if (!process.env.BIT_AGENT_GATEWAY_TOKEN) return reply.code(403).send({ error: "MANAGED_DESKTOP_REQUIRED" });
-        const server = request.body?.server;
-        if (!server || typeof server !== "object" || Array.isArray(server)) return reply.code(400).send({ error: "INVALID_SERVER" });
-        return taskStore.testMcp(server as Record<string, unknown>);
-    });
-    app.post<{ Body: Record<string, unknown> }>("/v1/model/test", async (request, reply) => {
-        // 同样携带密钥，只接受桌面主进程的认证请求。
-        if (!process.env.BIT_AGENT_GATEWAY_TOKEN) {
-            return reply.code(403).send({ error: "MANAGED_DESKTOP_REQUIRED" });
-        }
-        return taskStore.testModel(request.body);
-    });
-    app.get<{ Params: { taskId: string } }>("/v1/tasks/:taskId/changes", async (request) => {
-        return taskStore.getChanges(request.params.taskId);
-    });
-    app.post<{ Params: { taskId: string }; Body: { change_id?: string; action?: string } }>(
-        "/v1/tasks/:taskId/changes", async (request, reply) => {
-            if (!request.body || typeof request.body.change_id !== "string" || !["accept", "undo"].includes(request.body.action ?? "")) {
-                return reply.code(400).send({ error: "INVALID_REVIEW" });
-            }
-            return taskStore.reviewChange(request.params.taskId, request.body.change_id, request.body.action!);
-        },
-    );
-
-    app.get<{ Params: { taskId: string } }>("/v1/tasks/:taskId/git", async (request) => {
-        return taskStore.gitStatus(request.params.taskId);
-    });
-    app.post<{ Params: { taskId: string } }>("/v1/tasks/:taskId/git/message", async (request) => {
-        return taskStore.suggestCommitMessage(request.params.taskId);
-    });
-    app.post<{ Params: { taskId: string }; Body: { message?: unknown; branch?: unknown } }>(
-        "/v1/tasks/:taskId/git/commit", async (request, reply) => {
-            const { message, branch } = request.body ?? {};
-            if (typeof message !== "string" || (branch !== undefined && branch !== null && typeof branch !== "string")) {
-                return reply.code(400).send({ error: "INVALID_COMMIT" });
-            }
-            return taskStore.commitChanges(request.params.taskId,
-                { message, ...(typeof branch === "string" && branch ? { branch } : {}) });
-        },
-    );
-
-    app.post("/v1/tasks", async (request, reply) => {
-        const parsed = createTaskBodySchema.safeParse(request.body);
-        if (!parsed.success) {
-            return reply.code(400).send({
-                error: "INVALID_REQUEST",
-                details: parsed.error.issues,
-            });
-        }
-        if (!isAbsolute(parsed.data.workspace_root)) {
-            return reply.code(400).send({
-                error: "INVALID_WORKSPACE_ROOT",
-                message: "workspace_root 必须是绝对路径",
-            });
-        }
-        const task = await taskStore.createTask(parsed.data);
-        return reply.code(202).send(task);
-    });
-
-    app.post<{ Params: { taskId: string } }>("/v1/tasks/:taskId/interaction", async (request, reply) => {
-        const parsed = taskInteractionSchema.safeParse(request.body);
-        if (!parsed.success) return reply.code(400).send({ error: "INVALID_INTERACTION", details: parsed.error.issues });
-        return taskStore.interactTask(request.params.taskId, parsed.data);
-    });
-
-    app.get<{ Params: { taskId: string } }>("/v1/tasks/:taskId", async (request, reply) => {
-        const task = await taskStore.getTask(request.params.taskId);
-        if (!task) {
-            return reply.code(404).send({ error: "TASK_NOT_FOUND" });
-        }
-        return task;
-    });
-
-    app.get<{ Params: { taskId: string } }>(
-        "/v1/tasks/:taskId/result",
-        async (request, reply) => {
-            const task = await taskStore.getTask(request.params.taskId);
-            if (!task) {
-                return reply.code(404).send({ error: "TASK_NOT_FOUND" });
-            }
-            if (!terminalTaskStatuses.has(task.status)) {
-                return reply.code(409).send({
-                    error: "TASK_NOT_FINISHED",
-                    status: task.status,
-                });
-            }
-            return {
-                task_id: task.task_id,
-                status: task.status,
-                result: task.result,
-                error: task.error,
-            };
-        },
-    );
-
-    app.delete<{ Params: { taskId: string } }>(
-        "/v1/tasks/:taskId",
-        async (request, reply) => {
-            const cancellation = await taskStore.requestCancellation(request.params.taskId);
-            if (!cancellation.found) {
-                return reply.code(404).send({ error: "TASK_NOT_FOUND" });
-            }
-            return reply.code(cancellation.changed ? 202 : 200).send(cancellation.task);
-        },
-    );
-
-    app.get<{
-        Params: { taskId: string };
-        Querystring: { after?: string };
-    }>("/v1/tasks/:taskId/events", async (request, reply) => {
-        const task = await taskStore.getTask(request.params.taskId);
-        if (!task) {
-            return reply.code(404).send({ error: "TASK_NOT_FOUND" });
-        }
-
-        const lastHeader = request.headers["last-event-id"];
-        let cursor = request.query.after
-            ?? (typeof lastHeader === "string" ? lastHeader : undefined)
-            ?? "0-0";
-        if (!/^[0-9]+-[0-9]+$/u.test(cursor)) return reply.code(400).send({ error: "INVALID_CURSOR" });
-        reply.hijack();
-        reply.raw.writeHead(200, {
-            "content-type": "text/event-stream; charset=utf-8",
-            "cache-control": "no-cache, no-transform",
-            connection: "keep-alive",
-            "x-accel-buffering": "no",
-        });
-
-        try {
-            while (!request.raw.aborted && !reply.raw.destroyed) {
-                const events = await taskStore.readEvents(request.params.taskId, cursor, 1_000);
-                for (const event of events) {
-                    cursor = event.id;
-                    reply.raw.write(
-                        `id: ${event.id}\nevent: ${event.event_type}\ndata: ${JSON.stringify(event.data)}\n\n`,
-                    );
-                }
-                const current = await taskStore.getTask(request.params.taskId);
-                if (!current || (terminalTaskStatuses.has(current.status) && events.length === 0)) {
-                    break;
-                }
-                if (events.length === 0) {
-                    reply.raw.write(": heartbeat\n\n");
-                }
-            }
-        } catch (error) {
-            const id = diagnostics.failure("sse_failed", error, { task_id: request.params.taskId, request_id: request.id });
-            if (!reply.raw.destroyed) {
-                reply.raw.write(
-                    `event: gateway_error\ndata: ${JSON.stringify({ message: publicError(id, "连接暂时中断，正在尝试恢复"), diagnostic_id: id })}\n\n`,
-                );
-            }
-        } finally {
-            if (!reply.raw.destroyed) {
-                reply.raw.end();
-            }
-        }
-    });
-
-    app.addHook("onClose", async () => {
-        await taskStore.close();
-    });
-
-    return app;
+export function createHttpApp(options: BuildAppOptions): FastifyInstance {
+  const { taskStore, diagnostics } = options;
+  const app = Fastify({
+    ...(options.logger === false ? { logger: false } : { loggerInstance: diagnostics.logger as FastifyBaseLogger }),
+    logController: new LogController({ disableRequestLogging: true }),
+    genReqId: request => {
+      const id = request.headers["x-request-id"];
+      return typeof id === "string" && /^D-[a-f0-9]{16}$/u.test(id) ? id : diagnosticId();
+    },
+  });
+  registerHttpSecurity(app, diagnostics);
+  registerRuntimeRoutes(app, taskStore, diagnostics);
+  registerSessionRoutes(app, taskStore);
+  registerConfigurationRoutes(app, taskStore);
+  registerChangeRoutes(app, taskStore);
+  registerTaskRoutes(app, taskStore);
+  registerTaskEvents(app, taskStore, diagnostics);
+  app.addHook("onClose", async () => taskStore.close());
+  return app;
 }

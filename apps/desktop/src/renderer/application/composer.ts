@@ -3,6 +3,7 @@ import {
 setModeDisabled
 } from "../session-view";
 import type { RendererApp,RunState } from "./context";
+import { hasComposerContent } from "./message";
 
 function requestInput(app: RendererApp) {
   if (!app.activeTaskId) throw new Error("当前没有任务");
@@ -48,7 +49,7 @@ function runState(app: RendererApp): RunState {
   if (isLocallyStopped(app)) return "stopped";
   const status = app.statusText.dataset.status ?? "";
   const mode = app.composerMode();
-  if (app.objectiveInput.value.trim() && (mode === "supplement" || mode === "answer")) return "send";
+  if (hasComposerContent(app) && (mode === "supplement" || mode === "answer")) return "send";
   if (status === "PAUSE_REQUESTED" || status === "CANCELLATION_REQUESTED") return "stopped";
   if (status === "PAUSED") return "paused";
   if (status === "WAITING_FOR_INPUT") return "waiting";
@@ -63,17 +64,18 @@ function paintRunButton(app: RendererApp): void {
     const icon = state === "stopping" || state === "waiting" ? "send" : state;
     app.runButton.innerHTML = app.RUN_ICONS[icon];
   }
-  const empty = !app.objectiveInput.value.trim();
+  const empty = !hasComposerContent(app);
   app.runButton.dataset.empty = String(empty);
   app.runButton.title = app.RUN_LABELS[state];
   app.runButton.setAttribute("aria-label", app.RUN_LABELS[state]);
-  app.runButton.disabled = app.submitting || (state === "send" && empty) || ["stopped", "stopping", "waiting"].includes(state);
+  app.runButton.disabled = app.submitting || (state === "send" && (empty || Boolean(app.composerImages?.isReading())))
+    || ["stopped", "stopping", "waiting"].includes(state);
 }
 
 async function primaryAction(app: RendererApp): Promise<void> {
   const state = app.runState();
   if (state === "send") {
-    if (document.body.dataset.busy !== "true" && !app.objectiveInput.value.trim()) {
+    if (document.body.dataset.busy !== "true" && !hasComposerContent(app)) {
       app.objectiveInput.focus();
       return;
     }
@@ -89,10 +91,11 @@ function paintComposer(app: RendererApp): void {
   document.body.dataset.steering = mode === "answer" ? "WAITING_FOR_INPUT" : mode === "supplement" ? status ?? "" : "";
   if (document.body.dataset.busy === "true") app.objectiveInput.disabled = mode === "locked" && !(app.stoppedTaskId && app.stoppedTaskId === app.activeTaskId);
   // 运行中写了文字：工具栏左侧换成“引导 / 排队”两个选择（多 Agent 和权限这时本来就不能改）。
-  const choosing = mode === "supplement" && Boolean(app.objectiveInput.value.trim());
+  const choosing = mode === "supplement" && hasComposerContent(app);
   app.steerChoice.hidden = !choosing;
   app.composerContext.dataset.choosing = String(choosing);
   app.paintRunButton();
+  app.composerImages?.refresh();
   const approval = app.interactionView?.pendingKind() === "approval";
   app.objectiveInput.placeholder = mode === "answer"
     ? approval ? "不批准？写下原因按 Enter，Agent 会按你的意见调整…" : "直接写下你的回答，按 Enter 提交…"

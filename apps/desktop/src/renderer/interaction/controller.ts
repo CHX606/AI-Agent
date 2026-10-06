@@ -1,4 +1,5 @@
 import type { TaskInteractionInput, TaskRequestInput } from "../../shared/contracts";
+import type { ImageAttachment } from "../../shared/image-input";
 import { errorText, object } from "../dom";
 import { mountInteractionPanel } from "./panel";
 import { InteractionQuestion } from "./question";
@@ -184,14 +185,15 @@ export class InteractionController {
   }
 
   /** 在输入框补充要求，运行时会交给 Agent 的下一步。 */
-  supplement(text: string): Promise<boolean> {
-    return this.submit({ action: "supplement", text });
+  supplement(text: string, images: ImageAttachment[] = []): Promise<boolean> {
+    return this.submit({ action: "supplement", text, ...(images.length ? { images } : {}) });
   }
 
   /** 权限确认时，文字回答表示不批准，并说明原因。 */
-  answer(text: string): Promise<boolean> {
+  answer(text: string, images: ImageAttachment[] = []): Promise<boolean> {
     const questionId = this.questions.id();
-    return questionId === null ? Promise.resolve(false) : this.submit({ action: "answer", questionId, text });
+    return questionId === null ? Promise.resolve(false)
+      : this.submit({ action: "answer", questionId, text, ...(images.length ? { images } : {}) });
   }
 
   /** 保留安全暂停接口，后台处理期间无需显示额外面板。 */

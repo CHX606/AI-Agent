@@ -19,12 +19,17 @@ export class MemoryTaskStore implements TaskStore {
 
   async diagnosticSnapshot(taskId?: string): Promise<Record<string, unknown>> {
     const tasks = [...this.tasks.values()].filter((task) => !taskId || task.task_id === taskId);
-    return { tasks: structuredClone(tasks), events: [] };
+    return { tasks: tasks.map(task => ({ task_id: task.task_id, status: task.status,
+      created_at: task.created_at, updated_at: task.updated_at })), events: [] };
   }
 
-  async interactTask(taskId: string, _input: TaskInteractionBody): Promise<TaskRecord> {
+  async interactTask(taskId: string, input: TaskInteractionBody): Promise<TaskRecord> {
     const task = this.tasks.get(taskId);
     if (!task) throw notFound("任务不存在");
+    if (["supplement", "replace", "answer"].includes(input.action)) {
+      const { action, ...content } = structuredClone(input);
+      task.intent_updates = [...(task.intent_updates ?? []), { kind: action, ...content }];
+    }
     return structuredClone(task);
   }
 
@@ -106,6 +111,7 @@ export class MemoryTaskStore implements TaskStore {
       task_id: randomUUID(),
       status: "QUEUED",
       objective: input.objective,
+      ...(input.images?.length ? { images: structuredClone(input.images) } : {}),
       workspace_root: input.workspace_root,
       max_tool_rounds: input.max_tool_rounds ?? DEFAULT_MAX_TOOL_ROUNDS,
       created_at: now,

@@ -5,12 +5,12 @@ import json
 from typing import Any, Protocol, runtime_checkable
 
 from bit_agent.context.models import ContextSummary
-from bit_agent.context.serialization import serialize_items
+from bit_agent.context.multimodal import summary_content
+from bit_agent.context.summary_sources import summary_sources
 from bit_agent.llm.text import create_text
 from bit_agent.memory import WorkingMemory
 from bit_agent.memory.budget import (
     estimate_tokens,
-    split_text_by_token_budget,
     truncate_to_token_budget,
 )
 
@@ -71,14 +71,11 @@ class LLMContextSummarizer:
         working_memory: WorkingMemory,
     ) -> ContextSummary:
         # 每一段都要经过摘要器；不能截去中间内容后删除整段原历史。
-        sources = split_text_by_token_budget(
-            serialize_items(items),
-            max_tokens=self.max_source_tokens,
-        )
+        sources = summary_sources(items, self.max_source_tokens)
         summary = previous_summary
         try:
-            for source in sources:
-                generated = await self._summarize_source(source, summary, working_memory)
+            for source, images in sources:
+                generated = await self._summarize_source(source, images, summary, working_memory)
                 summary = reconcile_context_summary(generated, summary, working_memory)
         except Exception as exc:
             raise IncompleteContextSummaryError("历史摘要未完成，保留原始历史") from exc
@@ -87,6 +84,7 @@ class LLMContextSummarizer:
     async def _summarize_source(
         self,
         source: str,
+        images: list[dict[str, Any]],
         previous_summary: ContextSummary | None,
         working_memory: WorkingMemory,
     ) -> ContextSummary:
@@ -104,7 +102,7 @@ class LLMContextSummarizer:
             self.response_client,
             model=self.model_name,
             instructions=CONTEXT_SUMMARIZATION_INSTRUCTIONS,
-            content=json.dumps(payload, ensure_ascii=False, default=str),
+            content=summary_content(json.dumps(payload, ensure_ascii=False, default=str), images),
             timeout=self.request_timeout_seconds,
         )
         # 从响应中提取 JSON 对象并验证为 ContextSummary
@@ -126,6 +124,32 @@ class DeterministicContextSummarizer:
         return reconcile_context_summary(None, previous_summary, working_memory)
 
 
+_FIELD_LIMITS = {
+    "constraints": 50,
+    "confirmed_facts": 100,
+    "files_examined": 200,
+    "changes_made": 200,
+    "failed_attempts": 100,
+    "unresolved_errors": 100,
+    "next_actions": 50,
+}
+
+
+def _collect_summary_values(
+    previous: ContextSummary | None,
+    generated: ContextSummary | None,
+    field_name: str,
+    trusted: list[str] | None,
+) -> list[str]:
+    groups = [
+        getattr(previous, field_name, []) if previous is not None else [],
+        getattr(generated, field_name, []) if generated is not None else [],
+        trusted or [],
+    ]
+    values = (value.strip()[:1_000] for group in groups for value in group)
+    return list(dict.fromkeys(value for value in values if value))[: _FIELD_LIMITS[field_name]]
+
+
 def reconcile_context_summary(  # 把“旧摘要、新摘要、当前工作记忆”整合成一份新的 ContextSummary
     generated: ContextSummary | None,
     previous: ContextSummary | None,
@@ -133,31 +157,8 @@ def reconcile_context_summary(  # 把“旧摘要、新摘要、当前工作记�
 ) -> ContextSummary:
     """用确定性任务状态覆盖 LLM 可能遗失或误写的关键字段。"""
 
-    field_limits = {  # 每个字段的最大条目数
-        "constraints": 50,
-        "confirmed_facts": 100,
-        "files_examined": 200,
-        "changes_made": 200,
-        "failed_attempts": 100,
-        "unresolved_errors": 100,
-        "next_actions": 50,
-    }
-
     def collect(field_name: str, trusted: list[str] | None = None) -> list[str]:  # 收集字段值
-        groups = [  # 收集不同来源的字段值
-            getattr(previous, field_name, []) if previous is not None else [],
-            getattr(generated, field_name, []) if generated is not None else [],
-            trusted or [],
-        ]
-        result: list[str] = []
-        for group in groups:  # 遍历每个组
-            for value in group:
-                normalized = value.strip()[:1_000]
-                if normalized and normalized not in result:
-                    result.append(normalized)
-                    if len(result) >= field_limits[field_name]:
-                        return result
-        return result  # 返回收集到的字段值
+        return _collect_summary_values(previous, generated, field_name, trusted)
 
     return ContextSummary(  # 用确定性任务状态覆盖 LLM 可能遗失或误写的关键字段。
         objective=working_memory.objective,

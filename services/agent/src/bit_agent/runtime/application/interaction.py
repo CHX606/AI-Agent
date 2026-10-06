@@ -1,17 +1,18 @@
-"""让正在执行的任务等一等，接收新要求，或向用户问一个问题。"""
+from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from bit_agent.images import image_metadata
 from bit_agent.runtime.application.capacity import ExecutionSlot
 from bit_agent.runtime.application.ports import StoragePort
-from bit_agent.runtime.domain.clock import accepted_at
-from bit_agent.runtime.domain.errors import InteractionError
+from bit_agent.runtime.domain.errors import InteractionError as InteractionError
+
+from .interaction_questions import InteractionQuestions
+from .interaction_requests import InteractionRequests
 
 
 class QuestionOption(BaseModel):
@@ -33,7 +34,7 @@ class UserQuestion(BaseModel):
     timeout_seconds: int = Field(default=300, ge=10, le=600)
 
     @model_validator(mode="after")
-    def validate_options(self) -> "UserQuestion":
+    def validate_options(self) -> UserQuestion:
         identifiers = {option.id for option in self.options}
         if len(identifiers) != len(self.options):
             raise ValueError("选项编号不能重复")
@@ -64,9 +65,7 @@ INTERACTION_INSTRUCTIONS = (
 )
 
 
-class TaskInteraction:
-    """只在安全位置等待，不强行打断正在写文件的工具。"""
-
+class TaskInteraction(InteractionRequests, InteractionQuestions):
     def __init__(self, storage: StoragePort, task_id: str) -> None:
         self.storage = storage
         self.task_id = task_id
@@ -76,7 +75,7 @@ class TaskInteraction:
         self.pause_requested = False
         self.closed = False
         self.sealed = False
-        self.updates: list[dict[str, str]] = []
+        self.updates: list[dict[str, Any]] = []
         self.question: dict[str, Any] | None = None
         self.answer: asyncio.Future[dict[str, Any]] | None = None
         self.question_count = 0
@@ -107,10 +106,25 @@ class TaskInteraction:
                 "task_id": self.task_id,
                 "status": task["status"],
                 "question": task.get("question"),
-                "last_answer": task.get("last_answer"),
+                "last_answer": self._public_answer(task.get("last_answer")),
+                **self._intent_image_metadata(event, task),
             },
         )
         return task
+
+    @staticmethod
+    def _intent_image_metadata(event: str, task: dict[str, Any]) -> dict[str, Any]:
+        if event != "TASK_INTENT_UPDATED":
+            return {}
+        updates = task.get("intent_updates", [])
+        images = updates[-1].get("images", []) if updates else []
+        return {"images": image_metadata(images)} if images else {}
+
+    @staticmethod
+    def _public_answer(answer: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not answer or not answer.get("images"):
+            return answer
+        return {**answer, "images": image_metadata(answer["images"])}
 
     @asynccontextmanager
     async def waiting(self):
@@ -145,197 +159,36 @@ class TaskInteraction:
             ):
                 self.deadline.reschedule(asyncio.get_running_loop().time() + self._remaining)
 
-    async def boundary(self, finishing: bool = False) -> list[dict[str, str]]:
+    async def boundary(self, finishing: bool = False) -> list[dict[str, Any]]:
         while True:
             async with self.lock:
                 if self.closed:
                     raise asyncio.CancelledError
                 if not self.pause_requested:
-                    updates, self.updates = self.updates, []
-                    if finishing and not updates:
-                        self.sealed = True
-                    return updates
+                    return self._consume_updates(finishing)
                 await self._state("PAUSED", "TASK_PAUSED")
             async with self.waiting():
                 await self.gate.wait()
 
-    async def acceptance_boundary(self, finishing: bool = False) -> list[dict[str, str]]:
+    def _consume_updates(self, finishing: bool) -> list[dict[str, Any]]:
+        updates, self.updates = self.updates, []
+        if finishing and not updates:
+            self.sealed = True
+        return updates
+
+    async def acceptance_boundary(self, finishing: bool = False) -> list[dict[str, Any]]:
         """Respect parent pause/cancel without consuming its input or sealing its task."""
         while True:
             async with self.lock:
                 if self.closed:
                     raise asyncio.CancelledError
+                if not self.pause_requested and self.updates:
+                    raise RuntimeError("用户要求已改变，本次验收失效；交回主 Agent 处理新要求")
                 if not self.pause_requested:
-                    if self.updates:
-                        raise RuntimeError("用户要求已改变，本次验收失效；交回主 Agent 处理新要求")
                     return []
                 await self._state("PAUSED", "TASK_PAUSED")
             async with self.waiting():
                 await self.gate.wait()
-
-    async def request(self, input: dict[str, Any]) -> dict[str, Any]:
-        if not isinstance(input, dict):
-            raise InteractionError("交互请求必须是对象", 400)
-        action = input.get("action")
-        async with self.lock:
-            task = await self.storage.call("get_task", self.task_id)
-            if task is None:
-                raise InteractionError("任务不存在", 404)
-            if (
-                self.closed
-                or self.sealed
-                or task["status"]
-                in {"COMPLETED", "PARTIAL", "FAILED", "CANCELLED", "CANCELLATION_REQUESTED"}
-            ):
-                raise InteractionError("当前任务已结束或正在收尾，请在同一对话继续提问")
-
-            if action == "pause":
-                if self.question is not None:
-                    raise InteractionError("Agent 已在等你回答，可以直接回答或修改要求")
-                if self.pause_requested:
-                    return task
-                self.pause_requested = True
-                self.gate.clear()
-                return await self._state("PAUSE_REQUESTED", "TASK_PAUSE_REQUESTED")
-
-            if action == "resume":
-                if self.question is not None:
-                    raise InteractionError("请先回答当前问题，或提交新的任务要求")
-                if not self.pause_requested:
-                    raise InteractionError("当前任务没有暂停")
-                result = await self._state(
-                    "RUNNING" if task["started_at"] else "QUEUED", "TASK_RESUMED"
-                )
-                self.pause_requested = False
-                self.gate.set()
-                return result
-
-            if action in {"supplement", "replace"}:
-                # 运行中也可以直接提交（像 Claude Code 边跑边输入）：要求先排队，
-                # Agent 在下一次调用工具或请求模型前读取，正在执行的工具不会被打断。
-                text = input.get("text")
-                if not isinstance(text, str) or not 1 <= len(text.strip()) <= 4000:
-                    raise InteractionError("新要求需要 1 到 4000 个字符", 400)
-                updates = list(task.get("intent_updates", []))
-                if len(updates) >= 100:
-                    raise InteractionError("本轮补充次数过多，请结束后继续新一轮对话")
-                update = {
-                    "id": uuid4().hex,
-                    "kind": action,
-                    "text": text.strip(),
-                    "accepted_at": accepted_at(),
-                }
-                result = await self._state(
-                    "RUNNING" if task["started_at"] else "QUEUED",
-                    "TASK_INTENT_UPDATED",
-                    intent_updates=[*updates, update],
-                    question=None,
-                )
-                self.updates.append(update)
-                self.pause_requested = False
-                self.question = None
-                if self.answer is not None and not self.answer.done():
-                    self.answer.set_result(
-                        {"source": "intent_changed", "permission_granted": False}
-                    )
-                self.gate.set()
-                return result
-
-            if action == "answer":
-                question, future = self.question, self.answer
-                if (
-                    question is None
-                    or future is None
-                    or future.done()
-                    or input.get("question_id") != question["id"]
-                ):
-                    raise InteractionError("这个问题已经结束，请查看最新的问题")
-                text, option_id = input.get("text"), input.get("option_id")
-                if bool(text) == bool(option_id):
-                    raise InteractionError("请选择一个选项，或填写自己的回答", 400)
-                if option_id:
-                    option = next(
-                        (item for item in question["options"] if item["id"] == option_id), None
-                    )
-                    if option is None:
-                        raise InteractionError("选项不存在", 400)
-                    text = option["label"] + "：" + option["description"]
-                if not isinstance(text, str) or not 1 <= len(text.strip()) <= 4000:
-                    raise InteractionError("回答需要 1 到 4000 个字符", 400)
-                answer = {
-                    "question_id": question["id"],
-                    "option_id": option_id,
-                    "text": text.strip(),
-                    "source": "user",
-                    "permission_granted": False,
-                }
-                result = await self._state(
-                    "RUNNING",
-                    "USER_ANSWERED",
-                    answered_question=question,
-                    question=None,
-                    last_answer=answer,
-                )
-                self.question = None
-                future.set_result(answer)
-                return result
-            raise InteractionError("不支持的交互操作", 400)
-
-    async def ask(self, question: UserQuestion, *, operation: dict | None = None) -> dict[str, Any]:
-        async with self.lock:
-            if self.closed or self.sealed:
-                raise InteractionError("任务已经结束")
-            # 上限只约束 Agent 自己提的问题；框架的权限确认不计入，否则批准多了就再也写不了文件。
-            if operation is None:
-                if self.question_count >= 20:
-                    raise InteractionError("本轮提问次数已达上限，请根据已有信息整理结果")
-                self.question_count += 1
-            public = question.model_dump()
-            public["id"] = uuid4().hex
-            if operation is not None:
-                public["operation"] = operation
-            public["expires_at"] = (
-                None
-                if question.requires_confirmation
-                else (datetime.now(UTC) + timedelta(seconds=question.timeout_seconds)).isoformat()
-            )
-            self.question = public
-            future = asyncio.get_running_loop().create_future()
-            self.answer = future
-            await self._state("WAITING_FOR_INPUT", "USER_QUESTION", question=public)
-        try:
-            async with self.waiting():
-                if question.requires_confirmation:
-                    return await future
-                try:
-                    return await asyncio.wait_for(asyncio.shield(future), question.timeout_seconds)
-                except TimeoutError:
-                    # 回答和超时争同一把锁，只允许其中一个最终生效。
-                    async with self.lock:
-                        if future.done():
-                            return future.result()
-                        option = next(
-                            item
-                            for item in question.options
-                            if item.id == question.recommended_option_id
-                        )
-                        answer = {
-                            "question_id": public["id"],
-                            "option_id": option.id,
-                            "text": option.label + "：" + option.description,
-                            "source": "timeout",
-                            "permission_granted": False,
-                            "note": "这是超时后的推荐方案，不是用户明确批准高风险操作。",
-                        }
-                        await self._state(
-                            "RUNNING", "QUESTION_DEFAULTED", question=None, last_answer=answer
-                        )
-                        self.question = None
-                        future.set_result(answer)
-                        return answer
-        finally:
-            if self.answer is future:
-                self.answer = None
 
     def close(self) -> None:
         self.closed = True

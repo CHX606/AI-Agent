@@ -1,0 +1,46 @@
+.image-upload {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+}
+.image-upload svg { width: 17px; height: 17px; }
+.image-upload:hover:not(:disabled) { border-color: var(--border); background: var(--bg-panel); color: var(--text); }
+.composer-images { padding: 12px 14px 0; }
+.composer-image-list, .message-images { display: flex; max-width: 100%; flex-wrap: wrap; gap: 8px; }
+.composer-image { position: relative; width: 72px; min-width: 0; margin: 0; }
+.composer-image img { display: block; width: 72px; height: 64px; border: 1px solid var(--border); border-radius: 7px; object-fit: cover; }
+.composer-image figcaption { margin-top: 3px; overflow: hidden; color: var(--text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.composer-image button { position: absolute; top: -5px; right: -5px; display: grid; width: 19px; height: 19px; place-items: center; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--bg-main); color: var(--text-soft); font-size: 15px; line-height: 1; }
+.composer-image button:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+.composer-image-error, .composer-image-progress { margin: 6px 0 0; font-size: 12px; line-height: 1.5; }
+.composer-image-error { color: var(--red); }
+.composer-image-progress { color: var(--text-muted); }
+.turn-user:has(> .message-images), .stream-user:has(> .message-images) { flex-direction: column; gap: 8px; }
+.message-image { max-width: 100%; margin: 0; }
+.message-image img { display: block; width: auto; max-width: min(240px, 100%); max-height: 180px; border: 1px solid var(--border); border-radius: 7px; object-fit: contain; }
+.message-image figcaption { max-width: 240px; margin-top: 3px; overflow-wrap: anywhere; color: var(--text-muted); font-size: 11px; }
+.previewable-image { cursor: zoom-in; }
+.previewable-image:focus-visible { outline: 2px solid var(--accent, var(--text)); outline-offset: 2px; }
+/* Fill the viewport and center the image; the global reset removes the dialog's default auto margins. */
+.image-preview { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; overflow: hidden; }
+.image-preview[open] { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+.image-preview::backdrop { background: rgb(16 16 15 / 72%); backdrop-filter: blur(3px); }
+.image-preview img { display: block; max-width: calc(100vw - 64px); max-height: calc(100dvh - var(--titlebar-height, 32px) - 120px); border-radius: 8px; object-fit: contain; background: var(--bg-main); box-shadow: 0 12px 40px rgb(0 0 0 / 35%); }
+.image-preview-name { max-width: calc(100vw - 64px); margin: 0; overflow: hidden; color: #f2f2f0; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.image-preview img { position: relative; z-index: 0; cursor: zoom-in; touch-action: none; user-select: none; transform-origin: center; }
+.image-preview[data-zoomed="true"] img { cursor: grab; }
+.image-preview[data-dragging="true"] img { cursor: grabbing; }
+.image-preview-close { position: fixed; z-index: 1; top: calc(var(--titlebar-height, 32px) + 12px); right: 16px; display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid rgb(255 255 255 / 25%); border-radius: 50%; background: rgb(0 0 0 / 45%); color: #fff; }
+.image-preview svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.image-preview-close:hover, .image-preview-toolbar button:hover { background: rgb(255 255 255 / 14%); }
+.image-preview-toolbar { position: fixed; z-index: 1; bottom: 16px; left: 50%; display: flex; align-items: center; gap: 2px; padding: 3px; transform: translateX(-50%); border: 1px solid rgb(255 255 255 / 18%); border-radius: 9px; background: rgb(0 0 0 / 60%); color: #fff; }
+.image-preview-toolbar button { display: grid; min-width: 30px; height: 28px; padding: 0 6px; place-items: center; border: 0; border-radius: 6px; background: transparent; color: inherit; font-size: 12px; }
+.image-preview-level { min-width: 48px; font-size: 12px; font-variant-numeric: tabular-nums; text-align: center; }
+.image-preview-toolbar .image-preview-fit { margin-left: 2px; border-left: 1px solid rgb(255 255 255 / 18%); border-radius: 0 6px 6px 0; }
+.message-image[data-unavailable="true"] { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-main); }

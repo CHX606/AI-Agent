@@ -5,6 +5,10 @@ import { createServer as createSocketServer } from "node:net";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import assert from "node:assert/strict";
+import { verifyConversationLayout, verifyFoldedPatch, verifyNoEmptyText, verifySidebarOrder } from "../apps/desktop/test/stream-sidebar-packaged.mjs";
+import { markdownFixture, verifyMarkdown } from "../apps/desktop/test/markdown-packaged.mjs";
+import { verifySidebarResize, verifyWorkspaceOrder } from "../apps/desktop/test/workspace-sidebar-packaged.mjs";
+import { evaluateMain, verifyImageInput } from "../apps/desktop/test/image-input-packaged.mjs";
 
 const executable = resolve(process.argv[2] ?? "");
 if (!process.argv[2]) throw new Error("需要提供待验收的 exe 路径");
@@ -32,6 +36,11 @@ const probes = [];
 const responseGates = new Map();
 function releaseResponse(goal) { responseGates.get(goal)?.(); responseGates.delete(goal); }
 const model = createServer(async (request, response) => {
+  if (request.method === "GET" && request.url === "/markdown-image.svg") {
+    response.writeHead(200, { "content-type":"image/svg+xml" });
+    response.end('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="40"><rect width="160" height="40" fill="#df7440"/><text x="8" y="25" fill="white">Markdown image</text></svg>');
+    return;
+  }
   if (request.method === "GET" && request.url?.endsWith("/models")) {
     // “从服务获取”：向量模型应被过滤掉。
     response.writeHead(200, { "content-type": "application/json" });
@@ -50,10 +59,13 @@ const model = createServer(async (request, response) => {
     return;
   }
   requests.push(body);
-  const users = body.input.filter((item) => item.role === "user").map((item) => String(item.content));
+  const users = body.input.filter((item) => item.role === "user").map((item) =>
+    Array.isArray(item.content) ? item.content.filter(block=>block.type==='input_text').map(block=>block.text).join('\n') : String(item.content));
   const held = ["QUEUE-TEST", "STOP-QUEUE"].includes(users.at(-1))
     ? new Promise(done => responseGates.set(users.at(-1), done)) : null;
-  const text = `PACKAGED_STREAM_START ${users.join(" | ")} PACKAGED_STREAM_END`;
+  const text = users.at(-1) === "PACKAGE-MARKDOWN"
+    ? markdownFixture(`http://127.0.0.1:${model.address().port}/markdown-image.svg`)
+    : `PACKAGED_STREAM_START ${users.join(" | ")} PACKAGED_STREAM_END`;
   const id = `resp-${requests.length}`;
   const message = { type: "message", id: `msg-${requests.length}`, status: "completed", role: "assistant",
     content: [{ type: "output_text", text, annotations: [] }] };
@@ -64,6 +76,13 @@ const model = createServer(async (request, response) => {
     output = called || !offered
       ? [{ ...message, content: [{ type: "output_text", text: offered ? "PACKAGE-MCP-DONE" : "MCP-TOOL-MISSING", annotations: [] }] }]
       : [{ type: "function_call", call_id: "package-mcp", name: "mcp__self__list_files", arguments: JSON.stringify({ path: "", max_depth: 0 }) }];
+  }
+  if (users.at(-1) === "PACKAGE-GROUP") {
+    // 一次回复里查看目录、读两个文件：界面应合成一行可展开的分组。
+    const done = body.input.some(item => item.type === "function_call_output" && item.call_id === "group-read-2");
+    const call = (id, name, args) => ({ type: "function_call", call_id: id, name, arguments: JSON.stringify(args) });
+    output = done ? [message] : [call("group-list", "list_files", { path: "", max_depth: 0 }),
+      call("group-read-1", "read_file", { path: "README.md" }), call("group-read-2", "read_file", { path: "README.md" })];
   }
   if (users.at(-1) === "PACKAGE-EDIT") {
     const patched = body.input.some(item => item.type === "function_call_output" && item.call_id === "package-patch");
@@ -215,8 +234,9 @@ async function captureScreenshot() {
         const window = BrowserWindow.getAllWindows().find(item => item.webContents.getURL().includes('index.html'));
         window.webContents.setBackgroundThrottling(false);
         const sample = await window.webContents.executeJavaScript("(() => { const element = ['.product-dialog[open]', '.composer-card', '.editor-scroll', '.repository-view'].map((selector) => document.querySelector(selector)).find((item) => item && item.getBoundingClientRect().width > 0); const rect = element.getBoundingClientRect(); return { x:rect.right-16, y:rect.top+16, width:innerWidth, height:innerHeight, color:getComputedStyle(element).backgroundColor.match(/\\\\d+/g).slice(0,3).map(Number) }; })()");
-        const frame = await window.webContents.executeJavaScript("(() => { let marker=document.querySelector('#acceptance-frame'); if(!marker){marker=document.createElement('canvas');marker.id='acceptance-frame';marker.width=3;marker.height=3;document.body.append(marker);document.styleSheets[0].insertRule('#acceptance-frame{position:fixed;left:16px;top:16px;width:3px;height:3px;z-index:2147483647}',0)} (document.querySelector('.product-dialog[open]')||document.body).append(marker);const count=Number(window.acceptanceFrameCount||0)+1;window.acceptanceFrameCount=count;const color=[count,31,219];marker.getContext('2d').fillStyle='rgb('+color.join(',')+')';marker.getContext('2d').fillRect(0,0,3,3);const rect=marker.getBoundingClientRect();return {color,x:rect.left+1,y:rect.top+1}; })()");
+        const frame = await window.webContents.executeJavaScript("(() => { let marker=document.querySelector('#acceptance-frame'); if(!marker){marker=document.createElement('canvas');marker.id='acceptance-frame';marker.width=3;marker.height=3;document.body.append(marker);document.styleSheets[0].insertRule('#acceptance-frame{position:fixed;left:16px;top:16px;width:3px;height:3px;z-index:2147483647}',0)} (document.querySelector('.product-dialog[open]')||document.body).append(marker);const count=Number(window.acceptanceFrameCount||0)+1;window.acceptanceFrameCount=count;const color=[32+(count%6)*32,32+(Math.floor(count/6)%6)*32,32+(Math.floor(count/36)%6)*32];marker.getContext('2d').fillStyle='rgb('+color.join(',')+')';marker.getContext('2d').fillRect(0,0,3,3);const rect=marker.getBoundingClientRect();return {color,x:rect.left+1,y:rect.top+1}; })()");
         // 主题和唯一帧标记都匹配才接收截图，避免同一主题下仍取到旧菜单画面。
+        let lastMismatch;
         for (let attempt = 0; attempt < 8; attempt++) {
           const image = await window.webContents.capturePage(undefined, {stayHidden:true, stayAwake:true});
           if (image.isEmpty()) throw new Error('截图为空');
@@ -233,13 +253,14 @@ async function captureScreenshot() {
           const markerY = Math.floor(frame.y * height / sample.height);
           const markerOffset = (markerY * width + markerX) * 4;
           const frameColor = [bitmap[markerOffset + 2], bitmap[markerOffset + 1], bitmap[markerOffset]];
+          lastMismatch = { color, expectedColor:sample.color, frameColor, expectedFrame:frame.color, sample, frame };
           if (color.every((value, index) => Math.abs(value - sample.color[index]) < 12)
-            && frameColor.every((value, index) => value === frame.color[index])) {
+            && frameColor.every((value, index) => Math.abs(value - frame.color[index]) <= 2)) {
             return { data:image.toPNG().toString('base64'), pixelThemeChecked:true };
           }
           await new Promise(resolve => setTimeout(resolve, 150));
         }
-        throw new Error('截图画面没有更新到当前主题');
+        throw new Error('截图画面没有更新到当前主题：' + JSON.stringify(lastMismatch));
       })()` },
     })));
     connection.addEventListener("message", ({data}) => {
@@ -275,6 +296,10 @@ async function captureLayouts(command, evaluate, stage) {
         if (${width} > 1050 && !visible) document.querySelector('#inspector-toggle').click();
       })()`);
       await check(() => evaluate(`document.documentElement.dataset.theme === ${JSON.stringify(theme)}`), "主题切换没有生效");
+      const conversation = stage === "conversation"
+        ? await verifyConversationLayout(evaluate, { history:true, supplement:true, longText:true }) : null;
+      const markdown = stage === "markdown" ? await verifyMarkdown(evaluate, check) : null;
+      if (markdown) await evaluate("document.querySelector('#current-turn .markdown-table').scrollIntoView({block:'start'})");
       // 隐藏窗口可能不再产生绘制帧；在测试进程稍等，再让截图命令直接请求画面。
       await new Promise(resolve => setTimeout(resolve, 150));
       const shot = await captureScreenshot();
@@ -315,7 +340,8 @@ async function captureLayouts(command, evaluate, stage) {
         assert(Math.abs(geometry.dialog.x + geometry.dialog.width / 2 - width / 2) <= 2, `${filename}: 弹窗没有居中`);
         assert.equal(geometry.dialogBackground, theme === "dark" ? "rgb(28, 28, 26)" : "rgb(255, 255, 255)", `${filename}: 弹窗没有使用当前主题`);
       }
-      layoutResults.push({ stage, theme, width, height, screenshot:filename, pixelThemeChecked:shot.pixelThemeChecked, geometry });
+      layoutResults.push({ stage, theme, width, height, screenshot:filename, pixelThemeChecked:shot.pixelThemeChecked, geometry,
+        ...(conversation ? { conversation } : {}), ...(markdown ? { markdown } : {}) });
       console.log("LAYOUT_PASSED", filename);
     }
   }
@@ -383,7 +409,7 @@ try {
   assert(state.answer.includes("PACKAGE-CANARY-73"));
   const screenshot = await captureScreenshot();
   writeFileSync(join(directory, "packaged-desktop.png"), Buffer.from(screenshot.data, "base64"));
-  await captureLayouts(command, evaluate, "conversation");
+  await verifyConversationLayout(evaluate);
   // 侧边栏按工作区分组；左下角个人中心显示版本 1.0，页面上不再有 Local harness。
   assert(await evaluate("document.querySelector('.workspace-group[data-active=true] .workspace-group-name')?.textContent==='workspace' && document.querySelectorAll('.workspace-group[data-active=true] .history-item').length===1"), "对话没有归到所在工作区下");
   await evaluate("document.querySelector('.workspace-group[data-active=true] .workspace-group-toggle').click()");
@@ -459,9 +485,13 @@ try {
   // 运行中直接在输入框补充要求：先排队，Agent 下一步读取，最终回答里能看到。
   await evaluate("document.querySelector('#objective').value='RUN-NOTE-TEST';document.querySelector('#objective').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#run').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && !document.querySelector('#objective').disabled"), "运行中输入框不能补充要求");
-  await evaluate("const r=document.querySelector('#objective');r.value='RUNNING-NOTE';r.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))");
+  const runningNote = "RUNNING-NOTE\n" + "这条补充要求用于检查用户长句气泡在对话区内正确换行。".repeat(16)
+    + "\n" + "abcdefghijklmnopqrstuvwxyz".repeat(20);
+  await evaluate(`const r=document.querySelector('#objective');r.value=${JSON.stringify(runningNote)};r.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))`);
   await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false' && document.querySelector('#stream .stream-user')?.textContent.includes('RUNNING-NOTE') && [...document.querySelectorAll('#stream .stream-text')].some(e=>e.textContent.includes('RUNNING-NOTE'))"), "运行中补充的要求没有被 Agent 读到");
   assert(await evaluate("[...document.querySelectorAll('.saved-turn .stream-note')].some(e=>e.textContent.includes('已停止'))"), "继续对话后上一轮的执行过程不见了");
+  await verifyConversationLayout(evaluate, { history:true, supplement:true, longText:true });
+  await captureLayouts(command, evaluate, "conversation");
   // 运行中写字：工具栏出现“引导 / 排队”；按 Tab 排队，这一轮结束后自动作为下一条消息发送。
   await evaluate("document.querySelector('#objective').value='QUEUE-TEST';document.querySelector('#objective').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#run').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='RUNNING' && document.querySelector('#run').dataset.state==='running'"), "QUEUE-TEST 没有开始运行");
@@ -490,6 +520,11 @@ try {
   await captureLayouts(command, evaluate, "approval");
   await evaluate("document.querySelector('input[name=agent-question-option][value=approve]').click();document.querySelector('#submit-question-answer').click()");
   await check(() => evaluate("document.querySelector('#status').dataset.status==='WAITING_FOR_INPUT' && document.querySelector('.question-title').textContent.includes('等待审阅')"), "批准后工具未执行或问题卡片未更新");
+  // 修改文件那一行写增删行数（像 Claude Code 一样），批准后不再单独一行“已收到你的回答”。
+  await check(() => evaluate("[...document.querySelectorAll('#current-turn .stream-tool[data-tool=apply_patch] .tool-summary')].some(s=>s.textContent==='+1 −0')"), "修改文件没有显示增删行数");
+  await verifyFoldedPatch(evaluate, check);
+  await verifyNoEmptyText(evaluate);
+  assert(!(await evaluate("document.querySelector('#current-turn').textContent.includes('已收到你的回答')")), "批准后仍单独显示“已收到你的回答”");
   assert(existsSync(join(workspace, "package-demo.py")));
   assert(await evaluate("!document.querySelector('#end-task').hidden && document.querySelector('#run').dataset.state==='waiting'"), "等待回答时卡片上没有“结束这一轮”");
   await evaluate("document.querySelector('#end-task').click()");
@@ -532,6 +567,21 @@ try {
   assert.equal(mcpTask.result.final_answer, "PACKAGE-MCP-DONE", JSON.stringify(mcpTask.result.final_answer));
   assert.equal(mcpTask.result.tool_calls[0].tool_name, "mcp__self__list_files");
   assert(JSON.stringify(mcpTask.result.tool_calls[0].output).includes("README.md"), "外部工具没有返回工作区文件列表");
+  // 同一对话继续：连续的查看/读取合成一行分组，默认收起，展开后逐条列出，点开一条显示可读信息。
+  await evaluate("document.querySelector('#objective').value='PACKAGE-GROUP';document.querySelector('#objective').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#run').click()");
+  await check(() => evaluate("document.querySelector('#status').dataset.status==='COMPLETED' && document.body.dataset.busy==='false'"), "读取文件的任务没有完成");
+  // 外部工具连接成功只在对话第一轮提示；这是同一对话的第二轮。
+  assert(!(await evaluate("document.querySelector('#current-turn').textContent.includes('已连接外部工具')")), "后续轮次仍重复提示外部工具已连接");
+  const group = "[...document.querySelectorAll('#current-turn .stream-group')].at(-1)";
+  assert.equal(await evaluate(`${group}?.querySelector('.group-summary')?.textContent`), "查看了 1 个目录，读取了 2 个文件");
+  assert(await evaluate(`${group}.querySelector('.group-list').hidden && ${group}.querySelector('.group-head').getAttribute('aria-expanded')==='false'`), "工具分组默认应收起");
+  assert(await evaluate(`${group}.querySelector('.group-summary').getBoundingClientRect().width>150`), "分组摘要被挤窄，文字看不见");
+  writeFileSync(join(directory, "tool-group-collapsed.png"), Buffer.from((await captureScreenshot()).data, "base64"));
+  await evaluate(`${group}.querySelector('.group-head').click()`);
+  assert(await evaluate(`!${group}.querySelector('.group-list').hidden && ${group}.querySelectorAll('.group-list > .stream-tool').length===3`), "展开后没有逐条列出 3 次调用");
+  await evaluate(`${group}.querySelector('.group-list > .stream-tool .tool-head').click()`);
+  assert(await evaluate(`(() => { const d=${group}.querySelector('.group-list > .stream-tool .tool-detail'); return !d.hidden && d.textContent.includes('状态') && !d.querySelector('.tool-raw,.event-payload') && ![...d.querySelectorAll('dt')].some(term=>term.textContent==='工具'); })()`), "工具详情缺少可读信息或仍显示内部调试数据");
+  writeFileSync(join(directory, "tool-group.png"), Buffer.from((await captureScreenshot()).data, "base64"));
   await evaluate("document.querySelector('#memory-settings').click()");
   const memoryTitles = "Array.from(document.querySelectorAll('.memory-entry strong')).map(item=>item.textContent)";
   await check(async () => JSON.stringify(await evaluate(memoryTitles)) === JSON.stringify(["PACKAGE-MEMORY-CANARY"]), "记忆面板没有只显示本项目的记忆");
@@ -566,6 +616,14 @@ try {
   await check(() => evaluate("document.body.dataset.busy==='false' && document.querySelectorAll('.saved-turn .turn-expand').length>0"), "旧轮次没有“查看执行过程”入口");
   await evaluate("document.querySelector('.saved-turn .turn-expand').click()");
   await check(() => evaluate("(()=>{const t=document.querySelector('.saved-turn');return !t.querySelector('.turn-expand') && Boolean(t.querySelector('.stream-text')?.textContent.includes('PACKAGED_STREAM_START'));})()"), "点开后没有回放旧轮次的过程");
+  await verifyConversationLayout(evaluate, { history:true, update:true, longText:true });
+  await evaluate("document.querySelector('#objective').value='PACKAGE-MARKDOWN';document.querySelector('#objective').dispatchEvent(new Event('input'));document.querySelector('#run').click()");
+  await check(() => evaluate("document.body.dataset.busy==='false' && document.querySelector('#current-turn').textContent.includes('PACKAGED_STREAM_END')"), "Markdown 验收回复没有完成");
+  const markdownRendering = await verifyMarkdown(evaluate, check);
+  await captureLayouts(command, evaluate, "markdown");
+  await evaluate("document.querySelector('.history-item[data-active=true]').click()");
+  await check(() => evaluate("document.body.dataset.busy==='false'"), "Markdown 历史回放没有完成");
+  markdownRendering.historyReplay = await verifyMarkdown(evaluate, check);
   // VS Code 式仓库页：标签页、行号、语法高亮、状态栏。
   mkdirSync(join(workspace, "src"), { recursive: true });
   writeFileSync(join(workspace, "src", "app.py"), "# 示例\ndef greet(name: str) -> str:\n    return f\"hi {name}\"  # 问候\n\nprint(greet('bit'), 42)\n");
@@ -588,9 +646,20 @@ try {
   await captureLayouts(command, evaluate, "repository");
   const workspaceBindings = await verifyWorkspaceBinding(evaluate);
   await captureLayouts(command, evaluate, "workspace-chooser");
+  const sidebarResize = await verifySidebarResize(command, evaluate, check);
+  const workspaceOrder = await verifyWorkspaceOrder(evaluate, check);
+  const sidebarOrder = await verifySidebarOrder(evaluate, check);
+  const imageInput = await verifyImageInput({command,evaluate,check,requests,directory,screenshot:captureScreenshot,
+    main:expression=>evaluateMain(mainInspectorUrl,expression),
+    captureLayouts:stage=>captureLayouts(command,evaluate,stage)});
+  assert(await evaluate("!document.querySelector('#raw-result,.raw-section,.tool-raw,.event-payload')"), "正式界面仍包含原始结果或原始事件展示");
   await close();
   writeFileSync(join(directory, "result.json"), JSON.stringify({ passed: true, executable,
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,
+    allToolsCollapsible: true, noEmptyTextRows: true, userMessagesRightAligned: true, agentMessagesLeftAligned: true,
+    messageBackgroundMatchesTheme: true, longMultilineMessagesContained: true, sidebarOrder,
+    markdownRendering, workspaceOrder, sidebarResize, imageInput,
+    rawDebugDataAbsentFromUi:true,
     unauthorizedGatewayRejected: true, automaticLocalGateway: true, connectionStatusDotOnly: true, explicitNewChatWorkspace: true, workspaceBindings, noGatewayConnectionSettings: true, staleGatewayAddressIgnored: true, restartAndContinue: true, stopAndSteer: true, immediateStop: true, titlebarBorder: true, offlineRepositoryIcons: true, startupComposer: true, noDuplicateProfileTheme: true, windowsExecutableIcon: { orangePixels:windowsIcon.orange, whitePixels:windowsIcon.white, size:windowsIcon.size }, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, gitCommit: true, sessionSearchRenameDelete: true, externalMcpTools: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
   }, null, 2));
   console.log(`PACKAGED_ACCEPTANCE_PASSED ${directory}`);

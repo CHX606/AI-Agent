@@ -1,7 +1,8 @@
 import type { RendererApp } from "./context";
+import { clearComposerMessage, composerMessage } from "./message";
 
 function renderQueue(app: RendererApp): void {
-  app.queuedList.replaceChildren(...app.queued.map((text, index) => {
+  app.queuedList.replaceChildren(...app.queued.map((message, index) => {
     const item = document.createElement("li");
     item.className = "queued-message";
     const label = document.createElement("span");
@@ -9,8 +10,9 @@ function renderQueue(app: RendererApp): void {
     label.textContent = index === 0 ? "下一条" : "排队";
     const copy = document.createElement("span");
     copy.className = "queued-text";
+    const text = message.text + (message.images.length ? `${message.text ? " · " : ""}${message.images.length} 张图片` : "");
     copy.textContent = text;
-    copy.title = text;
+    copy.title = [message.text, ...message.images.map(image => image.name)].filter(Boolean).join("\n");
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "queued-remove";
@@ -24,19 +26,19 @@ function renderQueue(app: RendererApp): void {
 }
 
 function enqueue(app: RendererApp): void {
-  const text = app.objectiveInput.value.trim();
-  if (!text) return;
-  app.queued.push(text);
-  app.objectiveInput.value = "";
+  const message = composerMessage(app);
+  if ((!message.text && !message.images.length) || app.composerImages?.isReading()) return;
+  app.queued.push(message);
+  clearComposerMessage(app);
   app.renderQueue();
   app.paintComposer();
 }
 
 function sendQueued(app: RendererApp, status: string): void {
   if (!app.queued.length || status === "CANCELLED" || app.submitting || document.body.dataset.busy === "true") return;
-  const text = app.queued.shift()!;
+  const message = app.queued.shift()!;
   app.renderQueue();
-  void app.runAgent(text);
+  void app.runAgent(message.text, message.images);
 }
 
 function clearQueue(app: RendererApp): void {

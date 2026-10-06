@@ -593,6 +593,8 @@ async def test_desktop_runtime_runs_nested_sdk_and_restores_both_results(
                 "workspace_root": str(project),
                 "multi_agent_mode": "off",
                 "permission_mode": "edit",
+                # 这里要走完整的嵌套验收；默认的自动模式会因为改动很小而跳过验收。
+                "acceptance_mode": "always",
             }
         )
         await asyncio.wait_for(runtime._running[task["task_id"]], 10)
@@ -622,6 +624,58 @@ async def test_desktop_runtime_runs_nested_sdk_and_restores_both_results(
         assert "execute" not in results, "child raw dialogue must not replace parent context"
     finally:
         restored.close()
+
+
+async def test_default_auto_mode_skips_acceptance_for_a_small_change(
+    project, tmp_path, sandbox, monkeypatch
+):
+    class Client:
+        def __init__(self):
+            self.responses = self
+            self.tester_calls = 0
+
+        def create(self, **request):
+            if "write_acceptance_test" in {tool["name"] for tool in request["tools"]}:
+                self.tester_calls += 1
+            completed = {
+                item["call_id"]: item["output"]
+                for item in request["input"]
+                if item.get("type") == "function_call_output"
+            }
+            if "patch" not in completed:
+                patch = "*** Begin Patch\n*** Update File: app.py\n@@\n def add(a, b):\n"
+                patch += "-    return a + b\n+    return a + b  # addition\n*** End Patch\n"
+                return TestModel.call("apply_patch", "patch", {"patch": patch})
+            if "baseline" not in completed:
+                return TestModel.call("verify_project", "baseline", {})
+            if "acceptance" not in completed:  # 模型照旧调用也会被告知不需要
+                return TestModel.call("verify_task", "acceptance", {"focus": ""})
+            return SimpleNamespace(output=[], output_text="已完成")
+
+    client = Client()
+    monkeypatch.setitem(
+        sys.modules, "bit_agent.llm.client", SimpleNamespace(client=client, model_name="fixture")
+    )
+    runtime = create_runtime(tmp_path / "runtime")
+    await runtime.start()
+    try:
+        with pytest.raises(ValueError, match="独立验收"):
+            await runtime.create_task(
+                {"objective": "x", "workspace_root": str(project), "acceptance_mode": "sometimes"}
+            )
+        task = await runtime.create_task(
+            {"objective": "实现加法", "workspace_root": str(project), "permission_mode": "edit"}
+        )
+        assert task["acceptance_mode"] == "auto"
+        await asyncio.wait_for(runtime._running[task["task_id"]], 10)
+        stored = await runtime.get_task(task["task_id"])
+        assert stored["status"] == "COMPLETED", stored
+        assert stored["result"]["tests_passed"]
+        assert stored["result"]["acceptance_status"] == "NOT_RUN"
+        assert any("改动较小" in note for note in stored["result"]["verification_notes"])
+        assert client.tester_calls == 0 and len(sandbox) == 2, "只跑了基础检查"
+    finally:
+        await runtime.close()
 
 
 @pytest.mark.skipif(
@@ -658,3 +712,62 @@ async def test_real_os_baseline_and_new_acceptance_tests(project, tmp_path, brok
     evidence = result.output["evidence"][0]
     assert evidence["exit_code"] == (1 if broken else 0), evidence
     assert ("failed" if broken else "passed") in evidence["stdout"].lower()
+
+
+async def test_independent_tester_receives_original_images_as_vision_input(
+    project, tmp_path, sandbox
+):
+    from bit_agent.runtime.application.acceptance_input import acceptance_input
+
+    image = {
+        "name": "layout.png",
+        "mime_type": "image/png",
+        "data_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0l"
+        "EQVR42mP8/x8AAwMCAO+X2ioAAAAASUVORK5CYII=",
+    }
+    context = await acceptance_context(project, tmp_path)
+    context["requirements"]["user_requests"][0]["images"] = [image]
+    packet, history = acceptance_input(context)
+    assert image["data_url"] not in packet
+    assert (
+        json.loads(packet)["requirements"]["user_requests"][0]["images"][0]["name"] == "layout.png"
+    )
+    assert history[0]["content"][-1]["image_url"] == image["data_url"]
+    client = TestModel()
+    result = await run_acceptance(
+        root=project,
+        artifacts=tmp_path / "artifacts",
+        call_id="verify-image",
+        context=context,
+        workspace_factory=AcceptanceWorkspace,
+        sink=InMemoryEventSink(),
+        response_client=client,
+        model_name="fixture",
+    )
+    assert result.output["verdict"] == "PASSED", result.output
+    assert any(
+        isinstance(item.get("content"), list)
+        and any(
+            block.get("type") == "input_image" and block.get("image_url") == image["data_url"]
+            for block in item["content"]
+        )
+        for item in client.inputs[0]["input"]
+    )
+
+
+def test_image_bytes_do_not_trigger_independent_tester_text_limit():
+    from bit_agent.runtime.application.acceptance_input import acceptance_input
+
+    image = {
+        "name": "large.png",
+        "mime_type": "image/png",
+        "data_url": "data:image/png;base64," + "A" * 400_000,
+    }
+    context = {
+        "requirements": {
+            "user_requests": [{"objective": "match this screenshot", "images": [image]}]
+        }
+    }
+    packet, history = acceptance_input(context)
+    assert len(packet) < 256_000
+    assert history[0]["content"][-1]["image_url"] == image["data_url"]

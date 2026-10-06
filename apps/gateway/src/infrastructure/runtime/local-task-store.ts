@@ -7,6 +7,7 @@ import type { CreateTaskBody, TaskEvent, TaskRecord, TaskInteractionBody } from 
 import type { CancellationResult, TaskStore } from "../../application/ports/task-store.js";
 import { publicError, type DiagnosticPort } from "@bit-agent/diagnostics";
 import { gatewayDiagnostics } from "../observability/diagnostics.js";
+import { IMAGE_LIMITS } from "../../domain/image-input.js";
 
 function projectDirectory(): string {
   if (process.env.BIT_AGENT_PROJECT_ROOT) return process.env.BIT_AGENT_PROJECT_ROOT;
@@ -129,6 +130,11 @@ export class LocalTaskStore implements TaskStore {
   call<T>(method: string, params: Record<string, unknown> = {}, timeoutMs = 30_000): Promise<T> {
     if (this.stopped) return Promise.reject(new Error("本地执行服务不可用，请重新启动 Gateway"));
     const id = ++this.sequence;
+    const line = `${JSON.stringify({ id, method, params })}\n`;
+    if (Buffer.byteLength(line, "utf8") > IMAGE_LIMITS.maxRequestBytes) {
+      return Promise.reject(Object.assign(new Error("请求大小不能超过 28 MiB"),
+        { statusCode: 413, userMessage: "请求过大，请减少图片数量或大小" }));
+    }
     const fields = { rpc_id: String(id), operation: method, task_id: params.task_id,
       session_id: params.session_id };
     const started = performance.now();
@@ -141,7 +147,7 @@ export class LocalTaskStore implements TaskStore {
         reject(Object.assign(new Error(publicError(diagnostic_id, "本地服务响应超时，请先检查会话列表，避免重复提交")), { diagnostic_id }));
       }, timeoutMs);
       this.pending.set(id, { resolve: (value) => resolve(value as T), reject, timer, fields, started });
-      this.child.stdin.write(`${JSON.stringify({ id, method, params })}\n`, (error) => {
+      this.child.stdin.write(line, (error) => {
         if (error) this.fail(error);
       });
     });

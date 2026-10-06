@@ -1,8 +1,10 @@
 import type { ExecutionSettings } from "./execution-settings.js";
+import type { ImageAttachment } from "./image-input.js";
 
 export interface CreateTaskInput {
   gatewayUrl: string;
   objective: string;
+  images?: ImageAttachment[];
   workspaceRoot: string;
   sessionId?: string;
   multiAgentMode?: MultiAgentMode;
@@ -45,6 +47,7 @@ export interface TaskInteractionInput extends TaskRequestInput {
   text?: string;
   questionId?: string;
   optionId?: string;
+  images?: ImageAttachment[];
 }
 
 export interface RepositoryPathInput {
