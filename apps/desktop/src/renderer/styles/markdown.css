@@ -156,10 +156,20 @@
   background: var(--bg-code);
 }
 
-.code-language {
-  display: block;
-  padding: 5px 9px;
+.code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px 2px 9px;
   border-bottom: 1px solid var(--border);
+}
+
+.code-language {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-muted);
   font: 11px var(--font-mono);
   text-transform: uppercase;

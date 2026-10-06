@@ -12,6 +12,7 @@ import { registerGitIpc } from "./git-ipc.js";
 import { registerTaskIpc } from "./task-ipc.js";
 import { registerSessionIpc } from "./session-ipc.js";
 import { registerMemoryIpc } from "./memory-ipc.js";
+import { registerClipboardIpc } from "./clipboard-ipc.js";
 import { createTaskWatches } from "./task-watches.js";
 
 export function startDesktop(services: DesktopServices, currentDirectory: string): void {
@@ -40,6 +41,7 @@ async function initializeDesktop(services: DesktopServices, currentDirectory: st
   registerTaskIpc(services, handle);
   registerSessionIpc(services, handle);
   registerMemoryIpc(services, handle);
+  registerClipboardIpc(handle);
   watches.register();
   const createWindow = () => createDesktopWindow(services.diagnostics, currentDirectory, theme());
   createWindow();

@@ -1,4 +1,5 @@
 /** 流式文字延后到动画帧渲染；切换工具或保存过程前立即刷新。 */
+import { registerMarkdown } from "../copy-button";
 import { renderMarkdown } from "../markdown";
 import { streamBullet } from "./bullet";
 
@@ -19,9 +20,11 @@ export class StreamTextBlock {
     item.className = "stream-item stream-text";
     const body = document.createElement("div");
     body.className = "markdown-body";
+    const block: TextBlock = { body, raw: "" };
     item.append(streamBullet(), body);
+    registerMarkdown(item, () => block.raw);
     this.appendItem(item);
-    return { body, raw: "" };
+    return block;
   }
 
   append(delta: string): void {

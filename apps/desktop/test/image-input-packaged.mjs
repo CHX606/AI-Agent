@@ -27,6 +27,8 @@ async function clipboardImage(main, dataUrl) {
     const {clipboard,ClipboardItem}=process.getBuiltinModule('module').createRequire(process.resourcesPath+'/app/package.json')('electron');
     const saved=[];
     for(const item of await clipboard.read()){
+      // 空剪贴板会读出一个没有任何格式的项，ClipboardItem 不接受，跳过即可。
+      if(!item.types.length) continue;
       const entries=await Promise.all(item.types.map(async type=>[type,await item.getType(type)]));
       saved.push(new ClipboardItem(Object.fromEntries(entries)));
     }

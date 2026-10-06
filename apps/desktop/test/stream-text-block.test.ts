@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TaskEvent } from "../src/shared/contracts";
 import { createStreamView, type StreamView } from "../src/renderer/stream-view";
 
-const mocks = vi.hoisted(() => ({ render: vi.fn() }));
+const mocks = vi.hoisted(() => ({ render: vi.fn(), copied: [] as Array<() => string> }));
 vi.mock("../src/renderer/markdown", () => ({ renderMarkdown: mocks.render }));
+vi.mock("../src/renderer/copy-button", () => ({ registerMarkdown: (_item: unknown, text: () => string) => {
+  mocks.copied.push(text);
+} }));
 vi.mock("../src/renderer/stream/status-line", () => ({
   StreamStatusLine: class {
     stopped = false;
@@ -66,6 +69,7 @@ function contents(): string[] {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.copied.length = 0;
   mocks.render.mockImplementation((body: TestElement, raw: string) => { body.textContent = raw; });
   frames = new Map();
   nextFrame = 0;
@@ -161,5 +165,17 @@ describe("streamed assistant text boundaries", () => {
     paint();
     expect(contents()).toEqual(["新文字"]);
     expect(mocks.render).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers each text row's full latest markdown for copying the reply", () => {
+    delta("第一段 **加粗**");
+    delta("，还在输出\n");
+    view.handle(event("MODEL_REQUESTED"));
+    delta("第二段");
+    paint();
+    expect(mocks.copied).toHaveLength(2);
+    expect(mocks.copied.map(text => text())).toEqual(["第一段 **加粗**，还在输出\n", "第二段"]);
+    delta(" 补充");
+    expect(mocks.copied[1]!()).toBe("第二段 补充");
   });
 });

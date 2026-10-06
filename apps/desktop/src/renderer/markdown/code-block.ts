@@ -1,3 +1,4 @@
+import { copyButton } from "../copy-button";
 import { highlight, languageFor } from "../syntax-highlight";
 
 const aliases: Record<string, string> = {
@@ -33,12 +34,14 @@ export function decorateCodeBlock(pre: HTMLPreElement): void {
   const source = code.textContent ?? "";
   const wrapper = document.createElement("div");
   wrapper.className = "code-block";
-  if (name) {
-    const label = document.createElement("span");
-    label.className = "code-language";
-    label.textContent = name;
-    wrapper.append(label);
-  }
+  // 标题栏：左边语言名，右边复制按钮；按钮不浮在代码上，不会和边框或代码重叠。
+  const header = document.createElement("div");
+  header.className = "code-header";
+  const label = document.createElement("span");
+  label.className = "code-language";
+  label.textContent = name;
+  header.append(label, copyButton(() => source, "复制代码", "code-copy"));
+  wrapper.append(header);
   code.replaceChildren();
   if (name.toLowerCase() === "diff" || name.toLowerCase() === "patch") appendDiff(code, source);
   else appendTokens(code, source, name.toLowerCase());

@@ -1,4 +1,6 @@
 import { renderMessageImages } from "./attachments/message-images";
+import { registerMarkdown, replyMarkdown } from "./copy-button";
+import { replyActions, userActions } from "./message-actions";
 import { object } from "./dom";
 import { renderMarkdown } from "./markdown";
 
@@ -87,6 +89,7 @@ function appendAnswer(stream: HTMLOListElement, answer: string): void {
   response.className = "markdown-body";
   renderMarkdown(response, answer);
   item.append(mark, response);
+  registerMarkdown(item, () => answer);
   stream.append(item);
 }
 
@@ -106,7 +109,9 @@ function renderTurn(turn: Record<string, unknown>, options: PreviousTurnOptions)
   const section = document.createElement("section");
   section.className = "turn saved-turn";
   section.dataset.taskId = taskId;
+  const objective = typeof turn.objective === "string" ? turn.objective : "";
   section.append(userMessage(turn));
+  if (objective) section.append(userActions(() => objective));
   const kept = options.processes?.get(taskId);
   appendUpdates(section, turn.intent_updates, kept);
   const stream = document.createElement("ol");
@@ -119,6 +124,8 @@ function renderTurn(turn: Record<string, unknown>, options: PreviousTurnOptions)
     appendAnswer(stream, answer);
   }
   section.append(stream);
+  // 点开“查看执行过程”后文字会变，复制时按当时显示的内容读取。
+  if (replyMarkdown(stream) || answer) section.append(replyActions(stream));
   previousTurns.append(section);
 }
 

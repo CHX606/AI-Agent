@@ -1,0 +1,17 @@
+/* 代码块标题栏右侧的复制按钮。 */
+.code-copy {
+  display: grid;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+}
+.code-copy svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.code-copy:hover { background: var(--bg-hover); color: var(--text); }
+.code-copy[data-state="done"] { color: var(--green); }
+.code-copy[data-state="error"] { color: var(--red); }
