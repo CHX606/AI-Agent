@@ -1,12 +1,15 @@
 """外部 MCP 工具：配置校验、连接、命名、权限确认和桌面任务中的使用。"""
 
 import asyncio
+import contextlib
 import json
+import socket
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import uvicorn
 from bit_agent.observability import InMemoryEventSink
 from bit_agent.runtime.application import service as service_module
 from bit_agent.runtime.application.delegation import DelegatingToolProvider
@@ -20,6 +23,7 @@ from bit_agent.tool_provider.external import (
     ExternalMcpTools,
     ExternalServer,
     ExternalServerConfigError,
+    build_servers,
     validate_servers,
 )
 from bit_agent.tools.models import ToolStatus
@@ -69,6 +73,67 @@ def test_validate_servers():
         "env": {"TOKEN": "secret"},
     }
     assert config[1]["enabled"] is False and config[1]["auto_approve"] is True
+    assert config[1]["headers"] == {}
+    [with_headers] = validate_servers(
+        [
+            {
+                "name": "gh",
+                "type": "http",
+                "url": "https://api.example.com/mcp",
+                "headers": {"Authorization": "Bearer abc"},
+            }
+        ]
+    )
+    assert with_headers["headers"] == {"Authorization": "Bearer abc"}
+
+
+@contextlib.asynccontextmanager
+async def http_server_requiring_token(token: str):
+    """真实的本机 Streamable HTTP MCP 服务；不带正确 Authorization 的请求一律 401。"""
+    app = demo_server().streamable_http_app()
+
+    async def guarded(scope, receive, send):
+        if scope["type"] == "http" and (
+            dict(scope["headers"]).get(b"authorization") != f"Bearer {token}".encode()
+        ):
+            await send({"type": "http.response.start", "status": 401, "headers": []})
+            await send({"type": "http.response.body", "body": b"unauthorized"})
+            return
+        await app(scope, receive, send)
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(guarded, host="127.0.0.1", port=port, log_level="error"))
+    serving = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.02)
+    try:
+        yield f"http://127.0.0.1:{port}/mcp"
+    finally:
+        server.should_exit = True
+        await serving
+
+
+async def test_http_server_receives_configured_headers():
+    async with http_server_requiring_token("t0ken") as url:
+        configs = validate_servers(
+            [
+                {
+                    "name": "ok",
+                    "type": "http",
+                    "url": url,
+                    "headers": {"Authorization": "Bearer t0ken"},
+                },
+                {"name": "anon", "type": "http", "url": url},
+            ]
+        )
+        tools = ExternalMcpTools(build_servers(configs, Path.cwd()), connect_timeout=10)
+        async with tools:
+            assert tools.connected == [{"name": "ok", "tools": 2}]
+            assert [item["name"] for item in tools.failed] == ["anon"]
+            result = await tools.call("mcp__ok__echo", "c1", json.dumps({"text": "hi"}))
+            assert result.output == {"result": "echo:hi"}
 
 
 @pytest.mark.parametrize(
@@ -81,6 +146,10 @@ def test_validate_servers():
         {"name": "a", "type": "http", "url": "https://user:pw@example.com/mcp"},
         {"name": "a", "type": "ftp"},
         {"name": "a", "type": "stdio", "command": "x", "shell": True},
+        {"name": "a", "type": "http", "url": "https://x.test", "headers": {"bad name": "v"}},
+        {"name": "a", "type": "http", "url": "https://x.test", "headers": {"X": "a\r\nB: c"}},
+        {"name": "a", "type": "http", "url": "https://x.test", "headers": {"Mcp-Session-Id": "1"}},
+        {"name": "a", "type": "http", "url": "https://x.test", "headers": ["Authorization"]},
     ],
 )
 def test_invalid_servers_are_rejected(server):

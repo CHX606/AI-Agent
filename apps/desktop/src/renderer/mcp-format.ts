@@ -19,6 +19,20 @@ export function parseEnv(text: string): Record<string, string> {
   return env;
 }
 
+/** 请求头每行一个 Name: Value；值里可以再有冒号。 */
+export function parseHeaders(text: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const line of text.split(/\r?\n/u)) {
+    if (!line.trim()) continue;
+    const index = line.indexOf(":");
+    const name = index > 0 ? line.slice(0, index).trim() : "";
+    if (!/^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,100}$/u.test(name)) throw new Error(`请求头格式应为 Name: Value：${line.slice(0, 40)}`);
+    if (Object.keys(headers).some((key) => key.toLowerCase() === name.toLowerCase())) throw new Error(`请求头重复：${name}`);
+    headers[name] = line.slice(index + 1).trim();
+  }
+  return headers;
+}
+
 export function describeServer(server: McpServer): string {
   return server.type === "stdio" ? [server.command ?? "", ...(server.args ?? [])].join(" ") : server.url ?? "";
 }

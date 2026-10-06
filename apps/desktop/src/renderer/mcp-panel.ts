@@ -1,7 +1,7 @@
 /** “外部工具”弹窗：配置交给主 Agent 使用的 MCP Server。 */
 import type { McpServer } from "../shared/contracts.js";
 import { errorText } from "./dom.js";
-import { describeServer, parseArgs, parseEnv } from "./mcp-format.js";
+import { describeServer, parseArgs, parseEnv, parseHeaders } from "./mcp-format.js";
 
 export async function renderMcpPanel(body: HTMLElement, report: (value: unknown, success?: boolean) => void): Promise<void> {
   let servers: McpServer[] = (await window.bitAgent.listMcpServers()).map((server) => ({ ...server }));
@@ -21,6 +21,7 @@ export async function renderMcpPanel(body: HTMLElement, report: (value: unknown,
       <div class="model-field" data-for="stdio"><label>参数（每行一个）</label><textarea name="args" rows="3" spellcheck="false" placeholder="-y&#10;@modelcontextprotocol/server-everything"></textarea></div>
       <div class="model-field" data-for="stdio"><label>环境变量（每行一个 KEY=VALUE，可选）</label><textarea name="env" rows="2" spellcheck="false" placeholder="GITHUB_TOKEN=..."></textarea><p>值由 Windows 加密保存，之后只显示变量名。</p></div>
       <div class="model-field" data-for="http" hidden><label>地址</label><input name="url" type="url" spellcheck="false" placeholder="https://example.com/mcp"></div>
+      <div class="model-field" data-for="http" hidden><label>请求头（每行一个 Name: Value，可选）</label><textarea name="headers" rows="2" spellcheck="false" placeholder="Authorization: Bearer ..."></textarea><p>用于令牌等认证信息。值由 Windows 加密保存，之后只显示请求头名称。</p></div>
       <div class="mcp-form-actions"><button type="submit" class="button-secondary">加入列表</button></div>
     </form>`;
   const footer = document.createElement("div");
@@ -50,7 +51,7 @@ export async function renderMcpPanel(body: HTMLElement, report: (value: unknown,
       const server: McpServer = kind.value === "stdio"
         ? { name, type: "stdio", command: value("command").trim(), args: parseArgs(value("args")),
           env: parseEnv(value("env")), enabled: true, auto_approve: false }
-        : { name, type: "http", url: value("url").trim(), enabled: true, auto_approve: false };
+        : { name, type: "http", url: value("url").trim(), headers: parseHeaders(value("headers")), enabled: true, auto_approve: false };
       if (server.type === "stdio" && !server.command) throw new Error("请填写要运行的命令");
       if (server.type === "http" && !server.url) throw new Error("请填写服务地址");
       servers = [...servers, server];
@@ -94,12 +95,15 @@ export async function renderMcpPanel(body: HTMLElement, report: (value: unknown,
       const target = document.createElement("code");
       target.textContent = describeServer(server);
       entry.append(header, target);
-      const keys = server.env ? Object.keys(server.env) : server.envKeys ?? [];
+      const [label, fresh, savedKeys] = server.type === "http"
+        ? ["请求头", server.headers, server.headerKeys] as const
+        : ["环境变量", server.env, server.envKeys] as const;
+      const keys = fresh ? Object.keys(fresh) : savedKeys ?? [];
       if (keys.length) {
-        const env = document.createElement("p");
-        env.className = "mcp-env";
-        env.textContent = `环境变量：${keys.join("、")}（${server.env ? "保存时加密" : "已加密保存"}）`;
-        entry.append(env);
+        const secrets = document.createElement("p");
+        secrets.className = "mcp-env";
+        secrets.textContent = `${label}：${keys.join("、")}（${fresh ? "保存时加密" : "已加密保存"}）`;
+        entry.append(secrets);
       }
       for (const [key, label] of [["enabled", "启用"], ["auto_approve", "“允许修改”模式下自动批准，不逐次询问"]] as const) {
         const toggle = document.createElement("label");

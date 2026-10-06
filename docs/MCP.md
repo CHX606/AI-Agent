@@ -99,7 +99,7 @@ result = await run_agent(
 | 类型 | 填写 | 说明 |
 | --- | --- | --- |
 | 本机命令（stdio） | 命令、参数（每行一个）、可选的环境变量（`KEY=VALUE`） | 命令在当前工作区目录下运行；环境变量的值用 Windows 系统加密保存，页面之后只显示变量名 |
-| 远程地址（HTTP） | Streamable HTTP 地址 | 远程地址必须是 HTTPS，本机地址允许 HTTP |
+| 远程地址（HTTP） | Streamable HTTP 地址、可选的请求头（每行一个 `Name: Value`，如 `Authorization: Bearer <令牌>`） | 远程地址必须是 HTTPS，本机地址允许 HTTP；请求头的值用 Windows 系统加密保存，页面之后只显示名称；带请求头的连接不跟随重定向，避免令牌被带到别的站点 |
 
 每个服务可以单独启用或停用，并可以点“测试”连接一次、列出它提供的工具（不调用工具）。保存后从下一轮任务开始生效。
 
@@ -117,7 +117,7 @@ result = await run_agent(
 开发模式没有桌面托管的运行服务时，可以在启动前设置环境变量 `BIT_AGENT_MCP_SERVERS`，值是服务列表的 JSON，例如：
 
 ```json
-[{"name": "docs", "type": "http", "url": "https://example.com/mcp"}]
+[{"name": "docs", "type": "http", "url": "https://example.com/mcp", "headers": {"Authorization": "Bearer <令牌>"}}]
 ```
 
 运行服务读取后会立即把它从自己的环境变量里移除，避免 Git、Docker 等子进程继承其中的密钥。对应代码在 `services/agent/src/bit_agent/tool_provider/external.py`。

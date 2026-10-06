@@ -104,7 +104,10 @@ export interface MemoryListResult {
   memories: LongTermMemory[];
 }
 
-/** 外部工具（MCP Server）。env 只在新填写时出现；已保存的只给出变量名 envKeys。 */
+/**
+ * 外部工具（MCP Server）。env（stdio）和 headers（http）只在新填写时出现；
+ * 已保存的只给出名字 envKeys / headerKeys。
+ */
 export interface McpServer {
   name: string;
   type: "stdio" | "http";
@@ -115,6 +118,8 @@ export interface McpServer {
   auto_approve: boolean;
   envKeys?: string[];
   env?: Record<string, string>;
+  headerKeys?: string[];
+  headers?: Record<string, string>;
 }
 
 export interface ModelTestResult {

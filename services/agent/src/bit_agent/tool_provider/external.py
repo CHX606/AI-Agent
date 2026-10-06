@@ -10,13 +10,16 @@
 
 import asyncio
 import re
-from contextlib import AsyncExitStack
+from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Self
 from urllib.parse import urlparse
 
 from mcp import StdioServerParameters
+from mcp.client.streamable_http import streamable_http_client
+from mcp.shared._httpx_utils import create_mcp_http_client
 
 from bit_agent.tool_provider.mcp import MCPToolProvider
 from bit_agent.tools.models import ToolResult
@@ -24,6 +27,18 @@ from bit_agent.tools.models import ToolResult
 PREFIX = "mcp__"
 SERVER_NAME = re.compile(r"[A-Za-z0-9_-]{1,32}")
 MAX_SERVERS = 10
+HEADER_NAME = re.compile(r"[A-Za-z0-9!#$%&'*+.^_`|~-]{1,100}")
+# 由 HTTP 客户端和 MCP 协议自己管理的请求头，用户填写会破坏连接。
+RESERVED_HEADERS = {
+    "host",
+    "content-length",
+    "content-type",
+    "accept",
+    "connection",
+    "transfer-encoding",
+    "mcp-session-id",
+    "mcp-protocol-version",
+}
 
 
 class ExternalServerConfigError(ValueError):
@@ -55,7 +70,17 @@ def validate_servers(raw: object) -> list[dict[str, Any]]:
         raise ExternalServerConfigError(f"最多配置 {MAX_SERVERS} 个外部工具服务")
     servers: list[dict[str, Any]] = []
     names: set[str] = set()
-    allowed = {"name", "type", "command", "args", "env", "url", "enabled", "auto_approve"}
+    allowed = {
+        "name",
+        "type",
+        "command",
+        "args",
+        "env",
+        "url",
+        "headers",
+        "enabled",
+        "auto_approve",
+    }
     for item in raw:
         if not isinstance(item, dict) or not set(item) <= allowed:
             raise ExternalServerConfigError("服务配置只支持 " + "、".join(sorted(allowed)))
@@ -111,11 +136,40 @@ def validate_servers(raw: object) -> list[dict[str, Any]]:
                 )
             ):
                 raise ExternalServerConfigError(f"{name}：远程地址必须是 HTTPS，本机地址允许 HTTP")
-            server["url"] = url
+            headers = item.get("headers") or {}
+            if (
+                not isinstance(headers, dict)
+                or len(headers) > 20
+                or any(
+                    not isinstance(key, str)
+                    or not HEADER_NAME.fullmatch(key)
+                    or not isinstance(value, str)
+                    or len(value) > 4000
+                    or any(char in value for char in "\r\n\0")
+                    for key, value in headers.items()
+                )
+            ):
+                raise ExternalServerConfigError(f"{name}：请求头格式不正确")
+            reserved = sorted(key for key in headers if key.casefold() in RESERVED_HEADERS)
+            if reserved:
+                raise ExternalServerConfigError(f"{name}：请求头 {reserved[0]} 由程序自动设置")
+            server.update(url=url, headers=dict(headers))
         else:
             raise ExternalServerConfigError(f"{name}：类型只能是 stdio 或 http")
         servers.append(server)
     return servers
+
+
+@asynccontextmanager
+async def http_transport(url: str, headers: dict[str, str]) -> AsyncIterator[Any]:
+    """带请求头的 Streamable HTTP 连接。
+
+    不跟随重定向：自定义请求头（如 X-API-Key）会被原样带到跳转后的地址，令牌可能泄露给别的站点。
+    """
+    async with create_mcp_http_client(headers=headers) as client:
+        client.follow_redirects = False
+        async with streamable_http_client(url, http_client=client) as streams:
+            yield streams
 
 
 def build_servers(configs: list[dict[str, Any]], cwd: Path) -> list[ExternalServer]:
@@ -131,6 +185,8 @@ def build_servers(configs: list[dict[str, Any]], cwd: Path) -> list[ExternalServ
                 env=config.get("env") or None,
                 cwd=cwd,
             )
+        elif config.get("headers"):
+            transport = http_transport(config["url"], config["headers"])
         else:
             transport = config["url"]
         servers.append(ExternalServer(config["name"], transport, config.get("auto_approve", False)))
