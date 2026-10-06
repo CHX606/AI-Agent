@@ -10,6 +10,7 @@ import { markdownFixture, verifyCopy, verifyMarkdown } from "../apps/desktop/tes
 import { verifyRewind } from "../apps/desktop/test/rewind-packaged.mjs";
 import { verifySidebarCollapse, verifySidebarResize, verifyWorkspaceOrder } from "../apps/desktop/test/workspace-sidebar-packaged.mjs";
 import { verifyTerminal } from "../apps/desktop/test/terminal-packaged.mjs";
+import { verifyBrowser } from "../apps/desktop/test/browser-packaged.mjs";
 import { evaluateMain, verifyImageInput } from "../apps/desktop/test/image-input-packaged.mjs";
 
 const executable = resolve(process.argv[2] ?? "");
@@ -668,6 +669,11 @@ try {
   const { result:terminal, shots:terminalShots } = await verifyTerminal({ command, evaluate, check, screenshot:captureScreenshot });
   for (const shot of terminalShots) writeFileSync(join(directory, shot.name), Buffer.from(shot.data, "base64"));
   console.log("TERMINAL_PASSED", terminalShots.map(shot => shot.name).join(" "));
+  const { result:browser, shots:browserShots } = await verifyBrowser({ command, evaluate, check, screenshot:captureScreenshot,
+    main:expression=>evaluateMain(mainInspectorUrl,expression) });
+  for (const shot of browserShots) writeFileSync(join(directory, shot.name), Buffer.from(shot.data, "base64"));
+  console.log("BROWSER_PASSED", browserShots.map(shot => shot.name).join(" "));
+  await command("Emulation.setDeviceMetricsOverride", { width:1280, height:820, deviceScaleFactor:1, mobile:false });
   const workspaceOrder = await verifyWorkspaceOrder(evaluate, check);
   const sidebarOrder = await verifySidebarOrder(evaluate, check);
   const imageInput = await verifyImageInput({command,evaluate,check,requests,directory,screenshot:captureScreenshot,
@@ -680,7 +686,7 @@ try {
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,
     allToolsCollapsible: true, noEmptyTextRows: true, userMessagesRightAligned: true, agentMessagesLeftAligned: true,
     messageBackgroundMatchesTheme: true, longMultilineMessagesContained: true, sidebarOrder,
-    markdownRendering, workspaceOrder, sidebarResize, sidebarCollapse, terminal, imageInput, rewind,
+    markdownRendering, workspaceOrder, sidebarResize, sidebarCollapse, terminal, browser, imageInput, rewind,
     rawDebugDataAbsentFromUi:true,
     unauthorizedGatewayRejected: true, automaticLocalGateway: true, connectionStatusDotOnly: true, explicitNewChatWorkspace: true, workspaceBindings, noGatewayConnectionSettings: true, staleGatewayAddressIgnored: true, restartAndContinue: true, stopAndSteer: true, immediateStop: true, titlebarBorder: true, offlineRepositoryIcons: true, startupComposer: true, noDuplicateProfileTheme: true, windowsExecutableIcon: { orangePixels:windowsIcon.orange, whitePixels:windowsIcon.white, size:windowsIcon.size }, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, gitCommit: true, sessionSearchRenameDelete: true, externalMcpTools: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
   }, null, 2));

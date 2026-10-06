@@ -172,6 +172,20 @@
               </svg>
             </button>
             <button
+              id="browser-toggle"
+              class="icon-button inspector-toggle terminal-toggle"
+              type="button"
+              aria-label="浏览器"
+              title="浏览器"
+              aria-expanded="false"
+              aria-controls="browser-pane"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="8.5" />
+                <path d="M3.5 12h17M12 3.5c2.4 2.3 3.5 5.2 3.5 8.5s-1.1 6.2-3.5 8.5c-2.4-2.3-3.5-5.2-3.5-8.5s1.1-6.2 3.5-8.5z" />
+              </svg>
+            </button>
+            <button
               id="inspector-toggle"
               class="icon-button inspector-toggle"
               type="button"
@@ -257,6 +271,9 @@
       </section>
 
       <!-- bit-agent:inspector -->
+
+      <!-- 内置浏览器：网页是主进程里的原生视图，对齐到 .browser-stage 的位置。 -->
+      <section id="browser-pane" class="browser-pane" aria-label="浏览器" hidden></section>
 
       <section id="repository-view" class="repository-view" aria-label="代码仓库浏览器" hidden>
         <!-- VS Code 式编辑区：打开的文件标签、路径、带行号和高亮的只读代码、底部状态栏。 -->

@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 
-import type { ColorTheme, DesktopApi, TaskEvent, TerminalExit, TerminalOutput } from "../../shared/contracts.js";
+import type { BrowserDownload, BrowserShortcut, BrowserState, ColorTheme, DesktopApi, TaskEvent, TerminalExit, TerminalOutput } from "../../shared/contracts.js";
 
 const rawTheme: unknown = ipcRenderer.sendSync("theme:get");
 const colorTheme: ColorTheme = rawTheme === "dark" ? "dark" : "light";
@@ -66,6 +66,34 @@ const api: DesktopApi = {
     const handler = (_event: Electron.IpcRendererEvent, payload: TerminalExit) => listener(payload);
     ipcRenderer.on("terminal:exit", handler);
     return () => ipcRenderer.removeListener("terminal:exit", handler);
+  },
+  getBrowserState: () => ipcRenderer.invoke("browser:state"),
+  showBrowser: (bounds, url) => ipcRenderer.invoke("browser:show", bounds, url),
+  setBrowserBounds: (bounds) => ipcRenderer.send("browser:bounds", bounds),
+  hideBrowser: (snapshot) => ipcRenderer.invoke("browser:hide", snapshot === true),
+  navigateBrowser: (url) => ipcRenderer.invoke("browser:navigate", url),
+  newBrowserTab: (url, options) => ipcRenderer.invoke("browser:new-tab", url ?? "", options ?? {}),
+  closeBrowserTab: (id) => ipcRenderer.invoke("browser:close-tab", id),
+  selectBrowserTab: (id) => ipcRenderer.invoke("browser:select-tab", id),
+  browserAction: (action) => ipcRenderer.invoke("browser:action", action),
+  downloadAction: (id, action) => ipcRenderer.invoke("browser:download-action", id, action),
+  onBrowserDownload: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: BrowserDownload) => listener(payload);
+    ipcRenderer.on("browser:download", handler);
+    return () => ipcRenderer.removeListener("browser:download", handler);
+  },
+  findInBrowser: (text, options) => ipcRenderer.invoke("browser:find", text, options ?? {}),
+  stopFindInBrowser: () => ipcRenderer.send("browser:stop-find"),
+  detectLocalServers: () => ipcRenderer.invoke("browser:local-servers"),
+  onBrowserState: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: BrowserState) => listener(payload);
+    ipcRenderer.on("browser:state", handler);
+    return () => ipcRenderer.removeListener("browser:state", handler);
+  },
+  onBrowserShortcut: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: BrowserShortcut) => listener(payload);
+    ipcRenderer.on("browser:shortcut", handler);
+    return () => ipcRenderer.removeListener("browser:shortcut", handler);
   },
 };
 

@@ -21,6 +21,7 @@ import { mountProfileMenu } from "./profile-menu";
 import { mountWorkspaceChooser } from "./workspace-chooser";
 import { mountSidebarResize } from "./sidebar-resize";
 import { mountTerminalPanel } from "./terminal/terminal-panel";
+import { mountBrowserPane } from "./browser/browser-pane";
 import { ComposerImages } from "./attachments/composer-images";
 import { hasComposerContent } from "./application/message";
 import {
@@ -116,6 +117,12 @@ app.objectiveInput.addEventListener("keydown", (event) => {
 app.cancelButton.addEventListener("click", () => void app.stopTask());
 
 app.inspectorToggle.addEventListener("click", () => {
+  // 浏览器和任务详情共用右侧一列：浏览器开着时，点这里切回任务详情。
+  if (browserPane.isOpen()) {
+    browserPane.close();
+    app.setInspectorCollapsed(false);
+    return;
+  }
   app.setInspectorCollapsed(app.shell.dataset.inspectorCollapsed !== "true");
 });
 
@@ -127,6 +134,23 @@ const terminalPanel = mountTerminalPanel({
   panel: element<HTMLElement>("#terminal-panel"),
   toggle: element<HTMLButtonElement>("#terminal-toggle"),
   workspace: () => app.activeWorkspaceRoot,
+});
+const browserPane = mountBrowserPane({
+  shell: app.shell,
+  pane: element<HTMLElement>("#browser-pane"),
+  toggle: element<HTMLButtonElement>("#browser-toggle"),
+  onShortcut: (shortcut) => {
+    if (shortcut === "toggle-sidebar") toggleSidebar();
+    else if (shortcut === "toggle-terminal" && app.activeView === "tasks") terminalPanel.toggle();
+  },
+});
+// 对话里的网页链接在内置浏览器的新标签页打开；按住 Ctrl/Shift 点击时仍交给系统浏览器。
+element<HTMLElement>("#conversation").addEventListener("click", (event) => {
+  if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+  if (!link || !/^https?:$/u.test(link.protocol)) return;
+  event.preventDefault();
+  browserPane.openInNewTab(link.href);
 });
 // Ctrl+B 收起/展开左侧栏，Ctrl+` 打开/隐藏终端，和 VS Code、Claude Code 一致。
 // 焦点在终端里时 Ctrl+B 留给 Shell。

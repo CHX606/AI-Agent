@@ -25,15 +25,17 @@ class SidebarResize {
     window.addEventListener("blur", () => this.finish(this.pointer));
     window.addEventListener("resize", () => this.refresh());
     new MutationObserver(() => this.refresh()).observe(shell,
-      { attributes: true, attributeFilter: ["data-view", "data-inspector-collapsed"] });
+      { attributes: true, attributeFilter: ["data-view", "data-inspector-collapsed", "data-browser-open"] });
     const inspector = shell.querySelector<HTMLElement>(".sidebar-right");
     if (inspector) new ResizeObserver(() => this.refresh()).observe(inspector);
     this.refresh();
   }
 
   private inspectorReserve(): number {
-    if (window.innerWidth <= 1050 || this.shell.dataset.view === "repository"
-      || this.shell.dataset.inspectorCollapsed === "true") return 0;
+    if (window.innerWidth <= 1050 || this.shell.dataset.view === "repository") return 0;
+    // 浏览器开着时右侧至少保留浏览器的最小宽度。
+    if (this.shell.dataset.browserOpen === "true") return 360;
+    if (this.shell.dataset.inspectorCollapsed === "true") return 0;
     const preferred = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--inspector-width"));
     return Number.isFinite(preferred) ? Math.min(280, preferred) : 280;
   }

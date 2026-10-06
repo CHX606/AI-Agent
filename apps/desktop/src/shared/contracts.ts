@@ -162,6 +162,56 @@ export interface TerminalExit {
   exitCode: number;
 }
 
+/** 内置浏览器在窗口里的位置（CSS 像素，相对窗口内容区）。 */
+export interface BrowserBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface BrowserTab {
+  id: string;
+  title: string;
+  /** 空字符串表示新标签页（显示起始页）。 */
+  url: string;
+  loading: boolean;
+  favicon: string | null;
+}
+
+/** 整个浏览器的状态；url 等字段描述当前标签页。 */
+export interface BrowserState {
+  tabs: BrowserTab[];
+  activeId: string | null;
+  url: string;
+  title: string;
+  loading: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  /** 缩放比例，1 为 100%。 */
+  zoom: number;
+  /** 加载失败时的说明；成功加载后清空。 */
+  error: { code: number; description: string; url: string } | null;
+}
+
+export interface BrowserDownload {
+  id: string;
+  filename: string;
+  path: string;
+  state: "progressing" | "completed" | "cancelled" | "interrupted";
+  received: number;
+  total: number;
+  /** 可执行文件（.exe、.bat 等）只提供“在文件夹中显示”，不直接打开。 */
+  executable: boolean;
+}
+
+export type BrowserAction = "back" | "forward" | "reload" | "stop" | "devtools" | "external"
+  | "zoom-in" | "zoom-out" | "zoom-reset" | "print";
+
+/** 浏览器页面里按下、需要交给应用处理的快捷键。 */
+export type BrowserShortcut = "focus-address" | "toggle-sidebar" | "toggle-terminal" | "find"
+  | "new-tab" | "close-tab" | "next-tab" | "previous-tab";
+
 export interface DesktopApi {
   reportClientError(input: { kind: "exception" | "rejection"; taskId?: string; line?: number }): Promise<string>;
   diagnosticStatus(input: { gatewayUrl?: string; taskId?: string }): Promise<Record<string, unknown>>;
@@ -218,4 +268,26 @@ export interface DesktopApi {
   closeTerminal(id: string): Promise<void>;
   onTerminalOutput(listener: (output: TerminalOutput) => void): () => void;
   onTerminalExit(listener: (exit: TerminalExit) => void): () => void;
+  /** 主进程里浏览器的当前状态（页面重新加载后用来接上已有的标签页）。 */
+  getBrowserState(): Promise<BrowserState>;
+  /** 显示内置浏览器并放到 bounds 位置；url 为空时只显示，不导航。 */
+  showBrowser(bounds: BrowserBounds, url?: string): Promise<BrowserState>;
+  setBrowserBounds(bounds: BrowserBounds): void;
+  /** 隐藏浏览器（页面保留）。snapshot 为 true 时先返回当前画面，供弹窗遮挡时显示。 */
+  hideBrowser(snapshot?: boolean): Promise<string | null>;
+  /** 在当前标签页打开；没有标签页时新建一个。 */
+  navigateBrowser(url: string): Promise<void>;
+  /** 新建标签页并切换过去；url 为空时显示起始页。lazy 为 true 时先不加载，切换过去时再加载（恢复标签页用）。 */
+  newBrowserTab(url?: string, options?: { activate?: boolean; lazy?: boolean; title?: string }): Promise<string>;
+  closeBrowserTab(id: string): Promise<void>;
+  selectBrowserTab(id: string): Promise<void>;
+  browserAction(action: BrowserAction): Promise<void>;
+  downloadAction(id: string, action: "open" | "show" | "cancel"): Promise<void>;
+  onBrowserDownload(listener: (download: BrowserDownload) => void): () => void;
+  findInBrowser(text: string, options?: { forward?: boolean; next?: boolean }): Promise<{ matches: number; active: number }>;
+  stopFindInBrowser(): void;
+  /** 探测本机常见端口上正在运行的开发服务器。 */
+  detectLocalServers(): Promise<number[]>;
+  onBrowserState(listener: (state: BrowserState) => void): () => void;
+  onBrowserShortcut(listener: (shortcut: BrowserShortcut) => void): () => void;
 }

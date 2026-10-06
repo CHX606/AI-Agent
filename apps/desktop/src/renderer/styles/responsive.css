@@ -69,6 +69,19 @@ body[data-resizing="true"] {
   .shell[data-inspector-collapsed="true"] .sidebar-right {
     display: none;
   }
+
+  .shell[data-browser-open="true"] {
+    grid-template-columns: var(--sidebar-width) minmax(460px, 1fr);
+  }
+
+  .browser-pane {
+    position: absolute;
+    z-index: 20;
+    top: 0;
+    right: 0;
+    width: min(var(--browser-width, 520px), 88vw);
+    box-shadow: var(--overlay-shadow);
+  }
 }
 
 @media (max-width: 720px) {

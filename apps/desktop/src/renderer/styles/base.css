@@ -99,6 +99,20 @@ svg {
   pointer-events: none;
 }
 
+/* 内置浏览器占用右侧一列，这时任务详情先隐藏。 */
+.shell[data-browser-open="true"] {
+  grid-template-columns: var(--sidebar-width) minmax(420px, 1fr)
+    min(var(--browser-width, 520px), calc(100vw - var(--sidebar-width) - 420px));
+}
+
+.shell[data-browser-open="true"] .sidebar-right {
+  display: none;
+}
+
+.shell[data-view="repository"] .browser-pane {
+  display: none;
+}
+
 .shell[data-view="repository"] {
   grid-template-columns: var(--sidebar-width) minmax(480px, 1fr);
 }
