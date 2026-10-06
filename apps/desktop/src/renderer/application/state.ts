@@ -33,6 +33,7 @@ function initializeEnvironment(app: RendererApp): void {
 };
   app.workspaceKey = "bit-agent.workspace-root.v1";
   app.inspectorKey = "bit-agent.inspector-collapsed.v1";
+  app.sidebarKey = "bit-agent.sidebar-collapsed.v1";
   app.reportClientError = (kind: "exception" | "rejection", line?: number) => {
   void window.bitAgent.reportClientError({ kind, ...(line === undefined ? {} : { line }) })
     .then(message => { app.showError(new Error(message)); }).catch(() => {});
@@ -71,6 +72,7 @@ function initializeInputs(app: RendererApp): void {
   app.emptyState = element<HTMLElement>("#empty-state");
   app.errorActions = element<HTMLElement>("#error-actions");
   app.inspectorToggle = element<HTMLButtonElement>("#inspector-toggle");
+  app.sidebarToggle = element<HTMLButtonElement>("#sidebar-toggle");
   app.inspectorClose = element<HTMLButtonElement>("#inspector-close");
   app.inspectorResize = element<HTMLElement>("#inspector-resize");
   app.themeToggle = element<HTMLButtonElement>("#theme-toggle");

@@ -59,6 +59,16 @@ function setInspectorCollapsed(app: RendererApp, collapsed: boolean): void {
   localStorage.setItem(app.inspectorKey, String(collapsed));
 }
 
+/** 收起后只留最左侧的图标栏，和窄窗口时一样。 */
+function setSidebarCollapsed(app: RendererApp, collapsed: boolean): void {
+  const label = collapsed ? "展开侧边栏" : "收起侧边栏";
+  app.shell.dataset.sidebarCollapsed = String(collapsed);
+  app.sidebarToggle.setAttribute("aria-expanded", String(!collapsed));
+  app.sidebarToggle.setAttribute("aria-label", label);
+  app.sidebarToggle.title = `${label}（Ctrl+B）`;
+  localStorage.setItem(app.sidebarKey, String(collapsed));
+}
+
 async function browseWorkspace(app: RendererApp): Promise<void> {
   const path = await window.bitAgent.selectWorkspace();
   if (path) app.setWorkspace(path);
@@ -70,6 +80,7 @@ export function createShellController(app: RendererApp) {
     setWorkspace: setWorkspace.bind(null, app),
     setActiveView: setActiveView.bind(null, app),
     setInspectorCollapsed: setInspectorCollapsed.bind(null, app),
+    setSidebarCollapsed: setSidebarCollapsed.bind(null, app),
     browseWorkspace: browseWorkspace.bind(null, app),
   };
 }

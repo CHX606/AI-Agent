@@ -80,7 +80,8 @@ body[data-resizing="true"] {
     display: none;
   }
 
-  .sidebar-resize {
+  .sidebar-resize,
+  .sidebar-toggle {
     display: none;
   }
 

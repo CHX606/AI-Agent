@@ -15,10 +15,24 @@
       <span class="window-titlebar-mark" aria-hidden="true">B</span>
       <span class="window-titlebar-title">Bit Agent</span>
     </header>
-    <main class="shell" data-inspector-collapsed="false">
+    <main class="shell" data-inspector-collapsed="false" data-sidebar-collapsed="false">
       <aside class="sidebar-left">
         <nav class="app-rail" aria-label="Bit Agent 导航">
           <div class="rail-brand" aria-hidden="true">B</div>
+          <button
+            id="sidebar-toggle"
+            class="rail-item sidebar-toggle"
+            type="button"
+            aria-label="收起侧边栏"
+            title="收起侧边栏（Ctrl+B）"
+            aria-expanded="true"
+            aria-controls="task-sidebar-pane repository-sidebar-pane"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3.75" y="4.75" width="16.5" height="14.5" rx="3" />
+              <path d="M9.75 4.75v14.5" />
+            </svg>
+          </button>
           <div class="rail-divider"></div>
           <button
             id="nav-tasks"

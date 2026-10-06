@@ -158,6 +158,82 @@ async function restoreSidebar(command, evaluate, check, before) {
   assert.equal(await evaluate("innerHeight"), before.height, "验收没有恢复起始窗口高度");
 }
 
+const sidebarKey = "bit-agent.sidebar-collapsed.v1";
+const collapseState = `(() => {
+  const shell=document.querySelector('.shell'), toggle=document.querySelector('#sidebar-toggle');
+  const visible=element=>Boolean(element && element.getClientRects().length);
+  const center=document.querySelector(shell.dataset.view==='repository'?'#repository-view':'.main-center').getBoundingClientRect();
+  return { collapsed:shell.dataset.sidebarCollapsed, expanded:toggle.getAttribute('aria-expanded'), label:toggle.getAttribute('aria-label'),
+    toggleVisible:visible(toggle), width:document.querySelector('.sidebar-left').getBoundingClientRect().width,
+    paneVisible:visible(document.querySelector(shell.dataset.view==='repository'?'#repository-sidebar-pane':'#task-sidebar-pane')),
+    handleVisible:visible(document.querySelector('#sidebar-resize')), centerLeft:center.left, centerWidth:center.width,
+    overflow:document.body.scrollWidth-innerWidth, stored:localStorage.getItem(${JSON.stringify(sidebarKey)}), view:shell.dataset.view };
+})()`;
+
+/** 左侧栏收起/展开：按钮、Ctrl+B、两个视图共用、刷新后保留；结束时恢复原状态。 */
+export async function verifySidebarCollapse(command, evaluate, check, screenshot) {
+  const before = await evaluate(`({ stored:localStorage.getItem(${JSON.stringify(sidebarKey)}),
+    collapsed:document.querySelector('.shell').dataset.sidebarCollapsed, view:document.querySelector('.shell').dataset.view })`);
+  const shots = [];
+  const capture = async (name) => {
+    await new Promise(resolve => setTimeout(resolve, 150));
+    shots.push({ name, data:(await screenshot()).data });
+  };
+  const ctrlB = async () => {
+    for (const type of ["keyDown", "keyUp"]) {
+      await command("Input.dispatchKeyEvent", { type, key:"b", code:"KeyB", windowsVirtualKeyCode:66, modifiers:2 });
+    }
+  };
+  const state = () => evaluate(collapseState);
+  let result, failure;
+  try {
+    await command("Emulation.setDeviceMetricsOverride", { width:1280, height:820, deviceScaleFactor:1, mobile:false });
+    await evaluate(`document.querySelector('#nav-tasks').click();
+      if(document.querySelector('.shell').dataset.sidebarCollapsed==='true')document.querySelector('#sidebar-toggle').click()`);
+    const open = await state();
+    assert(open.toggleVisible && open.paneVisible && open.expanded === "true" && open.width > 150, `展开状态不正确：${JSON.stringify(open)}`);
+    await evaluate("document.querySelector('#sidebar-toggle').click()");
+    const closed = await state();
+    assert(closed.collapsed === "true" && closed.expanded === "false" && closed.label === "展开侧边栏" && closed.stored === "true",
+      `点击后没有收起：${JSON.stringify(closed)}`);
+    assert(Math.abs(closed.width - 48) <= 1 && !closed.paneVisible && !closed.handleVisible && closed.toggleVisible,
+      `收起后应只剩图标栏：${JSON.stringify(closed)}`);
+    assert(closed.centerWidth > open.centerWidth + 100 && closed.overflow <= 1, `收起后对话区没有变宽：${JSON.stringify({ open, closed })}`);
+    await capture("sidebar-collapsed-tasks.png");
+    await evaluate("document.querySelector('#nav-repository').click()");
+    const repository = await state();
+    assert(repository.view === "repository" && Math.abs(repository.width - 48) <= 1 && !repository.paneVisible && repository.toggleVisible,
+      `代码仓库页没有沿用收起状态：${JSON.stringify(repository)}`);
+    await capture("sidebar-collapsed-repository.png");
+    await ctrlB();
+    await check(async () => (await state()).collapsed === "false", "Ctrl+B 没有展开侧栏");
+    const reopened = await state();
+    assert(reopened.paneVisible && reopened.width > 150 && reopened.stored === "false", `Ctrl+B 展开后状态不正确：${JSON.stringify(reopened)}`);
+    await ctrlB();
+    await check(async () => (await state()).collapsed === "true", "Ctrl+B 没有收起侧栏");
+    await reloadDocument(evaluate, check, "侧栏收起刷新验收");
+    const reloaded = await state();
+    assert(reloaded.collapsed === "true" && Math.abs(reloaded.width - 48) <= 1 && !reloaded.paneVisible, `刷新后没有保留收起状态：${JSON.stringify(reloaded)}`);
+    result = { button:true, ctrlB:true, sharedAcrossViews:true, persistedAfterReload:true,
+      collapsedWidth:closed.width, centerGain:closed.centerWidth - open.centerWidth };
+  } catch (error) {
+    failure = error;
+  }
+  try {
+    await evaluate(`(() => {
+      if(document.querySelector('.shell').dataset.sidebarCollapsed!==${JSON.stringify(before.collapsed)})document.querySelector('#sidebar-toggle').click();
+      if(${JSON.stringify(before.stored)}===null)localStorage.removeItem(${JSON.stringify(sidebarKey)});
+      document.querySelector(${JSON.stringify(before.view === "repository" ? "#nav-repository" : "#nav-tasks")}).click();
+    })()`);
+    assert.equal(await evaluate(`localStorage.getItem(${JSON.stringify(sidebarKey)})`), before.stored, "验收没有恢复侧栏收起设置");
+  } catch (error) {
+    if (failure) throw new AggregateError([failure, error], "侧栏收起验收失败，且恢复原状态也失败");
+    throw error;
+  }
+  if (failure) throw failure;
+  return { ...result, shots };
+}
+
 export async function verifySidebarResize(command, evaluate, check) {
   await settledSidebar(evaluate, check);
   const before = await evaluate(`({ viewport:innerWidth, height:innerHeight, scale:devicePixelRatio,

@@ -23,6 +23,7 @@ export interface RendererApp {
   statusLabels: Record<string, string>;
   workspaceKey: "bit-agent.workspace-root.v1";
   inspectorKey: "bit-agent.inspector-collapsed.v1";
+  sidebarKey: "bit-agent.sidebar-collapsed.v1";
   reportClientError: (kind: "exception" | "rejection", line?: number | undefined) => void;
   initialTheme: ColorTheme;
   shell: HTMLElement;
@@ -55,6 +56,7 @@ export interface RendererApp {
   emptyState: HTMLElement;
   errorActions: HTMLElement;
   inspectorToggle: HTMLButtonElement;
+  sidebarToggle: HTMLButtonElement;
   inspectorClose: HTMLButtonElement;
   inspectorResize: HTMLElement;
   themeToggle: HTMLButtonElement;
@@ -155,6 +157,7 @@ export interface RendererApp {
   restoreTask: (entry: TaskHistoryEntry) => Promise<void>;
   resetTask: () => void;
   setInspectorCollapsed: (collapsed: boolean) => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   browseWorkspace: () => Promise<void>;
   cyclePermission: () => void;
 }

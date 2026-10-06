@@ -120,6 +120,16 @@ app.inspectorToggle.addEventListener("click", () => {
 
 app.inspectorClose.addEventListener("click", () => app.setInspectorCollapsed(true));
 
+const toggleSidebar = () => app.setSidebarCollapsed(app.shell.dataset.sidebarCollapsed !== "true");
+app.sidebarToggle.addEventListener("click", toggleSidebar);
+// Ctrl+B 收起/展开左侧栏，和 VS Code、Claude Code 一致。
+document.addEventListener("keydown", (event) => {
+  if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== "b") return;
+  if (event.isComposing || document.querySelector("dialog[open]")) return;
+  event.preventDefault();
+  toggleSidebar();
+});
+
 app.themeToggle.addEventListener("click", () => {
   app.setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 });
@@ -182,6 +192,8 @@ element<HTMLButtonElement>("#more-sessions").addEventListener("click", () => {
 app.setWorkspace("");
 
 app.setInspectorCollapsed(localStorage.getItem(app.inspectorKey) === "true");
+
+app.setSidebarCollapsed(localStorage.getItem(app.sidebarKey) === "true");
 
 app.setTheme(app.initialTheme, false);
 

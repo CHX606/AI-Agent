@@ -9,6 +9,25 @@
   background: var(--bg-sidebar);
 }
 
+/* 收起左侧栏：只留图标栏，和窄窗口时的样子一致。 */
+.shell[data-sidebar-collapsed="true"] {
+  --sidebar-width: var(--rail-width);
+}
+
+.shell[data-sidebar-collapsed="true"] .sidebar-left {
+  grid-template-columns: var(--rail-width);
+  border-right: 0;
+}
+
+.shell[data-sidebar-collapsed="true"] .sidebar-pane,
+.shell[data-sidebar-collapsed="true"] .sidebar-resize {
+  display: none;
+}
+
+.sidebar-toggle[aria-expanded="false"] {
+  color: var(--text-soft);
+}
+
 .sidebar-resize {
   position: absolute;
   z-index: 12;
