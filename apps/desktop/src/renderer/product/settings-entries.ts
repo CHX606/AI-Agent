@@ -19,7 +19,7 @@ function settingButton(id: string, html: string): HTMLButtonElement {
 
 async function showTools(dialog: ProductDialog): Promise<void> {
   const body = dialog.open("mcp", "外部工具", "通过 MCP 给 Agent 增加工具，只对主 Agent 开放。");
-  try { await renderMcpPanel(body, (value, success) => dialog.feedback(body, value, success)); }
+  try { await renderMcpPanel(body); }
   catch (error) { dialog.feedback(body, error); }
 }
 

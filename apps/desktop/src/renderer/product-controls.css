@@ -119,21 +119,77 @@
 .git-branch-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--text-soft); font-size: 12px; }
 .git-branch { width: auto; min-width: 200px; flex: 1; padding: 6px 10px; }
 .mcp-list { display: grid; gap: 10px; margin-bottom: 14px; }
-.mcp-entry { display: grid; gap: 6px; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
-.mcp-entry header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mcp-entry header .change-actions { margin-left: auto; }
-.mcp-entry code { overflow-wrap: anywhere; color: var(--text-soft); font-size: 12px; }
-.mcp-type { padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-size: 11px; }
-.mcp-env, .mcp-toggle { color: var(--text-soft); font-size: 12px; }
-.mcp-toggle { display: flex; align-items: center; gap: 6px; }
-.mcp-test-result { overflow-wrap: anywhere; font-size: 12px; }
-.mcp-test-result[data-ok="true"] { color: var(--green); }
-.mcp-test-result[data-ok="false"] { color: var(--red); }
-.mcp-add { margin-bottom: 16px; }
-.mcp-add summary { width: fit-content; cursor: pointer; font-size: 13px; font-weight: 600; }
-.mcp-form { display: grid; gap: 14px; margin-top: 12px; }
+.mcp-entry { display: grid; gap: 8px; min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-panel); }
+.mcp-entry header { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mcp-entry header strong { overflow: hidden; font-size: 13.5px; text-overflow: ellipsis; white-space: nowrap; }
+.mcp-entry header .change-actions { flex: none; margin-left: auto; }
+.mcp-entry header .change-actions button { min-height: 27px; padding: 0 10px; font-size: 12px; }
+.mcp-entry[data-enabled="false"] :is(header strong, .mcp-type, .mcp-target, .mcp-env) { opacity: .5; }
+.mcp-target { overflow: hidden; color: var(--text-soft); font: 12px/1.5 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.mcp-type { flex: none; padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-size: 11px; }
+.mcp-env { color: var(--text-soft); font-size: 12px; }
+.mcp-switches { display: flex; flex-wrap: wrap; gap: 6px 22px; padding-top: 8px; border-top: 1px solid var(--border); }
+.mcp-switch { display: inline-flex; align-items: center; gap: 8px; color: var(--text-soft); font-size: 12px; cursor: pointer; }
+.mcp-switch small { color: var(--text-faint); font-size: 11px; }
+/* 开关：复选框外观换成小号滑块，颜色跟随主题色。 */
+.mcp-switch input {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-main);
+  appearance: none;
+  cursor: pointer;
+  transition: background-color .15s, border-color .15s;
+}
+.mcp-switch input::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  content: "";
+  transition: transform .15s, background-color .15s;
+}
+.mcp-switch input:checked { border-color: var(--brand); background: var(--brand); }
+.mcp-switch input:checked::after { background: #fff; transform: translateX(12px); }
+.mcp-switch input:focus-visible { outline: none; box-shadow: var(--field-focus-ring); }
+.mcp-test-result { padding: 7px 10px; border-radius: 6px; overflow-wrap: anywhere; font-size: 12px; line-height: 1.65; }
+.mcp-test-result[data-ok="true"] { background: var(--green-soft); color: var(--green); }
+.mcp-test-result[data-ok="false"] { background: var(--red-soft); color: var(--red); }
+.mcp-add { margin-bottom: 18px; }
+.mcp-add > summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+.mcp-add > summary::-webkit-details-marker { display: none; }
+.mcp-add > summary::before { content: "+"; font-size: 16px; font-weight: 400; line-height: 1; }
+.mcp-add > summary:hover { border-color: var(--brand); color: var(--text); }
+.mcp-add[open] > summary { display: none; }
+.mcp-form { display: grid; gap: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-panel); }
+.mcp-form-title { font-size: 14px; font-weight: 650; }
 .mcp-form textarea { width: 100%; padding: 8px 11px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--bg-main); color: var(--text); font: 12px/1.6 var(--font-mono); resize: vertical; }
-.mcp-form-actions { display: flex; justify-content: flex-end; }
+.mcp-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* 保存栏常驻在弹窗底部，滚到哪里都能看到未保存提示和保存按钮。 */
+.mcp-footer { position: sticky; bottom: -22px; margin: 0 -24px -22px; padding: 14px 24px; background: var(--bg-main); }
+.mcp-footer > span[data-kind="dirty"] { color: var(--brand); }
+.mcp-footer > span[data-kind="success"] { color: var(--green); }
+.mcp-footer > span[data-kind="error"] { color: var(--red); }
 .model-field p { margin-top: 6px; color: var(--text-muted); font-size: 12px; line-height: 1.65; }
 .model-key-state { padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-size: 10px; font-weight: 400; }
 .model-settings-footer { display: flex; align-items: center; gap: 8px; padding-top: 18px; border-top: 1px solid var(--border); }
@@ -178,5 +234,6 @@ body[data-busy="true"] .composer-context:has(.permission-control) .composer-tip 
   .product-dialog-body { padding: 16px; }
   .model-settings-footer { flex-wrap: wrap; justify-content: flex-end; }
   .model-settings-footer > span { flex-basis: 100%; }
+  .mcp-footer { bottom: -16px; margin: 0 -16px -16px; padding: 12px 16px; }
   .change-actions { flex-wrap: wrap; }
 }

@@ -3,8 +3,11 @@ import type { McpServer } from "../shared/contracts.js";
 import { errorText } from "./dom.js";
 import { describeServer, parseArgs, parseEnv, parseHeaders } from "./mcp-format.js";
 
-export async function renderMcpPanel(body: HTMLElement, report: (value: unknown, success?: boolean) => void): Promise<void> {
+const SAVED_HINT = "保存后从下一轮任务开始生效。";
+
+export async function renderMcpPanel(body: HTMLElement): Promise<void> {
   let servers: McpServer[] = (await window.bitAgent.listMcpServers()).map((server) => ({ ...server }));
+  let dirty = false;
   const intro = document.createElement("div");
   intro.className = "review-explanation";
   intro.textContent = "把 MCP Server 提供的工具交给主 Agent 使用，例如查文档、读 Issue。这些工具在本机或远程服务上运行，不在隔离环境中，"
@@ -15,6 +18,7 @@ export async function renderMcpPanel(body: HTMLElement, report: (value: unknown,
   add.className = "mcp-add";
   add.innerHTML = `<summary>添加服务</summary>
     <form class="mcp-form">
+      <h3 class="mcp-form-title">添加服务</h3>
       <div class="model-field"><label>名称</label><input name="name" required maxlength="32" pattern="[A-Za-z0-9_\\-]+" placeholder="例如 docs，只能用字母、数字、_ 和 -"></div>
       <div class="model-field"><label>类型</label><select name="type"><option value="stdio">本机命令（stdio）</option><option value="http">远程地址（HTTP）</option></select></div>
       <div class="model-field" data-for="stdio"><label>命令</label><input name="command" spellcheck="false" placeholder="例如 npx"></div>
@@ -22,12 +26,12 @@ export async function renderMcpPanel(body: HTMLElement, report: (value: unknown,
       <div class="model-field" data-for="stdio"><label>环境变量（每行一个 KEY=VALUE，可选）</label><textarea name="env" rows="2" spellcheck="false" placeholder="GITHUB_TOKEN=..."></textarea><p>值由 Windows 加密保存，之后只显示变量名。</p></div>
       <div class="model-field" data-for="http" hidden><label>地址</label><input name="url" type="url" spellcheck="false" placeholder="https://example.com/mcp"></div>
       <div class="model-field" data-for="http" hidden><label>请求头（每行一个 Name: Value，可选）</label><textarea name="headers" rows="2" spellcheck="false" placeholder="Authorization: Bearer ..."></textarea><p>用于令牌等认证信息。值由 Windows 加密保存，之后只显示请求头名称。</p></div>
-      <div class="mcp-form-actions"><button type="submit" class="button-secondary">加入列表</button></div>
+      <div class="mcp-form-actions"><button type="button" class="button-secondary" data-action="cancel">取消</button><button type="submit" class="button-secondary">加入列表</button></div>
     </form>`;
   const footer = document.createElement("div");
-  footer.className = "model-settings-footer";
+  footer.className = "model-settings-footer mcp-footer";
   const hint = document.createElement("span");
-  hint.textContent = "保存后从下一轮任务开始生效。";
+  hint.setAttribute("role", "status");
   const save = document.createElement("button");
   save.type = "button";
   save.className = "button-primary";
@@ -37,10 +41,37 @@ export async function renderMcpPanel(body: HTMLElement, report: (value: unknown,
   body.setAttribute("aria-busy", "false");
   body.append(intro, list, add, footer);
 
+  /** 提示放在常驻底栏里，弹窗滚动到哪里都看得到。 */
+  function status(text: string, kind?: "success" | "error" | "dirty"): void {
+    hint.textContent = text;
+    if (kind) hint.dataset.kind = kind;
+    else delete hint.dataset.kind;
+  }
+  function changed(text: string): void {
+    dirty = true;
+    save.disabled = false;
+    status(text, "dirty");
+  }
+  function refreshFooter(): void {
+    save.disabled = !dirty;
+    if (dirty) status("有未保存的更改。", "dirty");
+    else status(SAVED_HINT);
+  }
+
   const form = add.querySelector<HTMLFormElement>("form")!;
   const kind = form.elements.namedItem("type") as HTMLSelectElement;
   kind.addEventListener("change", () => {
     for (const field of form.querySelectorAll<HTMLElement>("[data-for]")) field.hidden = field.dataset.for !== kind.value;
+  });
+  add.addEventListener("toggle", () => {
+    if (!add.open) return;
+    form.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    (form.elements.namedItem("name") as HTMLInputElement).focus({ preventScroll: true });
+  });
+  form.querySelector<HTMLButtonElement>("[data-action=cancel]")!.addEventListener("click", () => {
+    form.reset();
+    kind.dispatchEvent(new Event("change"));
+    add.open = false;
   });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -59,9 +90,32 @@ export async function renderMcpPanel(body: HTMLElement, report: (value: unknown,
       kind.dispatchEvent(new Event("change"));
       add.open = false;
       draw();
-      report("已加入列表，点“保存”后生效。", true);
-    } catch (error) { report(errorText(error)); }
+      changed(`已加入 ${name}，点“保存”后生效。`);
+    } catch (error) { status(errorText(error), "error"); }
   });
+
+  function toggle(server: McpServer, key: "enabled" | "auto_approve", label: string, note: string, entry: HTMLElement): HTMLLabelElement {
+    const wrapper = document.createElement("label");
+    wrapper.className = "mcp-switch";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.setAttribute("role", "switch");
+    box.checked = server[key];
+    box.addEventListener("change", () => {
+      server[key] = box.checked;
+      if (key === "enabled") entry.dataset.enabled = String(box.checked);
+      changed("有未保存的更改。");
+    });
+    const text = document.createElement("span");
+    text.textContent = label;
+    wrapper.append(box, text);
+    if (note) {
+      const small = document.createElement("small");
+      small.textContent = note;
+      wrapper.append(small);
+    }
+    return wrapper;
+  }
 
   function draw(): void {
     list.replaceChildren();
@@ -74,6 +128,7 @@ export async function renderMcpPanel(body: HTMLElement, report: (value: unknown,
     for (const server of servers) {
       const entry = document.createElement("article");
       entry.className = "mcp-entry";
+      entry.dataset.enabled = String(server.enabled);
       const header = document.createElement("header");
       const title = document.createElement("strong");
       title.textContent = server.name;
@@ -93,7 +148,9 @@ export async function renderMcpPanel(body: HTMLElement, report: (value: unknown,
       actions.append(test, remove);
       header.append(title, type, actions);
       const target = document.createElement("code");
+      target.className = "mcp-target";
       target.textContent = describeServer(server);
+      target.title = target.textContent;
       entry.append(header, target);
       const [label, fresh, savedKeys] = server.type === "http"
         ? ["请求头", server.headers, server.headerKeys] as const
@@ -105,16 +162,13 @@ export async function renderMcpPanel(body: HTMLElement, report: (value: unknown,
         secrets.textContent = `${label}：${keys.join("、")}（${fresh ? "保存时加密" : "已加密保存"}）`;
         entry.append(secrets);
       }
-      for (const [key, label] of [["enabled", "启用"], ["auto_approve", "“允许修改”模式下自动批准，不逐次询问"]] as const) {
-        const toggle = document.createElement("label");
-        toggle.className = "mcp-toggle";
-        const box = document.createElement("input");
-        box.type = "checkbox";
-        box.checked = server[key];
-        box.addEventListener("change", () => { server[key] = box.checked; });
-        toggle.append(box, document.createTextNode(label));
-        entry.append(toggle);
-      }
+      const switches = document.createElement("div");
+      switches.className = "mcp-switches";
+      switches.append(
+        toggle(server, "enabled", "启用", "", entry),
+        toggle(server, "auto_approve", "自动批准", "仅在“允许修改”模式下生效", entry),
+      );
+      entry.append(switches);
       const result = document.createElement("p");
       result.className = "mcp-test-result";
       result.hidden = true;
@@ -129,13 +183,13 @@ export async function renderMcpPanel(body: HTMLElement, report: (value: unknown,
             ? `${outcome.message}：${outcome.tools.slice(0, 30).join("、")}${outcome.tools.length > 30 ? "…" : ""}`
             : `连接失败：${outcome.message}`;
           result.hidden = false;
-        } catch (error) { report(errorText(error)); }
+        } catch (error) { status(errorText(error), "error"); }
         finally { test.disabled = false; test.textContent = "测试"; }
       });
       remove.addEventListener("click", () => {
         servers = servers.filter((item) => item !== server);
         draw();
-        report("已从列表移除，点“保存”后生效。", true);
+        changed(`已移除 ${server.name}，点“保存”后生效。`);
       });
       list.append(entry);
     }
@@ -146,10 +200,15 @@ export async function renderMcpPanel(body: HTMLElement, report: (value: unknown,
     save.textContent = "正在保存…";
     try {
       servers = (await window.bitAgent.saveMcpServers(servers)).map((server) => ({ ...server }));
+      dirty = false;
       draw();
-      report("外部工具已保存，将用于下一轮任务。", true);
-    } catch (error) { report(errorText(error)); }
-    finally { save.disabled = false; save.textContent = "保存"; }
+      refreshFooter();
+      status("已保存，将用于下一轮任务。", "success");
+    } catch (error) {
+      save.disabled = false;
+      status(errorText(error), "error");
+    } finally { save.textContent = "保存"; }
   });
   draw();
+  refreshFooter();
 }
