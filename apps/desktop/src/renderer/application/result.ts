@@ -2,7 +2,7 @@ import { isLocallyStopped } from "./stop";
 import { object } from "../dom";
 import {
 estimateCost,formatTokens,summarizeResult,
-usageDescription,type TokenPrices,type UsageSummary,
+usageDescription,type ResultSummary,type TokenPrices,type UsageSummary,
 } from "../presentation";
 import type { RendererApp } from "./context";
 
@@ -20,7 +20,6 @@ function resetMetrics(app: RendererApp): void {
   app.usageCard.removeAttribute("title");
   app.files.textContent = "无文件修改";
   app.files.classList.add("empty-copy");
-  app.rawResult.textContent = "等待任务完成…";
 }
 
 function showConversation(app: RendererApp, objective: string): void {
@@ -58,8 +57,7 @@ function renderVerificationState(app: RendererApp, element: HTMLElement, passed:
   element.dataset.passed = String(passed);
 }
 
-function renderResult(app: RendererApp, payload: Record<string, unknown>): void {
-  const summary = summarizeResult(payload);
+function finishResultStream(app: RendererApp, payload: Record<string, unknown>, summary: ResultSummary): string {
   const result = object(payload.result);
   const finalAnswer = typeof result?.final_answer === "string" && result.final_answer ? result.final_answer : null;
   const status = typeof payload.status === "string" ? payload.status : "";
@@ -71,7 +69,10 @@ function renderResult(app: RendererApp, payload: Record<string, unknown>): void 
     cancelled: status === "CANCELLED" || isLocallyStopped(app),
     failure: finalAnswer ? null : failure ?? (status === "FAILED" ? summary.answer : null),
   });
-  app.renderChangedFiles(summary.changedFiles);
+  return status;
+}
+
+function renderResultVerification(app: RendererApp, summary: ResultSummary): void {
   app.renderVerificationState(app.tests, summary.testsPassed);
   app.renderVerificationState(app.lint, summary.qualityPassed);
   app.renderVerificationState(app.acceptance, summary.acceptanceStatus === "NOT_RUN" || summary.acceptanceStatus === "NOT_VERIFIED"
@@ -84,6 +85,9 @@ function renderResult(app: RendererApp, payload: Record<string, unknown>): void 
       if (unverified) target.dataset.passed = "unverified";
     }
   }
+}
+
+function renderVerificationNotes(app: RendererApp, summary: ResultSummary): void {
   app.verificationNotes.replaceChildren(...summary.verificationNotes.map((note) => {
     const item = document.createElement("li");
     item.textContent = note;
@@ -91,9 +95,16 @@ function renderResult(app: RendererApp, payload: Record<string, unknown>): void 
   }));
   app.verificationNotes.dataset.kind = summary.verificationStatus === "UNVERIFIED" ? "unverified" : "info";
   app.verificationNotes.hidden = summary.verificationNotes.length === 0;
+}
+
+function renderResult(app: RendererApp, payload: Record<string, unknown>): void {
+  const summary = summarizeResult(payload);
+  const status = finishResultStream(app, payload, summary);
+  app.renderChangedFiles(summary.changedFiles);
+  renderResultVerification(app, summary);
+  renderVerificationNotes(app, summary);
   app.rounds.textContent = summary.rounds === null ? "-" : String(summary.rounds);
   void app.renderUsage(summary.usage);
-  app.rawResult.textContent = JSON.stringify(payload, null, 2);
   app.errorActions.hidden = status !== "FAILED";
   app.updateActiveHistory({ finalAnswer: summary.answer });
 }

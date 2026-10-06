@@ -184,29 +184,4 @@ body[data-resizing="true"] .inspector-resize::after {
   white-space: nowrap;
 }
 
-.raw-section > summary {
-  border-bottom: 0;
-  cursor: pointer;
-  list-style: none;
-}
-
-.raw-section > summary::-webkit-details-marker {
-  display: none;
-}
-
-.raw-section[open] > summary {
-  border-bottom: 1px solid var(--border);
-}
-
-.raw {
-  max-height: 420px;
-  overflow: auto;
-  padding: 10px;
-  background: var(--bg-code);
-  color: var(--text-soft);
-  font: 11px/1.65 var(--font-mono);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 /* Repository browser */

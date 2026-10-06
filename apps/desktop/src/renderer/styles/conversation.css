@@ -170,21 +170,6 @@
   font-size: 12px;
 }
 
-.event-payload {
-  max-height: 240px;
-  margin: 7px 0 0;
-  padding: 9px 10px;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--bg-main);
-  color: var(--text-soft);
-  font: 12px/1.65 var(--font-mono);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.event-payload > span,
 .code-block code > span {
   display: block;
   min-height: 1.5em;

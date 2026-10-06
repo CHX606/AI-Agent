@@ -1,0 +1,168 @@
+/* 工具分组（参照 Claude Code）：一行摘要，点开是带边框的逐条列表。 */
+
+/* 分组本身也是 .stream-item（两列网格）；这里要压过它，否则摘要会挤进 18px 的圆点列。 */
+.stream-item.stream-group {
+  display: block;
+}
+
+.group-head {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-muted);
+  font: 13px/1.7 var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+
+.group-head > .stream-bullet {
+  width: 18px;
+  flex: none;
+  color: var(--text-faint);
+  line-height: 22px;
+}
+
+.group-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-outcome {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-outcome:empty {
+  display: none;
+}
+
+.stream-group:not([data-kind="read"]) > .group-head > .group-summary {
+  color: var(--text);
+}
+
+.stream-group[data-tone="success"]:not([data-kind="read"]) > .group-head > .stream-bullet {
+  color: var(--green);
+}
+
+.stream-group[data-tone="error"] > .group-head > .stream-bullet,
+.stream-group[data-tone="error"] > .group-head > .group-outcome {
+  color: var(--red);
+}
+
+.stream-group[data-tone="warning"] > .group-head > .stream-bullet,
+.stream-group[data-tone="warning"] > .group-head > .group-outcome,
+.group-failures[data-tone="warning"] {
+  color: var(--amber);
+}
+
+.group-head:hover .group-summary,
+.group-head:focus-visible .group-summary {
+  color: var(--text);
+}
+
+.group-failures {
+  flex: none;
+  color: var(--red);
+}
+
+.group-failures:empty {
+  display: none;
+}
+
+.group-chevron {
+  flex: none;
+  color: var(--text-faint);
+  transition: transform 0.15s ease;
+}
+
+.group-head[aria-expanded="true"] .group-chevron {
+  transform: rotate(90deg);
+}
+
+.stream-group[data-tone="running"] > .group-head > .stream-bullet {
+  color: var(--text-muted);
+  animation: stream-blink 1s steps(2, start) infinite;
+}
+
+/* 展开后的列表：每条一行“动作 目标 · 结果”，点一行再看详情。 */
+.group-list {
+  margin: 6px 0 2px 24px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  list-style: none;
+}
+
+.group-list > .stream-tool {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+  padding: 5px 12px;
+}
+
+.group-list > .stream-tool + .stream-tool {
+  border-top: 1px solid var(--border);
+}
+
+.group-list > .stream-tool > .tool-head {
+  display: flex;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  gap: 6px;
+}
+
+.group-list > .stream-tool > .tool-head > .stream-bullet {
+  width: 12px;
+  flex: none;
+  font-size: 8px;
+}
+
+.group-list > .stream-tool > .tool-result {
+  min-width: 0;
+  flex: 1 1 120px;
+  padding-left: 0;
+}
+
+.group-list > .stream-tool > .tool-result > .tool-branch {
+  display: none;
+}
+
+.group-list > .stream-tool > .tool-detail,
+.group-list > .stream-tool > .tool-diff,
+.group-list > .stream-tool > .tool-children {
+  margin-left: 18px;
+  flex-basis: 100%;
+}
+
+/* 子 Agent 的步骤挂在上级工具行（独立验收、调查）下面。 */
+.tool-children {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0 24px;
+  padding: 0;
+  list-style: none;
+}
+
+.tool-children:empty {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-group[data-tone="running"] > .group-head > .stream-bullet { animation: none; }
+  .group-chevron { transition: none; }
+}
