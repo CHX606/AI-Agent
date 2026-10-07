@@ -659,11 +659,9 @@ try {
   await evaluate("document.querySelector('.history-actions [data-action=delete]').click()");
   await check(() => evaluate("document.querySelectorAll('.history-item').length===1 && document.querySelector('.history-item').title==='PACKAGE-CANARY-73'"), "界面删除对话没有生效");
   assert.deepEqual((await evaluate(listSessions)).sessions.map((session) => session.title), ["PACKAGE-CANARY-73"]);
-  // 重新打开多轮对话：更早的轮次只显示回答，点“查看执行过程”回放那一轮。
+  // 重新打开多轮对话：更早的轮次不用点开，自动回放出执行过程。
   await evaluate("document.querySelector('.history-item').click()");
-  await check(() => evaluate("document.body.dataset.busy==='false' && document.querySelectorAll('.saved-turn .turn-expand').length>0"), "旧轮次没有“查看执行过程”入口");
-  await evaluate("document.querySelector('.saved-turn .turn-expand').click()");
-  await check(() => evaluate("(()=>{const t=document.querySelector('.saved-turn');return !t.querySelector('.turn-expand') && Boolean(t.querySelector('.stream-text')?.textContent.includes('PACKAGED_STREAM_START'));})()"), "点开后没有回放旧轮次的过程");
+  await check(() => evaluate("(()=>{const t=document.querySelector('.saved-turn');return document.body.dataset.busy==='false' && Boolean(t) && !document.querySelector('.turn-expand') && Boolean(t.querySelector('.stream-text')?.textContent.includes('PACKAGED_STREAM_START'));})()"), "旧轮次没有自动回放执行过程");
   await verifyConversationLayout(evaluate, { history:true, update:true, longText:true });
   await evaluate("document.querySelector('#objective').value='PACKAGE-MARKDOWN';document.querySelector('#objective').dispatchEvent(new Event('input'));document.querySelector('#run').click()");
   await check(() => evaluate("document.body.dataset.busy==='false' && document.querySelector('#current-turn').textContent.includes('PACKAGED_STREAM_END')"), "Markdown 验收回复没有完成");

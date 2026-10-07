@@ -14,7 +14,7 @@ export interface PreviousTurnOptions {
   expand?(taskId: string, stream: HTMLOListElement, answer: string): Promise<void>;
 }
 
-export function clearPreviousTurns(): void { previousTurns.replaceChildren(); }
+export function clearPreviousTurns(): void { generation += 1; previousTurns.replaceChildren(); }
 
 function userMessage(turn: Record<string, unknown>): HTMLElement {
   const user = document.createElement("div");
@@ -61,20 +61,19 @@ function appendUpdates(section: HTMLElement, value: unknown, kept: Node[] = []):
   }
 }
 
-function appendExpansion(section: HTMLElement, stream: HTMLOListElement, taskId: string,
-  answer: string, options: PreviousTurnOptions): void {
+// 更早的轮次直接显示执行过程（和 Claude Code 一样，不用点开）：按顺序逐轮回放，回放好之前先显示回答。
+// 切换对话后旧的回放队列作废。
+let generation = 0;
+let replaying: Promise<void> = Promise.resolve();
+
+function replayProcess(stream: HTMLOListElement, taskId: string, answer: string, options: PreviousTurnOptions): void {
   if (!taskId || !options.expand) return;
-  const expand = document.createElement("button");
-  expand.type = "button";
-  expand.className = "turn-expand";
-  expand.textContent = "查看执行过程";
-  expand.addEventListener("click", async () => {
-    expand.disabled = true;
-    expand.textContent = "正在载入…";
-    try { await options.expand!(taskId, stream, answer); expand.remove(); }
-    catch { expand.disabled = false; expand.textContent = "载入失败，点此重试"; }
+  const current = generation;
+  replaying = replaying.then(async () => {
+    if (current !== generation) return;
+    // 回放失败时保留原来的回答。
+    await options.expand!(taskId, stream, answer).catch(() => undefined);
   });
-  section.append(expand);
 }
 
 function appendAnswer(stream: HTMLOListElement, answer: string): void {
@@ -115,12 +114,12 @@ function renderTurn(turn: Record<string, unknown>, options: PreviousTurnOptions)
   const answer = typeof turn.final_answer === "string" ? turn.final_answer : "";
   if (kept?.length) stream.append(...kept);
   else {
-    appendExpansion(section, stream, taskId, answer, options);
     appendStatus(stream, turn.status);
     appendAnswer(stream, answer);
+    replayProcess(stream, taskId, answer, options);
   }
   section.append(stream);
-  // 点开“查看执行过程”后文字会变，复制时按当时显示的内容读取。
+  // 回放执行过程后文字会变，复制时按当时显示的内容读取。
   if (replyMarkdown(stream) || answer) section.append(replyActions(stream));
   previousTurns.append(section);
 }

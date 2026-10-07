@@ -30,10 +30,6 @@
   min-width: 0;
 }
 
-.stream-item[data-nested="true"] {
-  margin-left: 16px;
-}
-
 .stream-text .markdown-body {
   min-width: 0;
   color: var(--text-soft);

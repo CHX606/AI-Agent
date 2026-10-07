@@ -1,9 +1,4 @@
 .agent-mode-controls { display: flex; flex: none; align-items: center; }
-/* 更早的轮次默认只显示回答，点开回放执行过程。 */
-.turn-expand { display: block; margin: 8px 0 0 24px; padding: 0; border: 0; background: none; color: var(--text-muted); font-size: 12px; cursor: pointer; }
-.turn-expand::before { content: "▸ "; }
-.turn-expand:hover:not(:disabled) { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
-.turn-expand:disabled { cursor: default; }
 #previous-turns:empty { display: none; }
 @media (max-width: 700px) { .composer-toolbar, .composer-context { flex-wrap: wrap; gap: 8px; } }
 
