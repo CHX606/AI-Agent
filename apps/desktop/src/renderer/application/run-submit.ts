@@ -12,6 +12,7 @@ function prepareSubmission(app: RendererApp, message: ComposerMessage) {
   const generation = ++app.viewGeneration;
   app.submitting = true;
   app.activeImages = message.images;
+  app.activeAttachments = message.attachments ?? [];
   const title = previousSession
     ? app.history.find(item => item.sessionId === previousSession && item.gatewayUrl === app.gatewayUrl)?.objective
     : undefined;
@@ -47,6 +48,7 @@ async function createAndWatch(app: RendererApp, message: ComposerMessage, worksp
   const task = await window.bitAgent.createTask({
     gatewayUrl: app.gatewayUrl, objective: message.text, workspaceRoot,
     ...(message.images.length ? { images: message.images } : {}),
+    ...(message.attachments?.length ? { attachments: message.attachments } : {}),
     ...(context.previousSession ? { sessionId: context.previousSession } : {}),
     multiAgentMode: context.mode, permissionMode: permissionMode(), ...(app.modelMenu?.selection() ?? {}),
   });

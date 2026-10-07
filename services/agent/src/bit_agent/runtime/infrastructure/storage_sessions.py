@@ -81,6 +81,7 @@ class SessionRecords:
                     or "",
                     "intent_updates": self._task_inputs(task),
                     **({"images": task["images"]} if task.get("images") else {}),
+                    **({"attachments": task["attachments"]} if task.get("attachments") else {}),
                 }
             )
         return {

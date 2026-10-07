@@ -7,20 +7,20 @@
   --inspector-width: 320px;
   --rail-width: 48px;
   --sidebar-width: 260px;
-  --bg-app: #f2f2ef;
-  --bg-main: #ffffff;
-  --bg-sidebar: #f5f5f2;
-  --bg-rail: #eeeeea;
-  --bg-panel: #f7f7f5;
-  --bg-hover: #ecece8;
-  --bg-pressed: #e5e5df;
-  --bg-code: #f3f3f0;
-  --border: #dfdfda;
-  --border-strong: #cecec7;
-  --text: #262624;
-  --text-soft: #555550;
-  --text-muted: #7b7b74;
-  --text-faint: #a5a59e;
+  --bg-app: #eceef0;
+  --bg-main: #eceef0;
+  --bg-sidebar: #e6e8eb;
+  --bg-rail: #dfe3e7;
+  --bg-panel: #f3f4f6;
+  --bg-hover: #e0e5e9;
+  --bg-pressed: #d7dde3;
+  --bg-code: #e2e7ec;
+  --border: #d2d8df;
+  --border-strong: #bfc7d0;
+  --text: #272c32;
+  --text-soft: #505a65;
+  --text-muted: #5b6672;
+  --text-faint: #86929e;
   --brand: #d96c2f;
   --brand-hover: #c45d27;
   --brand-soft: #fff1e8;
@@ -32,13 +32,13 @@
   --amber-soft: #fdf4e3;
   --blue: #3973b8;
   --blue-soft: #edf4fb;
-  --selection: #f2d5c4;
+  --selection: #d5e1ec;
   --focus-ring: rgb(217 108 47 / 35%);
   --surface-shadow: 0 1px 1px rgb(30 30 28 / 3%);
   --active-shadow: inset 2px 0 var(--brand), 0 1px 1px rgb(20 20 18 / 4%);
   --field-focus-border: #c7a48f;
   --field-focus-ring: 0 0 0 2px rgb(217 108 47 / 10%);
-  --composer-fade: #ffffff;
+  --composer-fade: #eceef0;
   --composer-focus-border: #c9a18a;
   --composer-focus-shadow: 0 10px 36px rgb(35 35 32 / 9%),
     0 0 0 2px rgb(217 108 47 / 8%);
@@ -61,8 +61,8 @@
   --diff-add-text: #267c2c;
   --diff-remove-bg: #ffebe8;
   --diff-remove-text: #a63d38;
-  --scroll-thumb: #c8c8c1;
-  --scroll-thumb-hover: #aaa9a2;
+  --scroll-thumb: #b5bfc9;
+  --scroll-thumb-hover: #929eab;
   --status-ring: rgb(61 145 64 / 30%);
   --overlay-shadow: -10px 0 30px rgb(35 35 32 / 10%);
   --font-sans: "MiSans", "Noto Sans SC", "Microsoft YaHei UI",
@@ -70,8 +70,8 @@
   --font-mono: "Cascadia Code", "SFMono-Regular", "Segoe UI Mono", Consolas,
     "Microsoft YaHei UI", monospace;
   --shadow-composer: 0 8px 30px rgb(35 35 32 / 8%), 0 1px 2px rgb(35 35 32 / 8%);
-  /* 自绘标题栏的高度；页面主体占剩下的高度。 */
-  --titlebar-height: 32px;
+  /* 系统窗口按钮不随页面缩小，标题栏至少留出其实际高度。 */
+  --titlebar-height: max(32px, env(titlebar-area-height, 32px));
   --app-height: calc(100vh - var(--titlebar-height));
 }
 

@@ -92,7 +92,6 @@ const api: DesktopApi = {
   },
   findInBrowser: (text, options) => ipcRenderer.invoke("browser:find", text, options ?? {}),
   stopFindInBrowser: () => ipcRenderer.send("browser:stop-find"),
-  detectLocalServers: () => ipcRenderer.invoke("browser:local-servers"),
   onBrowserState: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: BrowserState) => listener(payload);
     ipcRenderer.on("browser:state", handler);

@@ -4,12 +4,13 @@
   height: 30px;
   flex: none;
   place-items: center;
-  border: 1px solid transparent;
-  border-radius: 7px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-soft);
 }
-.image-upload svg { width: 17px; height: 17px; }
+.image-upload svg { width: 20px; height: 20px; stroke-width: 1.8; }
 .image-upload:hover:not(:disabled) { border-color: var(--border); background: var(--bg-panel); color: var(--text); }
 .composer-images { padding: 12px 14px 0; }
 .composer-image-list, .message-images { display: flex; max-width: 100%; flex-wrap: wrap; gap: 8px; }
@@ -44,3 +45,26 @@
 .image-preview-level { min-width: 48px; font-size: 12px; font-variant-numeric: tabular-nums; text-align: center; }
 .image-preview-toolbar .image-preview-fit { margin-left: 2px; border-left: 1px solid rgb(255 255 255 / 18%); border-radius: 0 6px 6px 0; }
 .message-image[data-unavailable="true"] { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-main); }
+.attachment-card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-main);
+}
+
+.attachment-file-icon { display: grid; flex: none; width: 25px; height: 30px; place-items: center; color: var(--text-muted); }
+.attachment-file-icon svg { width: 22px; height: 22px; }
+.attachment-file-copy { display: grid; flex: 1; gap: 3px; min-width: 0; }
+.attachment-file-copy strong { overflow: hidden; color: var(--text-soft); font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-file-copy > span { overflow: hidden; color: var(--text-muted); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.composer-attachment { width: min(240px, 100%); }
+.attachment-remove { display: grid; flex: none; width: 22px; height: 22px; padding: 0; place-items: center; border-radius: 5px; background: transparent; color: var(--text-muted); }
+.attachment-remove:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+.message-attachments { display: flex; flex-wrap: wrap; gap: 7px; max-width: 100%; }
+.message-attachments .attachment-card { width: min(280px, 100%); }
+.turn-user:has(> .message-attachments), .stream-user:has(> .message-attachments) { flex-direction: column; gap: 8px; }

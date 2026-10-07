@@ -20,8 +20,8 @@ import { mountProductControls } from "./product-controls";
 import { mountProfileMenu } from "./profile-menu";
 import { mountWorkspaceChooser } from "./workspace-chooser";
 import { mountSidebarResize } from "./sidebar-resize";
-import { mountTerminalPanel } from "./terminal/terminal-panel";
-import { mountBrowserPane } from "./browser/browser-pane";
+import { mountToolPanels } from "./application/tool-panels";
+import { mountDesktopZoom } from "./zoom/zoom-controls";
 import { ComposerImages } from "./attachments/composer-images";
 import { hasComposerContent } from "./application/message";
 import {
@@ -86,7 +86,9 @@ app.steerChoice.addEventListener("click", (event) => {
 
 app.retryButton.addEventListener("click", () => {
   app.objectiveInput.value = app.activeObjective || app.objectiveInput.value;
-  if (app.activeImages.length) app.composerImages?.set(app.activeImages);
+  if (app.activeImages.length || app.activeAttachments.length) {
+    app.composerImages?.set(app.activeImages, app.activeAttachments);
+  }
   void app.runAgent();
 });
 
@@ -118,8 +120,9 @@ app.cancelButton.addEventListener("click", () => void app.stopTask());
 
 app.inspectorToggle.addEventListener("click", () => {
   // 浏览器和任务详情共用右侧一列：浏览器开着时，点这里切回任务详情。
-  if (browserPane.isOpen()) {
+  if (browserPane.isOpen() || (terminalPanel.isOpen() && app.shell.dataset.terminalPosition === "right")) {
     browserPane.close();
+    if (app.shell.dataset.terminalPosition === "right") terminalPanel.close();
     app.setInspectorCollapsed(false);
     return;
   }
@@ -130,33 +133,8 @@ app.inspectorClose.addEventListener("click", () => app.setInspectorCollapsed(tru
 
 const toggleSidebar = () => app.setSidebarCollapsed(app.shell.dataset.sidebarCollapsed !== "true");
 app.sidebarToggle.addEventListener("click", toggleSidebar);
-const terminalPanel = mountTerminalPanel({
-  panel: element<HTMLElement>("#terminal-panel"),
-  toggle: element<HTMLButtonElement>("#terminal-toggle"),
-  homes: { tasks: element<HTMLElement>(".main-center"), repository: element<HTMLElement>("#repository-view") },
-  shell: app.shell,
-  workspace: () => app.activeWorkspaceRoot,
-  openUrl: (url) => browserPane.openInNewTab(url),
-  // 把终端内容作为代码块放进输入框，用户补一句话就能让 Agent 看。
-  quote: (text) => {
-    if (app.activeView !== "tasks") app.setActiveView("tasks");
-    const input = app.objectiveInput;
-    const block = `\n\`\`\`\n${text}\n\`\`\`\n`;
-    const start = input.selectionStart ?? input.value.length;
-    input.setRangeText(block, start, input.selectionEnd ?? start, "end");
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.focus();
-  },
-});
-const browserPane = mountBrowserPane({
-  shell: app.shell,
-  pane: element<HTMLElement>("#browser-pane"),
-  toggle: element<HTMLButtonElement>("#browser-toggle"),
-  onShortcut: (shortcut) => {
-    if (shortcut === "toggle-sidebar") toggleSidebar();
-    else if (shortcut === "toggle-terminal") terminalPanel.toggle();
-  },
-});
+const { terminalPanel, browserPane } = mountToolPanels(app, toggleSidebar);
+mountDesktopZoom(app.showError);
 // 对话区滚动条的实际宽度（随系统、缩放而变）：输入框区域右边多留同样宽度，两者居中对齐。
 const conversation = element<HTMLElement>("#conversation");
 const measureScrollbar = () => {
@@ -174,30 +152,6 @@ conversation.addEventListener("click", (event) => {
 });
 // Ctrl+B 收起/展开左侧栏，Ctrl+` 打开/隐藏终端，和 VS Code、Claude Code 一致。
 // 焦点在终端里时 Ctrl+B 留给 Shell。
-// Ctrl+= / Ctrl+- / Ctrl+0、Ctrl+滚轮：缩放整个应用界面（和 Claude Code 一样，重启后保留）。
-// 焦点在内置浏览器的网页里时由网页自己缩放（主进程处理），不会走到这里。
-const zoomAction = (event: KeyboardEvent): "in" | "out" | "reset" | null => {
-  if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing) return null;
-  if (event.key === "=" || event.key === "+" || event.code === "NumpadAdd") return "in";
-  if (event.key === "-" || event.key === "_" || event.code === "NumpadSubtract") return "out";
-  if (!event.shiftKey && (event.key === "0" || event.code === "Numpad0")) return "reset";
-  return null;
-};
-document.addEventListener("keydown", (event) => {
-  const zoom = zoomAction(event);
-  if (!zoom) return;
-  event.preventDefault();
-  void window.bitAgent.setZoom(zoom);
-});
-let wheelZoomAt = 0;
-document.addEventListener("wheel", (event) => {
-  if (!event.ctrlKey || event.deltaY === 0) return;
-  event.preventDefault();
-  // 触控板一次滑动会连发很多滚轮事件，间隔太短的只算一次。
-  if (event.timeStamp - wheelZoomAt < 120) return;
-  wheelZoomAt = event.timeStamp;
-  void window.bitAgent.setZoom(event.deltaY < 0 ? "in" : "out");
-}, { passive: false });
 document.addEventListener("keydown", (event) => {
   if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return;
   if (event.isComposing || document.querySelector("dialog[open]")) return;

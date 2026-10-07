@@ -115,6 +115,7 @@ class TaskRunConfiguration:
             else None,
             "memory_project_id": project_id_for(root),
             **({"images": task["images"]} if task.get("images") else {}),
+            **({"attachments": task["attachments"]} if task.get("attachments") else {}),
         }
 
     async def _task_run_options(self, task, control):

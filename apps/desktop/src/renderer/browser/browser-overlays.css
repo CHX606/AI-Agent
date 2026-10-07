@@ -1,0 +1,131 @@
+/* 地址建议：浮在网页区域上方（这时原生视图会换成截图让开）。 */
+.browser-suggestions {
+  position: absolute;
+  z-index: 5;
+  top: 74px;
+  right: 120px;
+  left: 96px;
+  max-height: 320px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-main);
+  box-shadow: var(--overlay-shadow);
+  list-style: none;
+}
+
+.browser-suggestion {
+  display: grid;
+  gap: 1px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.browser-suggestion[aria-selected="true"] {
+  background: var(--bg-hover);
+}
+
+.browser-suggestion strong,
+.browser-suggestion span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-suggestion strong {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.browser-suggestion[data-kind="bookmark"] strong::before {
+  margin-right: 5px;
+  color: var(--brand);
+  content: "★";
+}
+
+.browser-suggestion span {
+  color: var(--text-muted);
+  font: 11px var(--font-mono);
+}
+
+/* 网页的权限或登录请求。 */
+.browser-prompt {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  font-size: 12.5px;
+}
+
+.browser-prompt p {
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+
+.browser-prompt-actions,
+.browser-prompt-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.browser-prompt-fields input {
+  flex: 1 1 120px;
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--bg-main);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.browser-prompt-fields input:focus {
+  border-color: var(--field-focus-border);
+  outline: none;
+  box-shadow: var(--field-focus-ring);
+}
+
+.browser-prompt button {
+  min-height: 30px;
+}
+
+.browser-find {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sidebar);
+}
+
+.browser-find input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-main);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.browser-find input:focus {
+  border-color: var(--field-focus-border);
+  outline: none;
+  box-shadow: var(--field-focus-ring);
+}
+
+.browser-find-count {
+  flex: none;
+  min-width: 44px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  text-align: right;
+}

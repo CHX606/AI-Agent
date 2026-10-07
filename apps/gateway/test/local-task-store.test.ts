@@ -93,3 +93,23 @@ test("RPC permits the exact byte limit and rejects the next byte", async () => {
     expect(runtime.requests).toHaveLength(written);
   } finally { runtime.exit(); await runtime.store.close(); }
 });
+
+
+test("RPC preserves ordinary attachment-only and mixed inputs without rewriting file bodies", async () => {
+  const runtime = await localRuntime();
+  const attachment = { name:"notes.txt", mime_type:"text/plain", data_url:"data:text/plain;base64,aGVsbG8=" };
+  const image = { name:"test.png", mime_type:"image/png" as const, data_url:"data:image/png;base64,iVBORw0KGgo=" };
+  try {
+    await runtime.store.createTask({ objective:"", workspace_root:"D:/project", attachments:[attachment] });
+    await runtime.store.createTask({ objective:"", workspace_root:"D:/project", images:[image], attachments:[attachment] });
+    const interactions:TaskInteractionBody[] = [
+      { action:"supplement", attachments:[attachment] }, { action:"replace", attachments:[attachment] },
+      { action:"answer", question_id:"q", attachments:[attachment] },
+    ];
+    for (const input of interactions) await runtime.store.interactTask("task", input);
+    const requests = runtime.requests as { params:{ input?:{ attachments?:unknown[]; images?:unknown[] } } }[];
+    expect(requests.slice(1).every(request => JSON.stringify(request.params.input?.attachments) === JSON.stringify([attachment]))).toBe(true);
+    expect(requests[1]?.params.input).not.toHaveProperty("images");
+    expect(requests[2]?.params.input?.images).toEqual([image]);
+  } finally { runtime.exit(); await runtime.store.close(); }
+});

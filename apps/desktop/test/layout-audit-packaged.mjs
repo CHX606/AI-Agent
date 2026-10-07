@@ -1,3 +1,5 @@
+import { setTerminalPosition } from "./terminal-packaged.mjs";
+
 /**
  * 界面错位/重叠检查：在终端、浏览器、代码仓库页、收起侧栏等组合下，
  * 找出互相重叠的控件、超出窗口的控件、被父容器截掉的控件，并截图留档。
@@ -6,11 +8,12 @@
 // 在页面里运行：返回问题列表。弹窗、下拉菜单本来就盖在别的内容上，不算。
 export const AUDIT = String.raw`(() => {
   const selector = 'button, input:not([type=hidden]), select, textarea, [role=tab], .status-badge, .task-title, .terminal-cwd,'
-    + ' .browser-tab-title, .terminal-tab > span, .section-label, .history-item, .workspace-group-header, .editor-tab, .mcp-type';
+    + ' .browser-tab-title, .terminal-tab > span, .section-label, .history-item, .workspace-group-header, .editor-tab, .mcp-type, .product-dialog-header h2, .product-dialog-header p';
   // 弹窗、菜单本来就盖在别的内容上，不检查。
-  const overlay = 'dialog, .choice-popover, #profile-menu, .browser-suggestions, .xterm, .browser-snapshot';
+  const overlay = '.choice-popover, .browser-suggestions, .xterm, .browser-snapshot';
+  const activeOverlay = document.querySelector('dialog[open]') ?? document.querySelector('#profile-menu:not([hidden])');
   const visible = (element) => {
-    if (element.closest(overlay) || element.closest('[hidden]')) return false;
+    if (element.closest(overlay) || element.closest('[hidden]') || (activeOverlay && !activeOverlay.contains(element))) return false;
     const rect = element.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) return false;
     for (let node = element; node && node !== document.body; node = node.parentElement) {
@@ -44,7 +47,7 @@ export const AUDIT = String.raw`(() => {
   const titlebar = document.querySelector('.window-titlebar')?.getBoundingClientRect().bottom ?? 0;
   // 浮动面板（窄窗口时的浏览器、任务详情）有意盖住下面的内容：被盖住的部分看不见，从可见区域里扣掉。
   // 面板都贴着右边，所以只需要把被盖住的控件右边界收到面板左边。
-  const panels = [...document.querySelectorAll('.browser-pane, .sidebar-right')]
+  const panels = [...document.querySelectorAll('.tools-pane, .sidebar-right')]
     .filter((panel) => getComputedStyle(panel).position === 'absolute' && visible(panel))
     .map((panel) => ({ panel, box: panel.getBoundingClientRect() }));
   const uncover = (item) => {
@@ -70,16 +73,26 @@ export const AUDIT = String.raw`(() => {
       if (shared > 6) issues.push({ kind: 'overlap', a: name(a.element), b: name(b.element), area: Math.round(shared) });
     }
   }
+  if (!activeOverlay) {
+    const terminal=document.querySelector('#terminal-panel'), browser=document.querySelector('#browser-pane');
+    if (terminal && visible(terminal)) {
+      const padding=parseFloat(getComputedStyle(terminal.querySelector('.terminal-host')).paddingLeft);
+      if (padding > 8) issues.push({ kind:'terminal-left-inset', padding });
+      if (browser && visible(browser)) {
+        const shared=area(intersect(terminal.getBoundingClientRect(),browser.getBoundingClientRect()));
+        if (shared > 1) issues.push({ kind:'terminal-browser-overlap', area:Math.round(shared) });
+      }
+    }
+  }
   return issues;
 })()`;
 
 const click = (selector) => `document.querySelector(${JSON.stringify(selector)})?.click()`;
 
-/** 组合各种状态，返回每种状态下的问题；截图写进 shots。 */
+/** 两个终端位置、主题、宽度和缩放的真实控件几何检查及截图。 */
 export async function auditLayouts({ command, evaluate, check, main }) {
   const results = [];
   const shots = [];
-  // 只为留档：直接截窗口画面，不做主题取色校验（窄窗口时浏览器面板会盖住校验取色的位置）。
   const shoot = async (name) => {
     await new Promise((resolve) => setTimeout(resolve, 400));
     const data = await main(`(async () => {
@@ -93,7 +106,10 @@ export async function auditLayouts({ command, evaluate, check, main }) {
     shots.push({ name, data });
   };
   const state = (expression) => evaluate(`(() => { const shell=document.querySelector('.shell'); ${expression} })()`);
+  const closeOverlays = () => evaluate(`document.querySelector('dialog[open]')?.querySelector('[aria-label="关闭弹窗"]')?.click();
+    if(!document.querySelector('#profile-menu').hidden)document.querySelector('#profile-button').click()`);
   const ensure = async ({ view = "tasks", terminal = false, browser = false, sidebarCollapsed = false, inspector = false }) => {
+    await closeOverlays();
     await evaluate(click(view === "tasks" ? "#nav-tasks" : "#nav-repository"));
     if ((await state("return shell.dataset.inspectorCollapsed==='false'")) !== inspector) {
       await evaluate(inspector ? "document.querySelector('.shell').dataset.view==='tasks' && document.querySelector('.shell').dataset.browserOpen!=='true' ? document.querySelector('#inspector-toggle').click() : null"
@@ -108,58 +124,76 @@ export async function auditLayouts({ command, evaluate, check, main }) {
         : click("#browser-pane [data-action=close]"));
     }
   };
+  const longLabels = () => evaluate(`document.querySelectorAll('#terminal-panel .terminal-tab > span').forEach((label,index)=>{
+    label.dataset.auditOriginal ??= label.textContent; label.textContent=(index+1)+'. Very long PowerShell terminal title for narrow layout checks'; });
+    document.querySelectorAll('#browser-pane .browser-tab-title').forEach((label,index)=>{
+      label.textContent=(index+1)+'. Very long browser title for narrow layout checks'; })`);
+  const capture = async (combo, position, width, theme) => {
+    await ensure(combo);
+    await longLabels();
+    if (combo.find) await evaluate("document.querySelector('#terminal-panel [data-action=find]').click()");
+    if (combo.profile || combo.settings) await evaluate(click("#profile-button"));
+    if (combo.settings) {
+      await evaluate(click("#terminal-settings"));
+      await check(() => evaluate("Boolean(document.querySelector('dialog[open] select[name=terminalPosition]'))"), "布局检查：终端设置没有打开");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const comboName = position === "right" && combo.name === "tasks-inspector-terminal" ? "tasks-inspector-to-terminal" : combo.name;
+    results.push({ combo:comboName, position, width, theme, issues:await evaluate(AUDIT) });
+    await shoot(`audit-${position}-${comboName}-${theme}-${width}.png`);
+    await closeOverlays();
+    if (combo.find) await evaluate("document.querySelector('#terminal-panel .terminal-find input').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
+  };
 
-  // 准备：浏览器开 3 个只显示起始页的标签（不加载网页，截图能看到面板），标题很长的情况用终端多标签覆盖。
   await evaluate(click("#nav-tasks"));
-  await ensure({ browser: true, terminal: true });
+  await ensure({ browser:true, terminal:true });
   for (let index = 0; index < 2; index += 1) await evaluate(click("#browser-pane .browser-new-tab"));
   await evaluate(click("#terminal-panel [data-action=new]"));
   await evaluate(click("#terminal-panel [data-action=new]"));
   await check(() => evaluate("document.querySelectorAll('#terminal-panel .terminal-tab').length===3"), "布局检查：终端标签没有建好");
 
   const combos = [
-    { name: "tasks-terminal-browser", view: "tasks", terminal: true, browser: true },
-    { name: "tasks-terminal-browser-find", view: "tasks", terminal: true, browser: true, find: true },
-    { name: "tasks-collapsed-terminal-browser", view: "tasks", terminal: true, browser: true, sidebarCollapsed: true },
-    { name: "repository-terminal-browser", view: "repository", terminal: true, browser: true },
-    { name: "repository-terminal", view: "repository", terminal: true, browser: false },
-    { name: "tasks-terminal", view: "tasks", terminal: true, browser: false },
-    { name: "tasks-inspector-terminal", view: "tasks", terminal: true, browser: false, inspector: true },
+    { name:"tasks-terminal-browser", view:"tasks", terminal:true, browser:true },
+    { name:"tasks-terminal-browser-find", view:"tasks", terminal:true, browser:true, find:true },
+    { name:"tasks-collapsed-terminal-browser", view:"tasks", terminal:true, browser:true, sidebarCollapsed:true },
+    { name:"repository-terminal-browser", view:"repository", terminal:true, browser:true },
+    { name:"repository-terminal", view:"repository", terminal:true, browser:false },
+    { name:"tasks-terminal", view:"tasks", terminal:true, browser:false },
+    { name:"tasks-inspector-terminal", view:"tasks", terminal:true, browser:false, inspector:true },
+    { name:"profile-terminal-browser", view:"tasks", terminal:true, browser:true, profile:true },
+    { name:"terminal-settings-browser", view:"tasks", terminal:true, browser:true, settings:true },
   ];
-  for (const width of [1280, 920]) {
-    const height = width === 920 ? 680 : 820;
-    await command("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
-    for (const theme of ["light", "dark"]) {
-      await evaluate(`if(document.documentElement.dataset.theme!==${JSON.stringify(theme)})document.querySelector('#theme-toggle').click()`);
-      for (const combo of combos) {
-        await ensure(combo);
-        if (combo.find) await evaluate("document.querySelector('#terminal-panel [data-action=find]').click()");
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        const issues = await evaluate(AUDIT);
-        results.push({ combo: combo.name, width, theme, issues });
-        await shoot(`audit-${combo.name}-${theme}-${width}.png`);
-        if (combo.find) await evaluate("document.querySelector('#terminal-panel .terminal-find input').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
+  for (const position of ["right", "bottom"]) {
+    await setTerminalPosition(evaluate, check, position);
+    for (const width of [1280, 920]) {
+      await command("Emulation.setDeviceMetricsOverride", { width, height:width === 920 ? 680 : 820, deviceScaleFactor:1, mobile:false });
+      for (const theme of ["light", "dark"]) {
+        await evaluate(`if(document.documentElement.dataset.theme!==${JSON.stringify(theme)})document.querySelector('#theme-toggle').click()`);
+        for (const combo of combos) await capture(combo, position, width, theme);
       }
     }
   }
-  // 应用界面放大到 125%：等于窗口变窄，几种常用组合再检查一遍。
-  await command("Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false });
   await evaluate("if(document.documentElement.dataset.theme!=='light')document.querySelector('#theme-toggle').click()");
   await evaluate("window.bitAgent.setZoom('in').then(() => window.bitAgent.setZoom('in'))");
-  for (const combo of combos.filter((item) => ["tasks-terminal-browser", "repository-terminal-browser", "tasks-inspector-terminal"].includes(item.name))) {
-    await ensure(combo);
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    results.push({ combo: combo.name, width: 1280, theme: "light-zoom-125", issues: await evaluate(AUDIT) });
-    await shoot(`audit-${combo.name}-zoom125-1280.png`);
+  for (const position of ["right", "bottom"]) {
+    await setTerminalPosition(evaluate, check, position);
+    for (const width of [1280, 920]) {
+      await command("Emulation.setDeviceMetricsOverride", { width, height:width === 920 ? 680 : 820, deviceScaleFactor:1, mobile:false });
+      for (const combo of combos.filter(item => ["tasks-terminal-browser", "repository-terminal-browser", "terminal-settings-browser"].includes(item.name))) {
+        await capture(combo, position, width, "light-zoom-125");
+      }
+    }
   }
   await evaluate("window.bitAgent.setZoom('reset')");
 
-  // 收拾：关掉多余的终端和浏览器标签，恢复默认状态。
-  await command("Emulation.setDeviceMetricsOverride", { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false });
-  await ensure({ view: "tasks", terminal: true, browser: true, sidebarCollapsed: false });
+  await command("Emulation.setDeviceMetricsOverride", { width:1280, height:820, deviceScaleFactor:1, mobile:false });
+  await setTerminalPosition(evaluate, check, "right");
+  await ensure({ view:"tasks", terminal:true, browser:true, sidebarCollapsed:false });
   await evaluate(`document.querySelectorAll('#browser-pane .browser-tab .browser-tab-close').forEach(button=>button.click());
-    [...document.querySelectorAll('#terminal-panel .terminal-tab-close')].slice(1).forEach(button=>button.click())`);
-  await ensure({ view: "tasks", terminal: false, browser: false, sidebarCollapsed: false, inspector: true });
+    [...document.querySelectorAll('#terminal-panel .terminal-tab-close')].slice(1).forEach(button=>button.click());
+    document.querySelectorAll('#terminal-panel [data-audit-original]').forEach(label=>{
+      label.textContent=label.dataset.auditOriginal; delete label.dataset.auditOriginal; })`);
+  await ensure({ view:"tasks", terminal:false, browser:false, sidebarCollapsed:false, inspector:true });
   await evaluate("if(document.documentElement.dataset.theme!=='light')document.querySelector('#theme-toggle').click()");
   return { results, shots };
 }

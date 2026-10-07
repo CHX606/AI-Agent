@@ -3,20 +3,29 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from bit_agent.images import image_metadata, validate_images
+from bit_agent.attachments import validate_attachments, validate_upload_limits
+from bit_agent.images import validate_images
 from bit_agent.runtime.domain.clock import accepted_at
 from bit_agent.runtime.domain.errors import InteractionError
 
 
-def message_input(input: dict[str, Any], label: str) -> tuple[str, list[dict[str, str]]]:
+def message_input(
+    input: dict[str, Any], label: str
+) -> tuple[str, list[dict[str, str]], list[dict[str, str]]]:
     try:
         images = validate_images(input.get("images"))
+        attachments = validate_attachments(input.get("attachments"))
+        validate_upload_limits(images, attachments)
     except ValueError as exc:
         raise InteractionError(str(exc), 400) from exc
     text = input.get("text", "")
-    if not isinstance(text, str) or len(text.strip()) > 4000 or not (text.strip() or images):
-        raise InteractionError(f"{label}需要 1 到 4000 个字符，或至少一张图片", 400)
-    return text.strip(), images
+    if (
+        not isinstance(text, str)
+        or len(text.strip()) > 4000
+        or not (text.strip() or images or attachments)
+    ):
+        raise InteractionError(f"{label}需要 1 到 4000 个字符，或至少一个图片/附件", 400)
+    return text.strip(), images, attachments
 
 
 class InteractionRequests:
@@ -68,7 +77,7 @@ class InteractionRequests:
         return result
 
     async def _update_intent(self, task: dict[str, Any], input: dict[str, Any]) -> dict[str, Any]:
-        text, images = message_input(input, "新要求")
+        text, images, attachments = message_input(input, "新要求")
         updates = list(task.get("intent_updates", []))
         if len(updates) >= 100:
             raise InteractionError("本轮补充次数过多，请结束后继续新一轮对话")
@@ -78,6 +87,7 @@ class InteractionRequests:
             "text": text,
             "accepted_at": accepted_at(),
             **({"images": images} if images else {}),
+            **({"attachments": attachments} if attachments else {}),
         }
         result = await self._state(
             "RUNNING" if task["started_at"] else "QUEUED",
@@ -96,14 +106,14 @@ class InteractionRequests:
     def _question_answer(self, input: dict[str, Any], question: dict[str, Any]) -> dict[str, Any]:
         option_id = input.get("option_id")
         if option_id:
-            if input.get("text") or input.get("images"):
+            if input.get("text") or input.get("images") or input.get("attachments"):
                 raise InteractionError("请选择一个选项，或填写自己的回答", 400)
             option = next((item for item in question["options"] if item["id"] == option_id), None)
             if option is None:
                 raise InteractionError("选项不存在", 400)
-            text, images = option["label"] + "：" + option["description"], []
+            text, images, attachments = option["label"] + "：" + option["description"], [], []
         else:
-            text, images = message_input(input, "回答")
+            text, images, attachments = message_input(input, "回答")
         return {
             "question_id": question["id"],
             "option_id": option_id,
@@ -111,6 +121,7 @@ class InteractionRequests:
             "source": "user",
             "permission_granted": False,
             **({"images": images} if images else {}),
+            **({"attachments": attachments} if attachments else {}),
         }
 
     async def _answer_question(self, input: dict[str, Any]) -> dict[str, Any]:
@@ -130,20 +141,17 @@ class InteractionRequests:
             question=None,
             last_answer=answer,
         )
-        if answer.get("images"):
+        if answer.get("images") or answer.get("attachments"):
             self.updates.append(
                 {
                     "id": "answer_" + question["id"],
                     "kind": "supplement",
                     "text": answer["text"],
-                    "images": answer["images"],
+                    **({"images": answer["images"]} if answer.get("images") else {}),
+                    **({"attachments": answer["attachments"]} if answer.get("attachments") else {}),
                 }
             )
         self.question = None
-        public = (
-            {**answer, "images": image_metadata(answer["images"])}
-            if answer.get("images")
-            else answer
-        )
+        public = self._public_answer(answer)
         future.set_result(public)
         return result

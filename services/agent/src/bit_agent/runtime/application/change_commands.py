@@ -87,7 +87,9 @@ class ChangeCommands:
     async def suggest_commit_message(self, task_id: str) -> dict[str, Any]:
         """用当前模型根据目标和差异写提交信息；模型不可用时给一个按目标生成的草稿。"""
         task, root, _files = await self._task_files(task_id)
-        fallback = readable_objective(task["objective"]).splitlines()[0][:72]
+        fallback = readable_objective(task["objective"], task.get("attachments")).splitlines()[0][
+            :72
+        ]
         changes = self.journal_factory(
             root, self.storage.directory / "artifacts" / task_id
         ).public()["changes"]

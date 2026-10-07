@@ -19,7 +19,7 @@ class TaskRecords:
                 (
                     session_id,
                     task["workspace_root"],
-                    readable_objective(task["objective"])[:100],
+                    readable_objective(task["objective"], task.get("attachments"))[:100],
                     task["multi_agent_mode"],
                     task["created_at"],
                     task["created_at"],
@@ -80,6 +80,7 @@ class TaskRecords:
             and task.get("last_answer") == answer
             and (
                 answer.get("images")
+                or answer.get("attachments")
                 or (not question.get("requires_confirmation") and "operation" not in question)
             )
             and answer.get("source") == "user"
@@ -90,6 +91,7 @@ class TaskRecords:
                 "text": f"用户对问题「{question['question']}」的回答：{answer['text']}",
                 "accepted_at": accepted_at(),
                 **({"images": answer["images"]} if answer.get("images") else {}),
+                **({"attachments": answer["attachments"]} if answer.get("attachments") else {}),
             }
             self._db.execute(
                 "INSERT OR IGNORE INTO user_answers(question_id, task_id, data) VALUES (?, ?, ?)",

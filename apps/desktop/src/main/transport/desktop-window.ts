@@ -5,12 +5,12 @@ import type { ColorTheme } from "../../shared/contracts.js";
 import { configureExternalNavigation } from "./external-navigation.js";
 
 export function themeBackground(theme: ColorTheme): string {
-  return theme === "dark" ? "#181817" : "#f2f2ef";
+  return theme === "dark" ? "#181817" : "#eceef0";
 }
 
 /** 自绘标题栏的颜色和页面一致；系统窗口按钮绘制在同色底上。 */
 export function titleBar(theme: ColorTheme): Electron.TitleBarOverlayOptions {
-  return { color: themeBackground(theme), symbolColor: theme === "dark" ? "#c7c4bb" : "#555550", height: 32 };
+  return { color: themeBackground(theme), symbolColor: theme === "dark" ? "#c7c4bb" : "#505a65", height: 32 };
 }
 
 function windowIcon(): Electron.NativeImage {

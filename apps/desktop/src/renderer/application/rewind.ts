@@ -1,5 +1,8 @@
 /** 最后一条消息下面的“编辑”和“重新生成”：先回到这一轮开始前，再改写或原样重发。 */
-import { normalizeImages, type ImageAttachment } from "../../shared/image-input";
+import type { ImageAttachment } from "../../shared/image-input";
+import type { FileAttachment } from "../../shared/attachment-input";
+import { savedAttachments } from "../attachments/message-attachments";
+import { savedImages } from "../attachments/message-images";
 import { replyMarkdown } from "../copy-button";
 import { element, errorText } from "../dom";
 import { iconButton, replyActions, userActions } from "../message-actions";
@@ -9,7 +12,7 @@ import type { RendererApp } from "./context";
 const EDIT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4"/></svg>';
 const REGENERATE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg>';
 
-interface Rewound { objective: string; images: ImageAttachment[]; workspaceRoot: string; sessionDeleted: boolean }
+interface Rewound { objective: string; images: ImageAttachment[]; attachments: FileAttachment[]; workspaceRoot: string; sessionDeleted: boolean }
 
 function available(app: RendererApp): boolean {
   const status = app.statusText.dataset.status ?? "";
@@ -36,14 +39,9 @@ async function rewind(app: RendererApp): Promise<Rewound | null> {
   }
   return {
     objective: typeof result.objective === "string" ? result.objective : "",
-    images: savedImages(result.images), workspaceRoot: String(result.workspace_root ?? app.activeWorkspaceRoot),
+    images: savedImages(result.images), attachments: savedAttachments(result.attachments), workspaceRoot: String(result.workspace_root ?? app.activeWorkspaceRoot),
     sessionDeleted: result.session_deleted === true,
   };
-}
-
-function savedImages(value: unknown): ImageAttachment[] {
-  try { return Array.isArray(value) ? normalizeImages(value) : []; }
-  catch { return []; }
 }
 
 /** 唯一的一轮被收回时服务端已删除对话；本地侧栏记录也要去掉，再开一个同目录的新对话。 */
@@ -68,7 +66,8 @@ async function resend(app: RendererApp, sessionId: string, rewound: Rewound): Pr
   if (app.activeTaskId) window.bitAgent.unwatchTask(app.activeTaskId);
   app.activeTaskId = null;
   if (rewound.sessionDeleted) startOver(app, sessionId, rewound.workspaceRoot);
-  await app.runAgent(rewound.objective, rewound.images);
+  if (rewound.attachments.length) await app.runAgent(rewound.objective, rewound.images, rewound.attachments);
+  else await app.runAgent(rewound.objective, rewound.images);
 }
 
 async function editOrRegenerate(app: RendererApp, regenerate: boolean): Promise<void> {
@@ -78,7 +77,7 @@ async function editOrRegenerate(app: RendererApp, regenerate: boolean): Promise<
   if (regenerate) { await resend(app, sessionId, rewound); return; }
   await showRewound(app, sessionId, rewound);
   app.objectiveInput.value = rewound.objective;
-  app.composerImages?.set(rewound.images);
+  app.composerImages?.set(rewound.images, rewound.attachments);
   app.paintComposer();
   app.objectiveInput.focus();
 }
@@ -96,7 +95,7 @@ export function mountTurnActions(app: RendererApp): () => void {
     const rewindable = available(app);
     edit.hidden = !rewindable;
     regenerate.hidden = !rewindable;
-    user.hidden = !app.activeObjective.trim();
+    user.hidden = !app.activeObjective.trim() && !app.activeImages.length && !app.activeAttachments?.length;
     // 运行中回答还在变，结束后再给复制。
     reply.hidden = document.body.dataset.busy === "true" || app.replaying || !replyMarkdown(stream);
   };

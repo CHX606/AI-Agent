@@ -57,14 +57,14 @@ export const browserMarkup = `
   <div class="browser-stage">
     <img class="browser-snapshot" alt="" hidden>
     <section class="browser-start" aria-label="起始页">
-      <h3>打开网页</h3>
-      <p>在上方输入网址，或输入 <code>localhost:5173</code> 这样的本机地址预览开发中的页面。</p>
-      <div class="browser-servers" data-state="loading">
-        <header><span>本机开发服务器</span><button type="button" class="browser-link" data-refresh>重新检测</button></header>
-        <div class="browser-servers-list"></div>
-        <p class="browser-servers-empty">常用端口上没有发现正在运行的服务。</p>
-        <p class="browser-servers-loading">正在检测…</p>
+      <div class="browser-start-header">
+        <span class="browser-start-mark">${globeIcon}</span>
+        <h3>浏览网页</h3>
+        <p>搜索内容，或继续访问你熟悉的网页。</p>
       </div>
+      <button type="button" class="browser-start-address">
+        ${globeIcon}<span>输入网址或搜索</span><kbd>Ctrl+L</kbd>
+      </button>
       <div class="browser-bookmarks-section" hidden>
         <header><span>书签</span></header>
         <div class="browser-bookmarks"></div>
@@ -73,6 +73,7 @@ export const browserMarkup = `
         <header><span>最近访问</span></header>
         <div class="browser-recent"></div>
       </div>
+      <p class="browser-start-empty">访问过的网页和收藏的书签会显示在这里。</p>
     </section>
     <section class="browser-error" role="alert" hidden>
       <h3 class="browser-error-title">无法打开这个网页</h3>

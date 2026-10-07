@@ -2,23 +2,30 @@
 
 from typing import Any
 
+from bit_agent.attachments import attachment_text_blocks
+
 IMAGE_OBJECTIVE = "请查看上传的图片。"
 
 
-def readable_objective(text: str) -> str:
-    return text.strip() or IMAGE_OBJECTIVE
+def readable_objective(text: str, attachments: list[dict[str, str]] | None = None) -> str:
+    return text.strip() or ("请查看上传的附件。" if attachments else IMAGE_OBJECTIVE)
 
 
-def user_message(text: str, images: list[dict[str, str]] | None = None) -> dict[str, Any]:
-    if not images:
+def user_message(
+    text: str,
+    images: list[dict[str, str]] | None = None,
+    attachments: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    if not images and not attachments:
         return {"role": "user", "content": text.strip()}
     content: list[dict[str, str]] = []
     if text.strip():
         content.append({"type": "input_text", "text": text.strip()})
     content.extend(
         {"type": "input_image", "image_url": image["data_url"], "detail": "auto"}
-        for image in images
+        for image in images or []
     )
+    content.extend(attachment_text_blocks(attachments or []))
     return {"role": "user", "content": content}
 
 

@@ -1,0 +1,49 @@
+.zoom-controls {
+  position: fixed;
+  inset: auto;
+  top: calc(var(--titlebar-height) + 64px);
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100vw - 32px);
+  min-height: 44px;
+  margin: 0;
+  padding: 6px 10px 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: var(--shadow-composer);
+  font: 14px/1 var(--font-sans);
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+.zoom-controls:not(:popover-open) { display: none; }
+:root[data-theme="dark"] .zoom-controls { background: var(--bg-rail); }
+
+.zoom-level {
+  min-width: 52px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.zoom-controls button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.zoom-controls button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.zoom-controls svg { width: 18px; height: 18px; }
+.zoom-controls [data-zoom-action="reset"] { width: auto; padding: 0 10px; font-weight: 500; }
+.zoom-divider { width: 1px; height: 18px; margin: 0 4px; background: var(--border); }

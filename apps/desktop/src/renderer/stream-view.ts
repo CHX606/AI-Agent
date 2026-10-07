@@ -1,3 +1,4 @@
+import { renderMessageAttachments } from "./attachments/message-attachments";
 /** 连续对话流：按事件顺序渲染文字、工具和流程说明。 */
 import type { TaskEvent } from "../shared/contracts";
 import { object } from "./dom";
@@ -28,9 +29,11 @@ export interface FinishInput {
 }
 
 function activityTitle(title: string, event: TaskEvent, payload: Record<string, unknown>): string {
-  if (event.event_type !== "TASK_INTENT_UPDATED" || !Array.isArray(payload.images)) return title;
-  const names = payload.images.map(object).map(image => image?.name).filter(name => typeof name === "string");
-  return names.length ? `${title} · 图片：${names.join("、")}` : title;
+  if (event.event_type !== "TASK_INTENT_UPDATED") return title;
+  const values = [...(Array.isArray(payload.images) ? payload.images : []),
+    ...(Array.isArray(payload.attachments) ? payload.attachments : [])];
+  const names = values.map(object).map(file => file?.name).filter(name => typeof name === "string");
+  return names.length ? `${title} · 附件：${names.join("、")}` : title;
 }
 
 class StreamRenderer {
@@ -114,7 +117,7 @@ class StreamRenderer {
   dispose(): void { this.text.end(); this.status.dispose(); }
   scrollToEnd(): void { this.stuck = true; requestAnimationFrame(() => this.toBottom()); }
 
-  userNote(message: string, images: unknown = []): void {
+  userNote(message: string, images: unknown = [], attachments: unknown = []): void {
     this.text.end();
     const item = document.createElement("li");
     item.className = "stream-item stream-user";
@@ -126,6 +129,7 @@ class StreamRenderer {
     copy.textContent = message;
     item.append(mark, copy);
     renderMessageImages(item, images);
+    renderMessageAttachments(item, attachments);
     this.stuck = true;
     this.append(item);
   }

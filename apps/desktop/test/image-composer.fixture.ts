@@ -1,3 +1,5 @@
+import { renderMessageAttachments } from "../src/renderer/attachments/message-attachments";
+import type { ImageAttachment } from "../src/shared/image-input";
 import { ComposerImages } from "../src/renderer/attachments/composer-images";
 import { renderMessageImages } from "../src/renderer/attachments/message-images";
 import { renderPreviousTurns } from "../src/renderer/previous-turns";
@@ -28,6 +30,48 @@ function selected(files: File[]): void {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+async function verifyOrdinaryAttachments(image: File, picture: ImageAttachment): Promise<void> {
+  const file = new File(["hello"], "notes.txt", { type: "text/plain" });
+  const attachment = { name: file.name, mime_type: file.type, data_url: "data:text/plain;base64,aGVsbG8=" };
+  controller.clear();
+  selected([image, file]);
+  await settled();
+  check(controller.snapshot().length === 1 && controller.attachmentsSnapshot().length === 1, "混合上传没有保留图片和普通附件");
+  check(card.querySelectorAll(".composer-image img").length === 1 && card.querySelectorAll(".composer-attachment").length === 1,
+    "普通附件被当作图片，或文件卡片没有显示");
+  check(card.querySelector(".composer-attachment")?.textContent?.includes("5 B"), "文件卡片没有展示大小");
+  card.querySelector<HTMLButtonElement>(".attachment-remove")!.click();
+  check(!controller.attachmentsSnapshot().length && controller.snapshot().length === 1, "移除普通附件影响了图片");
+  controller.set([picture], [attachment, attachment, attachment, attachment]);
+  selected([file]);
+  await settled();
+  check(card.querySelector(".composer-image-error")?.textContent?.includes("最多"), "图片和普通附件没有共用五个数量限制");
+  check(controller.snapshot().length + controller.attachmentsSnapshot().length === 5, "超量上传破坏了原有草稿");
+  controller.clear();
+  selected([file]);
+  controller.clear();
+  await new Promise(resolve => setTimeout(resolve, 25));
+  check(!controller.attachmentsSnapshot().length, "迟到普通附件写进了已清空的草稿");
+  renderPreviousTurns({ turns: [{ task_id: "file-old", objective: "", attachments: [attachment],
+    intent_updates: [{ text: "", attachments: [attachment] }] }] }, null);
+  check(document.querySelectorAll("#previous-turns .attachment-card").length === 2, "文件-only历史或补充附件丢失");
+  const live = createStreamView({ stream: document.createElement("ol"), scroller: document.createElement("div"),
+    follow: false, loadDiff: async () => [] });
+  live.userNote("", [], [attachment]);
+  const cached = live.detach();
+  const update = { text: "", attachments: [{ name: attachment.name, mime_type: attachment.mime_type, size: 5 }] };
+  renderPreviousTurns({ turns: [{ task_id: "file-old", objective: "", attachments: [attachment], intent_updates: [update] }] }, null,
+    { processes: new Map([["file-old", cached]]) });
+  check(document.querySelectorAll("#previous-turns .attachment-card").length === 2, "缓存普通附件补充被显示两次");
+  renderPreviousTurns({ turns: [{ task_id: "file-old", objective: "", attachments: [attachment], intent_updates: [update, update] }] }, null,
+    { processes: new Map([["file-old", cached]]) });
+  check(document.querySelectorAll("#previous-turns .attachment-card").length === 3, "两条相同附件消息被错误合并");
+  live.dispose();
+  const metadata = document.querySelector<HTMLElement>("#metadata")!;
+  renderMessageAttachments(metadata, update.attachments);
+  check(!metadata.querySelector("img") && metadata.textContent?.includes("notes.txt"), "普通附件元数据被渲染成伪图片");
+  controller.set([picture], [attachment]);
+}
 async function acceptance() {
   const canvas = document.createElement("canvas");
   canvas.width = 2;
@@ -88,14 +132,15 @@ async function acceptance() {
   const metadata = document.querySelector<HTMLElement>("#metadata")!;
   renderMessageImages(metadata, [{ name: "remote.png", mime_type: "image/png", size: 123 }]);
   check(!metadata.querySelector("img") && metadata.textContent!.includes("remote.png"), "图片元信息被错误当成可加载图片");
-  controller.set([attachment]);
+  await verifyOrdinaryAttachments(image, attachment);
   await Promise.all([...document.querySelectorAll<HTMLImageElement>("img")].map(image => image.decode()));
   await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   const result = { normalTextPaste: true, clipboardImage: true, mixedClipboardText: true, fileSelection: true,
     thumbnailDecoded: true, removal: true, inlineErrorPreservesTask: true, staleReadDiscarded: true,
     imageOnlyHistory: true, historicalSupplement: true, cachedLiveSupplementOnce: true,
     identicalUncachedSupplementPreserved: true, textOnlyHistoryPreserved: true,
-    metadataWithoutBrokenImage: true, changes };
+    metadataWithoutBrokenImage: true, ordinaryFiles: true, mixedUpload: true, fileRemoval: true,
+    combinedCountLimit: true, fileOnlyHistory: true, cachedFileSupplementOnce: true, fileMetadataWithoutImage: true, changes };
   return result;
 }
 (window as unknown as { runImageAcceptance: typeof acceptance }).runImageAcceptance = acceptance;

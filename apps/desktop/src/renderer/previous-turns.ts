@@ -1,3 +1,5 @@
+import { renderMessageAttachments } from "./attachments/message-attachments";
+import { attachmentDetails, attachmentKey } from "./attachments/attachment-card";
 import { renderMessageImages } from "./attachments/message-images";
 import { registerMarkdown, replyMarkdown } from "./copy-button";
 import { replyActions, userActions } from "./message-actions";
@@ -28,19 +30,24 @@ function userMessage(turn: Record<string, unknown>): HTMLElement {
   question.textContent = typeof turn.objective === "string" ? turn.objective : "";
   user.append(prompt, question);
   renderMessageImages(user, turn.images);
+  renderMessageAttachments(user, turn.attachments);
   return user;
 }
 
-function keptImageUpdate(kept: Node[], update: Record<string, unknown>): number {
+function keptUploadUpdate(kept: Node[], update: Record<string, unknown>): number {
   const sources = Array.isArray(update.images)
     ? update.images.map(object).map(image => image?.data_url).filter(source => typeof source === "string") : [];
-  if (!sources.length) return -1;
+  const attachments = Array.isArray(update.attachments) ? update.attachments : [];
+  const keys = attachments.map(attachmentDetails).filter(details => details !== null).map(attachmentKey);
+  if (!sources.length && !keys.length) return -1;
   const text = typeof update.text === "string" ? update.text : "";
   return kept.findIndex(node => {
     if (!(node instanceof HTMLElement) || !node.classList.contains("stream-user")) return false;
     const message = node.querySelector("p")?.textContent;
     const previews = [...node.querySelectorAll(".message-image img")].map(image => image.getAttribute("src"));
+    const files = [...node.querySelectorAll<HTMLElement>(".message-attachments .attachment-card")].map(file => file.dataset.attachmentKey);
     return (message === text || message === `不批准：${text}`) && previews.length === sources.length
+      && files.length === keys.length && files.every((key, index) => key === keys[index])
       && previews.every((source, index) => source === sources[index]);
   });
 }
@@ -50,13 +57,14 @@ function appendUpdates(section: HTMLElement, value: unknown, kept: Node[] = []):
   const remaining = [...kept];
   for (const raw of value) {
     const update = object(raw);
-    if (!update || (typeof update.text !== "string" && !Array.isArray(update.images))) continue;
-    const cached = keptImageUpdate(remaining, update);
+    if (!update || (typeof update.text !== "string" && !Array.isArray(update.images) && !Array.isArray(update.attachments))) continue;
+    const cached = keptUploadUpdate(remaining, update);
     if (cached !== -1) { remaining.splice(cached, 1); continue; }
     const note = document.createElement("div");
     note.className = "turn-update";
     note.textContent = (update.kind === "replace" ? "修改目标：" : "补充要求：") + String(update.text ?? "");
     renderMessageImages(note, update.images);
+    renderMessageAttachments(note, update.attachments);
     section.append(note);
   }
 }

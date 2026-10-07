@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { mountProductControls } from "../src/renderer/product-controls";
 
-const mocks = vi.hoisted(() => ({ model: vi.fn(), diagnostics: vi.fn(), memory: vi.fn(), tools: vi.fn(), execution: vi.fn() }));
+const mocks = vi.hoisted(() => ({ model: vi.fn(), diagnostics: vi.fn(), memory: vi.fn(), tools: vi.fn(), execution: vi.fn(), terminal: vi.fn() }));
+vi.mock("../src/renderer/product/terminal-settings", () => ({ showTerminalSettings: mocks.terminal }));
 vi.mock("../src/renderer/product/model", () => ({ showModelSettings: mocks.model }));
 vi.mock("../src/renderer/product/diagnostics", () => ({ showDiagnostics: mocks.diagnostics }));
 vi.mock("../src/renderer/product/memory", () => ({ showMemories: mocks.memory }));
@@ -67,11 +68,11 @@ afterEach(() => vi.unstubAllGlobals());
 it("creates all existing personal center settings without adding any rail shortcut", () => {
   mountProductControls(() => ({ gatewayUrl: "http://localhost:3000", taskId: "task-1" }), diagnosticCurrent, memoryCurrent);
   expect(profile.map(button => button.id)).toEqual([
-    "model-settings", "execution-settings", "diagnostics-settings", "memory-settings", "mcp-settings", "settings-panel",
+    "model-settings", "execution-settings", "diagnostics-settings", "memory-settings", "mcp-settings", "terminal-settings", "settings-panel",
   ]);
   expect(rail.map(button => button.id)).toEqual(["theme-toggle"]);
   expect(queries).not.toContain("#theme-toggle");
-  expect(created).toHaveLength(5);
+  expect(created).toHaveLength(6);
   expect(created.every(button => button.className === "sidebar-model-settings")).toBe(true);
 });
 
@@ -84,4 +85,5 @@ it("keeps each personal center action bound to its original settings feature", a
   expect(mocks.memory).toHaveBeenCalledWith(expect.anything(), memoryCurrent);
   expect(mocks.tools).toHaveBeenCalledTimes(1);
   expect(mocks.execution).toHaveBeenCalledTimes(1);
+  expect(mocks.terminal).toHaveBeenCalledWith(expect.anything());
 });

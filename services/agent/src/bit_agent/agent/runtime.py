@@ -48,6 +48,7 @@ async def run_agent(
     prompt: str,
     *,
     images: list[dict[str, str]] | None = None,
+    attachments: list[dict[str, str]] | None = None,
     workspace_root: Path | None = None,
     max_tool_rounds: int = MAX_TOOL_ROUNDS,
     response_client: Any | None = None,

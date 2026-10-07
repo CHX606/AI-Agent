@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { selectComposerFiles } from "./packaged-file-selection.mjs";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -71,11 +72,7 @@ export async function verifyImageInput({command,evaluate,check,requests,director
   const file = join(directory, "image-upload.png");
   writeFileSync(file, Buffer.from(sample.data, "base64"));
   const dataUrl = `data:image/png;base64,${sample.data}`;
-  const setFiles = async files => {
-    const {root} = await command("DOM.getDocument");
-    const {nodeId} = await command("DOM.querySelector", {nodeId:root.nodeId,selector:'.composer-images input[type=file]'});
-    await command("DOM.setFileInputFiles", {nodeId,files});
-  };
+  const setFiles = files => selectComposerFiles(command, files);
   const draftCount = () => evaluate("document.querySelectorAll('.composer-image img').length");
   const draftDecoded = () => evaluate("(() => { const image=document.querySelector('.composer-image img');return image?.complete&&image.naturalWidth>0; })()");
   await setFiles([file]);

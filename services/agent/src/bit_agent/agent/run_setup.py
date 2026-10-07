@@ -7,6 +7,7 @@ from uuid import uuid4
 from openai import AsyncOpenAI, OpenAI
 
 from bit_agent.agent.limits import validate_max_tool_rounds
+from bit_agent.attachments import validate_attachments, validate_upload_limits
 from bit_agent.context import (
     ContextManagementPolicy,
     ContextManager,
@@ -23,8 +24,12 @@ from .run_protocol import REASONING_EFFORTS
 
 def _validate_options(options: dict[str, Any]) -> None:
     options["images"] = validate_images(options["images"])
+    options["attachments"] = validate_attachments(options["attachments"])
+    validate_upload_limits(options["images"], options["attachments"])
     prompt = options["prompt"]
-    if not isinstance(prompt, str) or not (prompt.strip() or options["images"]):
+    if not isinstance(prompt, str) or not (
+        prompt.strip() or options["images"] or options["attachments"]
+    ):
         raise ValueError("用户输入不能为空")
     options["max_tool_rounds"] = validate_max_tool_rounds(options["max_tool_rounds"])
     if options["working_memory_ttl_seconds"] <= 0:

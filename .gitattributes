@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# PDF cross-reference offsets require byte-preserving checkout.
+apps/desktop/test/fixtures/attachments/*.pdf binary

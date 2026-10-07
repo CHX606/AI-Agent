@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from bit_agent.agent.result import AgentRunResult, AgentRunStatus
+from bit_agent.attachments import attachment_metadata
 from bit_agent.images import image_metadata, user_message
 from bit_agent.observability import (
     AgentEventType,
@@ -93,11 +94,18 @@ class RunCompletion:
                     "prompt_characters": len(self.prompt),
                     "workspace": str(self.root),
                     **({"images": image_metadata(self.images)} if self.images else {}),
+                    **(
+                        {"attachments": attachment_metadata(self.attachments)}
+                        if self.attachments
+                        else {}
+                    ),
                 },
             )
             await self.restore()
             await self.recall_long_term_memory()
-            self.conversation.append(user_message(self.prompt.strip(), self.images))
+            self.conversation.append(
+                user_message(self.prompt.strip(), self.images, self.attachments)
+            )
             await self.archive([self.conversation[-1]])
             await self.persist()
 

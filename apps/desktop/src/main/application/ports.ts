@@ -59,13 +59,8 @@ export interface TerminalPort {
   spawnTerminal(input: { cwd: string; cols: number; rows: number }): TerminalProcess;
 }
 
-export interface LocalServerPort {
-  /** 本机常见开发端口里正在监听的那些。 */
-  detectLocalServers(): Promise<number[]>;
-}
-
 /** Services assembled by main.ts. IPC knows these contracts, never their adapters. */
-export interface DesktopServices extends RepositoryPort, RuntimePort, PreferencesPort, TerminalPort, LocalServerPort {
+export interface DesktopServices extends RepositoryPort, RuntimePort, PreferencesPort, TerminalPort {
   gatewayClient: GatewayClientPort;
   diagnostics: DiagnosticService;
   saveDiagnosticBundle(snapshot?: unknown, unavailable?: boolean): Promise<

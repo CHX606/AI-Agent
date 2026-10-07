@@ -43,3 +43,18 @@ it("suggests bookmarks first, then history whose address starts with the input",
   expect(suggestions("next app", 7, now).map((item) => item.url)).toEqual(["http://localhost:3000/"]);
   expect(suggestions("   ", 7, now)).toEqual([]);
 });
+
+it("deduplicates stored history and bookmarks by normalized address without merging distinct searches", () => {
+  store.set("bit-agent.browser-history.v1", JSON.stringify([
+    { url: "https://example.com", title: "Older", visits: 1, last: 1000 },
+    { url: "https://example.com/", title: "Newest", visits: 2, last: 3000 },
+    { url: "https://example.com/search?q=one", title: "Search", visits: 1, last: 2000 },
+    { url: "https://example.com/search?q=two", title: "Search", visits: 1, last: 1500 },
+  ]));
+  store.set("bit-agent.browser-bookmarks.v1", JSON.stringify([
+    { url: "https://example.com", title: "Example" },
+    { url: "https://example.com/", title: "Duplicate" },
+  ]));
+  expect(recentVisits().map((entry) => entry.title)).toEqual(["Newest", "Search", "Search"]);
+  expect(bookmarks()).toEqual([{ url: "https://example.com", title: "Example" }]);
+});

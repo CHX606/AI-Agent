@@ -11,3 +11,4 @@
 @import "./styles/repository-preview.css";
 @import "./styles/markdown.css";
 @import "./styles/responsive.css";
+@import "./terminal/terminal-dock.css";

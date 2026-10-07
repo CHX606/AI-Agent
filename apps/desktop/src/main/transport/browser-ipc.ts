@@ -1,5 +1,4 @@
 import { BrowserWindow, ipcMain, type WebContents } from "electron";
-import type { DesktopServices } from "../application/ports.js";
 import type { BrowserAction, BrowserBounds, BrowserPromptAnswer } from "../../shared/contracts.js";
 import { browserPaneFor } from "./browser-panes.js";
 import type { IpcHandler } from "./ipc-handler.js";
@@ -9,21 +8,23 @@ const ACTIONS = new Set<BrowserAction>(["back", "forward", "reload", "stop", "de
 const DOWNLOAD_ACTIONS = new Set(["open", "show", "cancel"] as const);
 type DownloadAction = "open" | "show" | "cancel";
 
-export function registerBrowserIpc(services: DesktopServices, handle: IpcHandler): void {
-  const pane = (sender: WebContents) => {
-    const window = BrowserWindow.fromWebContents(sender);
-    if (!window) throw new Error("窗口不存在");
-    return browserPaneFor(window);
-  };
-  const bounds = (value: unknown): BrowserBounds => {
-    const input = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
-    return { x: Number(input.x), y: Number(input.y), width: Number(input.width), height: Number(input.height) };
-  };
-  const text = (value: unknown, message: string) => {
-    if (typeof value !== "string") throw new Error(message);
-    return value;
-  };
+function pane(sender: WebContents) {
+  const window = BrowserWindow.fromWebContents(sender);
+  if (!window) throw new Error("窗口不存在");
+  return browserPaneFor(window);
+}
 
+function bounds(value: unknown): BrowserBounds {
+  const input = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  return { x: Number(input.x), y: Number(input.y), width: Number(input.width), height: Number(input.height) };
+}
+
+function text(value: unknown, message: string): string {
+  if (typeof value !== "string") throw new Error(message);
+  return value;
+}
+
+function registerNavigation(handle: IpcHandler): void {
   handle("browser:state", (event) => pane(event.sender).state());
   handle("browser:show", (event, value: unknown, url: unknown) =>
     pane(event.sender).show(bounds(value), typeof url === "string" && url ? url : undefined));
@@ -43,6 +44,9 @@ export function registerBrowserIpc(services: DesktopServices, handle: IpcHandler
     if (!ACTIONS.has(action as BrowserAction)) throw new Error("不支持的操作");
     return pane(event.sender).action(action as BrowserAction);
   });
+}
+
+function registerPageRequests(handle: IpcHandler): void {
   handle("browser:download-action", (event, id: unknown, action: unknown) => {
     if (!DOWNLOAD_ACTIONS.has(action as DownloadAction)) throw new Error("不支持的操作");
     return pane(event.sender).downloadAction(text(id, "下载项无效"), action as DownloadAction);
@@ -61,5 +65,9 @@ export function registerBrowserIpc(services: DesktopServices, handle: IpcHandler
       { forward: input.forward !== false, next: input.next === true });
   });
   ipcMain.on("browser:stop-find", (event) => { pane(event.sender).stopFind(); });
-  handle("browser:local-servers", () => services.detectLocalServers());
+}
+
+export function registerBrowserIpc(handle: IpcHandler): void {
+  registerNavigation(handle);
+  registerPageRequests(handle);
 }

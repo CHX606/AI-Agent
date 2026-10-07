@@ -1,7 +1,7 @@
 .terminal-panel {
   position: relative;
   display: grid;
-  grid-template-rows: 34px auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   /* 每块固定在自己那一行：查找栏隐藏时终端不会挤到它那一行。 */
   grid-template-areas: "header" "find" "host";
   height: var(--terminal-height, 260px);
@@ -38,18 +38,20 @@ body[data-resizing="true"] .terminal-resize::after {
 }
 
 .terminal-header {
-  display: flex;
+  display: grid;
   grid-area: header;
+  grid-template-columns: minmax(0, 1fr) 24px auto;
+  grid-template-rows: 34px auto;
   align-items: center;
-  gap: 6px;
+  column-gap: 6px;
   min-width: 0;
-  padding: 0 8px 0 10px;
+  padding: 0 8px;
   border-bottom: 1px solid var(--border);
 }
 
 .terminal-tabs {
   display: flex;
-  flex: 0 1 auto;
+  grid-column: 1;
   gap: 2px;
   min-width: 0;
   overflow-x: auto;
@@ -95,6 +97,7 @@ body[data-resizing="true"] .terminal-resize::after {
 
 .terminal-tab-close {
   display: grid;
+  flex: none;
   width: 18px;
   height: 18px;
   place-items: center;
@@ -141,17 +144,24 @@ body[data-resizing="true"] .terminal-resize::after {
 }
 
 .terminal-cwd {
-  margin-left: 6px;
+  grid-column: 1 / -1;
+  grid-row: 2;
   min-width: 0;
+  padding-bottom: 7px;
   overflow: hidden;
   color: var(--text-muted);
-  font: 11px var(--font-mono);
+  font: 11px/16px var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.terminal-cwd:empty { display: none; }
+
 .terminal-actions {
   display: flex;
+  grid-column: 3;
+  grid-row: 1;
+  align-items: center;
   flex: none;
   gap: 2px;
   margin-left: auto;
@@ -185,7 +195,9 @@ body[data-resizing="true"] .terminal-resize::after {
 }
 
 .terminal-find input {
-  width: min(320px, 50%);
+  flex: 1;
+  min-width: 0;
+  width: 0;
   height: 26px;
   padding: 0 9px;
   border: 1px solid var(--border);
@@ -230,11 +242,12 @@ body[data-resizing="true"] .terminal-resize::after {
 .terminal-host {
   grid-area: host;
   min-height: 0;
-  padding: 6px 4px 4px 14px;
+  padding: 8px;
   overflow: hidden;
 }
 
 .terminal-session {
+  min-width: 0;
   height: 100%;
 }
 

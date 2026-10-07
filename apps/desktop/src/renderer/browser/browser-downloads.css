@@ -1,0 +1,95 @@
+/* 下载栏：在网页区域下方，不会被原生视图挡住。 */
+.browser-downloads {
+  display: grid;
+  gap: 1px;
+  border-top: 1px solid var(--border);
+  background: var(--border);
+}
+
+.browser-download {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px 10px 8px 14px;
+  background: var(--bg-sidebar);
+}
+
+.browser-download-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.browser-download-copy strong {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-download-copy span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.browser-download[data-state="interrupted"] .browser-download-copy span {
+  color: var(--red);
+}
+
+.browser-download progress {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 3px;
+  border: 0;
+  border-radius: 2px;
+  appearance: none;
+  background: var(--bg-panel);
+  accent-color: var(--brand);
+}
+
+.browser-download progress::-webkit-progress-bar {
+  border-radius: 2px;
+  background: var(--bg-panel);
+}
+
+.browser-download progress::-webkit-progress-value {
+  border-radius: 2px;
+  background: var(--brand);
+}
+
+.browser-download-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.browser-download-actions .icon-button {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.browser-download-actions .icon-button svg {
+  width: 12px;
+  height: 12px;
+}
+
+.browser-download-actions .icon-button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+
+.browser-link {
+  background: none;
+  color: var(--brand);
+  font-size: 12px;
+}
+
+.browser-link:hover { text-decoration: underline; }

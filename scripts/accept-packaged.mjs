@@ -10,9 +10,11 @@ import { markdownFixture, verifyCopy, verifyMarkdown } from "../apps/desktop/tes
 import { verifyRewind } from "../apps/desktop/test/rewind-packaged.mjs";
 import { verifySidebarCollapse, verifySidebarResize, verifyWorkspaceOrder } from "../apps/desktop/test/workspace-sidebar-packaged.mjs";
 import { verifyTerminal } from "../apps/desktop/test/terminal-packaged.mjs";
+import { verifyZoomControls } from "../apps/desktop/test/zoom-controls-packaged.mjs";
 import { verifyBrowser, verifyBrowserAgent, verifyBrowserFullscreen } from "../apps/desktop/test/browser-packaged.mjs";
 import { auditLayouts } from "../apps/desktop/test/layout-audit-packaged.mjs";
 import { evaluateMain, verifyImageInput } from "../apps/desktop/test/image-input-packaged.mjs";
+import { verifyFileAttachments } from "../apps/desktop/test/attachment-input-packaged.mjs";
 
 const executable = resolve(process.argv[2] ?? "");
 if (!process.argv[2]) throw new Error("需要提供待验收的 exe 路径");
@@ -268,8 +270,10 @@ async function captureScreenshot() {
         const { BrowserWindow } = process.getBuiltinModule('module').createRequire(process.resourcesPath + '/app/package.json')('electron');
         const window = BrowserWindow.getAllWindows().find(item => item.webContents.getURL().includes('index.html'));
         window.webContents.setBackgroundThrottling(false);
-        const sample = await window.webContents.executeJavaScript("(() => { const element = ['.product-dialog[open]', '.composer-card', '.editor-scroll', '.repository-view'].map((selector) => document.querySelector(selector)).find((item) => item && item.getBoundingClientRect().width > 0); const rect = element.getBoundingClientRect(); return { x:rect.right-16, y:rect.top+16, width:innerWidth, height:innerHeight, color:getComputedStyle(element).backgroundColor.match(/\\\\d+/g).slice(0,3).map(Number) }; })()");
-        const frame = await window.webContents.executeJavaScript("(() => { let marker=document.querySelector('#acceptance-frame'); if(!marker){marker=document.createElement('canvas');marker.id='acceptance-frame';marker.width=3;marker.height=3;document.body.append(marker);document.styleSheets[0].insertRule('#acceptance-frame{position:fixed;left:16px;top:16px;width:3px;height:3px;z-index:2147483647}',0)} (document.querySelector('.product-dialog[open]')||document.body).append(marker);const count=Number(window.acceptanceFrameCount||0)+1;window.acceptanceFrameCount=count;const color=[32+(count%6)*32,32+(Math.floor(count/6)%6)*32,32+(Math.floor(count/36)%6)*32];marker.getContext('2d').fillStyle='rgb('+color.join(',')+')';marker.getContext('2d').fillRect(0,0,3,3);const rect=marker.getBoundingClientRect();return {color,x:rect.left+1,y:rect.top+1}; })()");
+        await window.webContents.capturePage(undefined, {stayHidden:true, stayAwake:true});
+        await new Promise(done => setTimeout(done, 150));
+        const sample = await window.webContents.executeJavaScript("(() => { const element = ['.zoom-controls:popover-open', '.product-dialog[open]', '.composer-card', '.editor-scroll', '.repository-view'].map((selector) => document.querySelector(selector)).find((item) => item && item.getBoundingClientRect().width > 0); const rect = element.getBoundingClientRect(); return { x:element.classList.contains('zoom-controls')?rect.left+10:rect.right-16, y:element.classList.contains('zoom-controls')?rect.top+rect.height/2:rect.top+16, width:innerWidth, height:innerHeight, color:getComputedStyle(element).backgroundColor.match(/\\\\d+/g).slice(0,3).map(Number) }; })()");
+        const frame = await window.webContents.executeJavaScript("(() => { let marker=document.querySelector('#acceptance-frame'); if(!marker){marker=document.createElement('canvas');marker.id='acceptance-frame';marker.width=6;marker.height=6;document.body.append(marker);document.styleSheets[0].insertRule('#acceptance-frame{position:fixed;left:16px;top:16px;width:6px;height:6px;z-index:2147483647}',0)} (document.querySelector('.zoom-controls:popover-open')||document.querySelector('.product-dialog[open]')||document.body).append(marker);const pill=marker.parentElement?.matches('.zoom-controls:popover-open');marker.style.cssText='position:'+(pill?'absolute':'fixed')+';left:'+(pill?40:16)+'px;top:'+(pill?4:16)+'px;width:6px;height:6px;z-index:2147483647';const count=Number(window.acceptanceFrameCount||0)+1;window.acceptanceFrameCount=count;const color=[32+(count%6)*32,32+(Math.floor(count/6)%6)*32,32+(Math.floor(count/36)%6)*32];marker.getContext('2d').fillStyle='rgb('+color.join(',')+')';marker.getContext('2d').fillRect(0,0,6,6);const rect=marker.getBoundingClientRect();return {color,x:rect.left+3,y:rect.top+3}; })()");
         // 主题和唯一帧标记都匹配才接收截图，避免同一主题下仍取到旧菜单画面。
         let lastMismatch;
         for (let attempt = 0; attempt < 8; attempt++) {
@@ -347,7 +351,10 @@ async function captureLayouts(command, evaluate, stage) {
           const r = element.getBoundingClientRect();
           return { x:r.x, y:r.y, right:r.right, bottom:r.bottom, width:r.width, height:r.height, overflow:element.scrollWidth-element.clientWidth };
         };
-        return { card:rect('.composer-card'), context:rect('.composer-context'), actions:rect('.composer-actions'),
+        const themeProbe = document.createElement('span');
+        themeProbe.hidden = true; themeProbe.style.backgroundColor = 'var(--bg-main)'; document.body.append(themeProbe);
+        const themeBackground = getComputedStyle(themeProbe).backgroundColor; themeProbe.remove();
+        return { themeBackground, card:rect('.composer-card'), context:rect('.composer-context'), actions:rect('.composer-actions'),
           interaction:rect('#task-interaction'), dialog:rect('.product-dialog[open]'),
           dialogBackground:document.querySelector('.product-dialog[open]') ? getComputedStyle(document.querySelector('.product-dialog[open]')).backgroundColor : null,
           settingsInSidebar:Boolean(document.querySelector('#model-settings').closest('.sidebar-bottom')),
@@ -373,7 +380,7 @@ async function captureLayouts(command, evaluate, stage) {
       if (geometry.dialog) {
         assert(inside(geometry.dialog), `${filename}: 弹窗超出窗口`);
         assert(Math.abs(geometry.dialog.x + geometry.dialog.width / 2 - width / 2) <= 2, `${filename}: 弹窗没有居中`);
-        assert.equal(geometry.dialogBackground, theme === "dark" ? "rgb(28, 28, 26)" : "rgb(255, 255, 255)", `${filename}: 弹窗没有使用当前主题`);
+        assert.equal(geometry.dialogBackground, geometry.themeBackground, `${filename}: 弹窗没有使用当前主题`);
       }
       layoutResults.push({ stage, theme, width, height, screenshot:filename, pixelThemeChecked:shot.pixelThemeChecked, geometry,
         ...(conversation ? { conversation } : {}), ...(markdown ? { markdown } : {}) });
@@ -452,9 +459,9 @@ try {
   await evaluate("document.querySelector('.workspace-group[data-active=true] .workspace-group-toggle').click()");
   assert(await evaluate("!document.body.innerText.includes('Local harness') && document.querySelector('#profile-button').textContent.includes('Bit Agent 1.0')"), "个人中心没有显示版本号 1.0");
   await evaluate("document.querySelector('#profile-button').click()");
-  await check(() => evaluate("!document.querySelector('#profile-menu').hidden && ['#model-settings','#execution-settings','#mcp-settings','#memory-settings','#diagnostics-settings'].every(s=>document.querySelector('#profile-menu').contains(document.querySelector(s)))"), "个人中心菜单没有包含全部设置");
+  await check(() => evaluate("!document.querySelector('#profile-menu').hidden && ['#model-settings','#execution-settings','#mcp-settings','#memory-settings','#diagnostics-settings','#terminal-settings'].every(s=>document.querySelector('#profile-menu').contains(document.querySelector(s)))"), "个人中心菜单没有包含全部设置");
   assert(await evaluate("document.querySelector('#gateway')===null && document.querySelector('#health')===null && !document.querySelector('#profile-menu').textContent.includes('连接设置')"), "个人中心仍显示 Gateway 连接设置");
-  assert(await evaluate("[...document.querySelectorAll('.profile-menu-items button')].length===5"), "个人中心设置项数量不正确");
+  assert(await evaluate("[...document.querySelectorAll('.profile-menu-items button')].length===6"), "个人中心设置项数量不正确");
   await captureLayouts(command, evaluate, "profile-menu");
   await evaluate("document.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))");
   await check(() => evaluate("document.querySelector('#profile-menu').hidden"), "点击别处没有收起个人中心菜单");
@@ -698,6 +705,10 @@ try {
   const { shots:collapseShots, ...sidebarCollapse } = await verifySidebarCollapse(command, evaluate, check, captureScreenshot);
   for (const shot of collapseShots) writeFileSync(join(directory, shot.name), Buffer.from(shot.data, "base64"));
   console.log("SIDEBAR_COLLAPSE_PASSED", collapseShots.map(shot => shot.name).join(" "));
+  const zoomControls = await verifyZoomControls({ command, evaluate, check,
+    main:expression=>evaluateMain(mainInspectorUrl,expression),
+    capture:async name=>{ const shot=await captureScreenshot();writeFileSync(join(directory,name),Buffer.from(shot.data,"base64")); } });
+  console.log("ZOOM_CONTROLS_PASSED", zoomControls.results.layouts.length);
   const { result:terminal, shots:terminalShots } = await verifyTerminal({ command, evaluate, check, screenshot:captureScreenshot,
     main:expression=>evaluateMain(mainInspectorUrl,expression) });
   for (const shot of terminalShots) writeFileSync(join(directory, shot.name), Buffer.from(shot.data, "base64"));
@@ -718,6 +729,9 @@ try {
   const imageInput = await verifyImageInput({command,evaluate,check,requests,directory,screenshot:captureScreenshot,
     main:expression=>evaluateMain(mainInspectorUrl,expression),
     captureLayouts:stage=>captureLayouts(command,evaluate,stage)});
+  const fileAttachments = await verifyFileAttachments({command,evaluate,check,requests,directory,screenshot:captureScreenshot,
+    captureLayouts:stage=>captureLayouts(command,evaluate,stage)});
+  console.log("ATTACHMENTS_PASSED", JSON.stringify(fileAttachments));
   const rewind = await verifyRewind({ evaluate, check, requests });
   // 网页全屏会把隐藏的验收窗口显示出来，之后截图不稳定，所以放在最后。
   const browserFullscreen = await verifyBrowserFullscreen({ command, evaluate, check, main:expression=>evaluateMain(mainInspectorUrl,expression) });
@@ -728,7 +742,7 @@ try {
     independentPath: true, streamingBeforeCompletion: true, persistedEncryptedKey: true,
     allToolsCollapsible: true, noEmptyTextRows: true, userMessagesRightAligned: true, agentMessagesLeftAligned: true,
     messageBackgroundMatchesTheme: true, longMultilineMessagesContained: true, sidebarOrder,
-    markdownRendering, workspaceOrder, sidebarResize, sidebarCollapse, terminal, browser, browserAgent, browserFullscreen, imageInput, rewind,
+    markdownRendering, workspaceOrder, sidebarResize, sidebarCollapse, zoomControls, terminal, browser, browserAgent, browserFullscreen, imageInput, fileAttachments, rewind,
     rawDebugDataAbsentFromUi:true,
     unauthorizedGatewayRejected: true, automaticLocalGateway: true, connectionStatusDotOnly: true, explicitNewChatWorkspace: true, workspaceBindings, noGatewayConnectionSettings: true, staleGatewayAddressIgnored: true, restartAndContinue: true, stopAndSteer: true, immediateStop: true, titlebarBorder: true, offlineRepositoryIcons: true, startupComposer: true, noDuplicateProfileTheme: true, windowsExecutableIcon: { orangePixels:windowsIcon.orange, whitePixels:windowsIcon.white, size:windowsIcon.size }, approvalBeforeWrite: true, diffAndUndo: true, memoryPanel: true, modelConnectionTest: true, gitCommit: true, sessionSearchRenameDelete: true, externalMcpTools: true, modelRequests: requests.length, state, uiLayouts:layoutResults,
   }, null, 2));

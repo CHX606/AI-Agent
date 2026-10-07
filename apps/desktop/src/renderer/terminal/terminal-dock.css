@@ -1,0 +1,113 @@
+/* 浏览器与右侧终端共用一列，同时打开时上下排列。 */
+.tools-pane {
+  display: grid;
+  grid-column: 3;
+  grid-row: 1;
+  grid-auto-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg-main);
+}
+
+.shell[data-terminal-open="true"][data-terminal-position="right"] {
+  grid-template-columns: var(--sidebar-width) minmax(420px, 1fr)
+    min(var(--terminal-width, 420px), calc(100vw - var(--sidebar-width) - 420px));
+}
+
+.shell[data-terminal-open="true"][data-terminal-position="right"][data-browser-open="true"] {
+  grid-template-columns: var(--sidebar-width) minmax(420px, 1fr)
+    min(var(--tools-width, 420px), calc(100vw - var(--sidebar-width) - 420px));
+}
+
+.shell[data-terminal-open="true"][data-terminal-position="right"] .sidebar-right {
+  display: none;
+}
+
+.shell[data-view="repository"][data-terminal-open="true"][data-terminal-position="right"] .repository-view {
+  grid-column: 2;
+}
+
+.shell[data-view] .tools-pane .browser-pane,
+.shell[data-view] .tools-pane .terminal-panel {
+  position: relative;
+  top: auto;
+  right: auto;
+  grid-column: auto;
+  grid-row: auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  box-shadow: none;
+}
+
+.terminal-panel[data-position="right"] {
+  border-top: 0;
+  border-left: 1px solid var(--border);
+}
+
+.tools-pane:has(.browser-pane:not([hidden])) .terminal-panel:not([hidden]) {
+  border-top: 1px solid var(--border);
+}
+
+.terminal-panel[data-position="right"] .terminal-resize {
+  top: 0;
+  bottom: 0;
+  right: auto;
+  left: -3px;
+  width: 7px;
+  height: auto;
+  cursor: col-resize;
+}
+
+.terminal-panel[data-position="right"] .terminal-resize::after {
+  top: 0;
+  bottom: 0;
+  right: auto;
+  left: 3px;
+  width: 1px;
+  height: auto;
+}
+
+@media (max-width: 1050px) {
+  .shell[data-terminal-open="true"][data-terminal-position="right"],
+  .shell[data-terminal-open="true"][data-terminal-position="right"][data-browser-open="true"] {
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  }
+
+  .shell[data-view="repository"][data-terminal-open="true"][data-terminal-position="right"] .repository-view {
+    grid-column: 2 / -1;
+  }
+
+  .tools-pane {
+    position: absolute;
+    z-index: 20;
+    top: 0;
+    right: 0;
+    grid-column: auto;
+    width: min(var(--browser-width, 520px), calc(100vw - var(--sidebar-width)));
+    box-shadow: var(--overlay-shadow);
+  }
+
+  .shell[data-terminal-open="true"][data-terminal-position="right"] .tools-pane {
+    width: min(var(--terminal-width, 420px), calc(100vw - var(--sidebar-width)));
+  }
+
+  .shell[data-terminal-open="true"][data-terminal-position="right"][data-browser-open="true"] .tools-pane {
+    width: min(var(--tools-width, 420px), calc(100vw - var(--sidebar-width)));
+  }
+
+  .shell[data-view="tasks"] .tools-pane {
+    top: 52px;
+    height: calc(var(--app-height) - 52px);
+  }
+
+  .shell[data-terminal-open="true"][data-terminal-position="bottom"] .tools-pane {
+    bottom: var(--terminal-bottom-size, 260px);
+    height: auto;
+  }
+
+  .shell[data-view="repository"][data-terminal-open="true"][data-terminal-position="bottom"] .tools-pane {
+    bottom: calc(var(--terminal-bottom-size, 260px) + 24px);
+  }
+}

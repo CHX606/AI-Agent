@@ -91,7 +91,9 @@ export async function verifyBrowser({ command, evaluate, check, main, screenshot
       terminalActive:document.querySelector('#terminal-toggle').classList.contains('is-active') })`);
     assert.deepEqual(opened, { open:"true", start:true, inspectorHidden:true, browserActive:true, terminalActive:false },
       `打开浏览器的状态不对：${JSON.stringify(opened)}`);
-    await check(() => ui("pane.querySelector('.browser-servers').dataset.state!=='loading'"), "本机服务检测没有结束");
+    assert.equal(await ui("Boolean(pane.querySelector('.browser-servers'))"), false, "起始页仍然显示本机服务器入口");
+    await evaluate("document.querySelector('#browser-pane .browser-start-address').click()");
+    await check(() => ui("document.activeElement===pane.querySelector('.browser-address input')"), "起始页搜索入口没有聚焦地址栏");
 
     await go(host);
     await check(async () => await title() === "Fixture Home", "地址栏导航没有打开测试页");

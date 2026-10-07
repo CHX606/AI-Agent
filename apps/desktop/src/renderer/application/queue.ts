@@ -1,5 +1,5 @@
 import type { RendererApp } from "./context";
-import { clearComposerMessage, composerMessage } from "./message";
+import { clearComposerMessage, composerMessage, messageHasContent } from "./message";
 
 function renderQueue(app: RendererApp): void {
   app.queuedList.replaceChildren(...app.queued.map((message, index) => {
@@ -10,9 +10,10 @@ function renderQueue(app: RendererApp): void {
     label.textContent = index === 0 ? "下一条" : "排队";
     const copy = document.createElement("span");
     copy.className = "queued-text";
-    const text = message.text + (message.images.length ? `${message.text ? " · " : ""}${message.images.length} 张图片` : "");
+    const count = message.images.length + (message.attachments?.length ?? 0);
+    const text = message.text + (count ? `${message.text ? " · " : ""}${count} 个附件` : "");
     copy.textContent = text;
-    copy.title = [message.text, ...message.images.map(image => image.name)].filter(Boolean).join("\n");
+    copy.title = [message.text, ...message.images.map(image => image.name), ...(message.attachments ?? []).map(file => file.name)].filter(Boolean).join("\n");
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "queued-remove";
@@ -27,7 +28,7 @@ function renderQueue(app: RendererApp): void {
 
 function enqueue(app: RendererApp): void {
   const message = composerMessage(app);
-  if ((!message.text && !message.images.length) || app.composerImages?.isReading()) return;
+  if (!messageHasContent(message) || app.composerImages?.isReading()) return;
   app.queued.push(message);
   clearComposerMessage(app);
   app.renderQueue();
@@ -38,7 +39,8 @@ function sendQueued(app: RendererApp, status: string): void {
   if (!app.queued.length || status === "CANCELLED" || app.submitting || document.body.dataset.busy === "true") return;
   const message = app.queued.shift()!;
   app.renderQueue();
-  void app.runAgent(message.text, message.images);
+  if (message.attachments?.length) void app.runAgent(message.text, message.images, message.attachments);
+  else void app.runAgent(message.text, message.images);
 }
 
 function clearQueue(app: RendererApp): void {

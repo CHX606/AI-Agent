@@ -10,7 +10,6 @@ import * as executionSettings from "./infrastructure/persistence/execution-setti
 import { createThemePreferences } from "./infrastructure/persistence/theme-preferences.js";
 import * as runtime from "./infrastructure/runtime/managed-runtime.js";
 import { spawnTerminal } from "./infrastructure/terminal/pty-terminal.js";
-import { detectLocalServers } from "./infrastructure/browser/local-servers.js";
 import { startDesktop } from "./transport/electron.js";
 
 if (process.env.BIT_AGENT_DESKTOP_USER_DATA) app.setPath("userData", process.env.BIT_AGENT_DESKTOP_USER_DATA);
@@ -18,7 +17,7 @@ const diagnostics = desktopDiagnostics();
 const services: DesktopServices = {
   ...repository, ...executionSettings, ...runtime,
   ...createThemePreferences(app.getPath("userData")),
-  diagnostics, saveDiagnosticBundle, spawnTerminal, detectLocalServers: () => detectLocalServers(),
+  diagnostics, saveDiagnosticBundle, spawnTerminal,
   gatewayClient: new GatewayClient(diagnostics, runtime.managedHeaders),
 };
 startDesktop(services, dirname(fileURLToPath(import.meta.url)));

@@ -13,15 +13,29 @@ function read<T>(key: string): T[] {
   try {
     const value = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown;
     return Array.isArray(value) ? value.filter((item) => typeof item?.url === "string") as T[] : [];
-  } catch { return []; }
+  } catch (error) { console.warn("无法读取浏览历史", error); return []; }
 }
 
 function write(key: string, value: unknown): void {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* 存不下就不记 */ }
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (error) { console.warn("无法保存浏览历史", error); }
 }
 
-export function history(): HistoryEntry[] { return read<HistoryEntry>(HISTORY_KEY); }
-export function bookmarks(): Bookmark[] { return read<Bookmark>(BOOKMARKS_KEY); }
+function uniqueEntries<T extends { url: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    let key: string;
+    try { key = new URL(item.url).href; }
+    catch (error) { console.warn("忽略无效的浏览历史地址", error); return false; }
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function history(): HistoryEntry[] {
+  return uniqueEntries(read<HistoryEntry>(HISTORY_KEY).sort((a, b) => b.last - a.last));
+}
+export function bookmarks(): Bookmark[] { return uniqueEntries(read<Bookmark>(BOOKMARKS_KEY)); }
 
 export function recordVisit(url: string, title: string, now = Date.now()): void {
   const entries = history();

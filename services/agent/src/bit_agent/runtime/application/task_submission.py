@@ -9,11 +9,13 @@ from uuid import uuid4
 
 from bit_agent.agent.limits import DEFAULT_MAX_TOOL_ROUNDS, validate_max_tool_rounds
 from bit_agent.agent.runtime import REASONING_EFFORTS
+from bit_agent.attachments import validate_attachments, validate_upload_limits
 from bit_agent.images import validate_images
 from bit_agent.observability.diagnostics import failure
 from bit_agent.runtime.application.delegation import MODE_INSTRUCTIONS
 from bit_agent.runtime.application.interaction import TaskInteraction
 from bit_agent.runtime.domain.acceptance_policy import ACCEPTANCE_MODES, DEFAULT_ACCEPTANCE_MODE
+from bit_agent.runtime.domain.errors import InteractionError
 
 from .service_protocol import now
 
@@ -41,15 +43,29 @@ def _workspace_root(workspace: Any) -> Path:
     return root
 
 
-def _task_input(input: dict[str, Any]) -> dict[str, Any]:
+def _message_fields(input: dict[str, Any]) -> dict[str, Any]:
     objective = input.get("objective", "")
     images = validate_images(input.get("images"))
+    try:
+        attachments = validate_attachments(input.get("attachments"))
+        validate_upload_limits(images, attachments)
+    except ValueError as exc:
+        raise InteractionError(str(exc), 400) from exc
     if (
         not isinstance(objective, str)
         or len(objective.strip()) > 4000
-        or not (objective.strip() or images)
+        or not (objective.strip() or images or attachments)
     ):
-        raise ValueError("请填写 1 到 4000 个字符的任务要求，或上传图片")
+        raise ValueError("请填写 1 到 4000 个字符的任务要求，或上传图片/附件")
+    return {
+        "objective": objective.strip(),
+        **({"images": images} if images else {}),
+        **({"attachments": attachments} if attachments else {}),
+    }
+
+
+def _task_input(input: dict[str, Any]) -> dict[str, Any]:
+    message = _message_fields(input)
     root = _workspace_root(input.get("workspace_root", ""))
     mode, permission = (
         input.get("multi_agent_mode", "auto"),
@@ -66,7 +82,7 @@ def _task_input(input: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(session_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", session_id):
         raise ValueError("会话编号无效")
     return {
-        "objective": objective.strip(),
+        **message,
         "workspace_root": str(root),
         "session_id": session_id,
         "multi_agent_mode": mode,
@@ -76,7 +92,6 @@ def _task_input(input: dict[str, Any]) -> dict[str, Any]:
             input.get("max_tool_rounds", DEFAULT_MAX_TOOL_ROUNDS)
         ),
         **_model_options(input),
-        **({"images": images} if images else {}),
     }
 
 

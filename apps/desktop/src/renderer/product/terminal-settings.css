@@ -1,0 +1,28 @@
+#terminal-settings { order: 6; }
+
+.terminal-settings-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 200px);
+  align-items: center;
+  gap: 12px 20px;
+}
+
+.terminal-settings-form label {
+  font-weight: 500;
+}
+
+.terminal-settings-form select {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--bg-main);
+  color: var(--text);
+}
+
+.terminal-settings-form p {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+  font-size: 12px;
+}

@@ -133,7 +133,7 @@ export class LocalTaskStore implements TaskStore {
     const line = `${JSON.stringify({ id, method, params })}\n`;
     if (Buffer.byteLength(line, "utf8") > IMAGE_LIMITS.maxRequestBytes) {
       return Promise.reject(Object.assign(new Error("请求大小不能超过 28 MiB"),
-        { statusCode: 413, userMessage: "请求过大，请减少图片数量或大小" }));
+        { statusCode: 413, userMessage: "请求过大，请减少图片或附件的数量或大小" }));
     }
     const fields = { rpc_id: String(id), operation: method, task_id: params.task_id,
       session_id: params.session_id };

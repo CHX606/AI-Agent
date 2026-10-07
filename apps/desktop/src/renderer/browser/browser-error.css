@@ -1,0 +1,53 @@
+.browser-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.browser-error h3 {
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.browser-error p {
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.browser-error code {
+  max-width: 100%;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-panel);
+  font: 12px var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.browser-error-certificate {
+  max-width: 520px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.browser-proceed { color: var(--red); }
+
+.browser-error-code {
+  color: var(--text-faint);
+  font: 11px var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.browser-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.browser-error-actions button { min-height: 32px; }

@@ -1,3 +1,4 @@
+import { renderMessageAttachments, savedAttachments } from "../attachments/message-attachments";
 import { object } from "../dom";
 import { renderMessageImages, savedImages } from "../attachments/message-images";
 import { clearPreviousTurns, renderPreviousTurns, setAgentMode } from "../session-view";
@@ -26,8 +27,12 @@ export async function restoreTask(app: RendererApp, entry: TaskHistoryEntry): Pr
       app.objectiveDisplay.textContent = task.objective;
     }
     app.activeImages = savedImages(task.images);
-    if (app.objectiveDisplay.parentElement) renderMessageImages(app.objectiveDisplay.parentElement, task.images);
-    appendSavedImageUpdates(app, currentUpdates ?? task.intent_updates);
+    app.activeAttachments = savedAttachments(task.attachments);
+    if (app.objectiveDisplay.parentElement) {
+      renderMessageImages(app.objectiveDisplay.parentElement, task.images);
+      renderMessageAttachments(app.objectiveDisplay.parentElement, task.attachments);
+    }
+    appendSavedUploadUpdates(app, currentUpdates ?? task.intent_updates);
     watchRestoredTask(app, task, entry.status);
   } catch (error) {
     if (generation !== app.viewGeneration) return;
@@ -41,13 +46,17 @@ function savedCurrentUpdates(saved: Record<string, unknown>, taskId: string): un
   return current?.intent_updates;
 }
 
-function appendSavedImageUpdates(app: RendererApp, value: unknown): void {
+function appendSavedUploadUpdates(app: RendererApp, value: unknown): void {
   if (!Array.isArray(value)) return;
   for (const raw of value) {
     const update = object(raw);
-    if (!update || !Array.isArray(update.images) || !update.images.length) continue;
+    if (!update) continue;
+    const images = Array.isArray(update.images) ? update.images : [];
+    const attachments = Array.isArray(update.attachments) ? update.attachments : [];
+    if (!images.length && !attachments.length) continue;
     const text = typeof update.text === "string" ? update.text : "";
-    app.streamView.userNote(text, update.images);
+    if (attachments.length) app.streamView.userNote(text, images, attachments);
+    else app.streamView.userNote(text, images);
   }
 }
 
@@ -72,6 +81,7 @@ function prepareRestore(app: RendererApp, entry: TaskHistoryEntry): number {
   app.rewindableTaskId = null;
   app.activeObjective = entry.objective;
   app.activeImages = [];
+  app.activeAttachments = [];
   app.objectiveInput.value = "";
   app.composerImages?.clear();
   setAgentMode(entry.multiAgentMode);
@@ -107,6 +117,7 @@ export function resetTask(app: RendererApp): void {
   clearPreviousTurns();
   app.activeObjective = "";
   app.activeImages = [];
+  app.activeAttachments = [];
   app.replaying = false;
   app.taskIdText.textContent = "新任务";
   app.taskIdText.removeAttribute("title");

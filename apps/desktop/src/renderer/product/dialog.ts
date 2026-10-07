@@ -1,6 +1,6 @@
 import { errorText } from "../dom.js";
 
-type ViewKind = "model" | "review" | "diagnostics" | "memory" | "mcp";
+type ViewKind = "model" | "review" | "diagnostics" | "memory" | "mcp" | "terminal";
 
 export class ProductDialog {
   private readonly modal: HTMLDialogElement;

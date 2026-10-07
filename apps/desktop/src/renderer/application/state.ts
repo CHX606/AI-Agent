@@ -101,6 +101,7 @@ function initializeConversation(app: RendererApp): void {
   app.nextSessionOffset = 0;
   app.activeObjective = "";
   app.activeImages = [];
+  app.activeAttachments = [];
   app.composerImages = null;
   app.rewindableTaskId = null;
   app.refreshTurnActions = null;
@@ -152,4 +153,3 @@ function initializeComposer(app: RendererApp): void {
   app.permissionOrder = ["confirm", "edit", "read_only"] as const;
   app.resizingInspector = false;
 }
-

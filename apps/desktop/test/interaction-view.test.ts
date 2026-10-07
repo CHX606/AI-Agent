@@ -131,3 +131,12 @@ describe("task interaction visibility", () => {
     expect(mocks.getTask).not.toHaveBeenCalled();
   });
 });
+
+it.each(["supplement", "answer"] as const)("preserves ordinary attachments through %s IPC calls", async mode => {
+  const view = new InteractionController({ current: () => request, apply });
+  view.update({ task_id: request.taskId, status: "WAITING_FOR_INPUT", question });
+  mocks.interact.mockResolvedValue({ task_id: request.taskId, status: "RUNNING" });
+  const file = { name: "notes.txt", mime_type: "text/plain", data_url: "data:text/plain;base64,aGVsbG8=" };
+  expect(await view[mode]("", [], [file])).toBe(true);
+  expect(mocks.interact).toHaveBeenCalledWith(expect.objectContaining({ action: mode, text: "", attachments: [file] }));
+});

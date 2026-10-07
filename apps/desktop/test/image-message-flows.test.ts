@@ -1,3 +1,5 @@
+import type { FileAttachment } from "../src/shared/attachment-input";
+import { renderMessageAttachments } from "../src/renderer/attachments/message-attachments";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {} from "../src/renderer/global";
 import type { ImageAttachment } from "../src/shared/image-input";
@@ -13,6 +15,11 @@ vi.mock("../src/renderer/attachments/message-images", async original => ({
   ...await original<typeof import("../src/renderer/attachments/message-images")>(), renderMessageImages: vi.fn(),
 }));
 
+vi.mock("../src/renderer/attachments/message-attachments", async original => ({
+  ...await original<typeof import("../src/renderer/attachments/message-attachments")>(), renderMessageAttachments: vi.fn(),
+}));
+
+const file: FileAttachment = { name: "notes.txt", mime_type: "text/plain", data_url: "data:text/plain;base64,aGVsbG8=" };
 const image: ImageAttachment = { name: "screen.png", mime_type: "image/png",
   data_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2FIAAAAASUVORK5CYII=" };
 const api = { createTask: vi.fn(), getSession: vi.fn(), getTask: vi.fn(), watchTask: vi.fn(), unwatchTask: vi.fn() };
@@ -26,14 +33,18 @@ class TestElement {
   replaceChildren(...elements: TestElement[]): void { this.children = elements; }
 }
 
-function fixture(images = [image], text = "") {
+function fixture(images = [image], text = "", attachments: FileAttachment[] = []) {
   let draft = images.map(value => ({ ...value }));
+  let draftFiles = attachments.map(value => ({ ...value }));
   const composerImages = { snapshot: vi.fn(() => draft.map(value => ({ ...value }))),
-    isReading: vi.fn(() => false), clear: vi.fn(() => { draft = []; }),
-    set: vi.fn((value: ImageAttachment[]) => { draft = value.map(item => ({ ...item })); }), refresh: vi.fn() };
+    attachmentsSnapshot: vi.fn(() => draftFiles.map(value => ({ ...value }))),
+    isReading: vi.fn(() => false), clear: vi.fn(() => { draft = []; draftFiles = []; }),
+    set: vi.fn((value: ImageAttachment[], files: FileAttachment[] = []) => {
+      draft = value.map(item => ({ ...item })); draftFiles = files.map(item => ({ ...item }));
+    }), refresh: vi.fn() };
   const app = {
     gatewayUrl: "http://127.0.0.1:4000", activeTaskId: null, activeSessionId: null,
-    activeWorkspaceRoot: "D:/repo", activeObjective: "", activeImages: [],
+    activeWorkspaceRoot: "D:/repo", activeObjective: "", activeImages: [], activeAttachments: [],
     submitting: false, viewGeneration: 0, replaying: false, stoppedTaskId: null, stoppedTasks: new Set(),
     history: [], queued: [], queuedList: new TestElement(), terminalStatuses: new Set(["COMPLETED"]),
     workspaceInput: { value: "D:/repo" }, objectiveInput: Object.assign(new TestElement(), { value: text }),
@@ -187,5 +198,83 @@ describe("image messages across the existing task flow", () => {
       gatewayUrl: app.gatewayUrl, workspaceRoot: "D:/repo", createdAt: "2026-10-05", status: "COMPLETED" });
     expect(app.streamView.userNote).toHaveBeenCalledOnce();
     expect(app.streamView.userNote).toHaveBeenCalledWith("", [answerImage]);
+  });
+});
+
+describe("ordinary attachments across the existing task flow", () => {
+  it("submits a file-only task, uses its filename as the title and clears only the accepted draft", async () => {
+    const { app, composerImages } = fixture([], "", [file]);
+    await app.runAgent();
+    expect(api.createTask).toHaveBeenCalledWith(expect.objectContaining({ objective: "", attachments: [file] }));
+    expect(api.createTask.mock.calls[0]?.[0]).not.toHaveProperty("images");
+    expect(app.activeAttachments).toEqual([file]);
+    expect(composerImages.attachmentsSnapshot()).toEqual([]);
+    expect(app.upsertHistory).toHaveBeenCalledWith(expect.objectContaining({ objective: file.name }));
+    expect(renderMessageAttachments).toHaveBeenCalledWith(app.objectiveDisplay.parentElement, [file]);
+  });
+
+  it("keeps mixed image/file channels separate when continuing a conversation", async () => {
+    const { app } = fixture([image], "compare", [file]);
+    app.activeSessionId = "old-session";
+    await app.runAgent();
+    expect(api.createTask).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "old-session", images: [image], attachments: [file] }));
+  });
+
+  it("restores text, images and files together after a rejected creation", async () => {
+    const { app, composerImages } = fixture([image], "read these", [file]);
+    api.createTask.mockRejectedValueOnce(new Error("unavailable"));
+    await app.runAgent();
+    expect(app.objectiveInput.value).toBe("read these");
+    expect(composerImages.snapshot()).toEqual([image]);
+    expect(composerImages.attachmentsSnapshot()).toEqual([file]);
+  });
+
+  it.each(["supplement", "answer"] as const)("sends a file-only %s and preserves a failed draft", async mode => {
+    const { app, composerImages } = fixture([], "", [file]);
+    app.composerMode = () => mode;
+    vi.mocked(app.interactionView![mode]).mockResolvedValueOnce(false);
+    await app.steer(mode);
+    expect(composerImages.attachmentsSnapshot()).toEqual([file]);
+    await app.steer(mode);
+    expect(app.interactionView![mode]).toHaveBeenCalledWith("", [], [file]);
+    expect(app.streamView.userNote).toHaveBeenCalledWith("", [], [file]);
+    expect(composerImages.attachmentsSnapshot()).toEqual([]);
+  });
+
+  it("queues a file snapshot independently of later edits and restores a rejected queue item", async () => {
+    const { app, composerImages } = fixture([], "queued A", [file]);
+    app.enqueue();
+    const later = { ...file, name: "later.txt" };
+    composerImages.set([], [later]);
+    app.objectiveInput.value = "draft B";
+    api.createTask.mockRejectedValueOnce(new Error("unavailable"));
+    const run = vi.spyOn(app, "runAgent");
+    app.sendQueued("COMPLETED");
+    await run.mock.results[0]?.value;
+    expect(run).toHaveBeenCalledWith("queued A", [], [file]);
+    expect(app.queued).toEqual([{ text: "queued A", images: [], attachments: [file] }]);
+    expect(app.objectiveInput.value).toBe("draft B");
+    expect(composerImages.attachmentsSnapshot()).toEqual([later]);
+  });
+
+  it("restores file-only initial messages and question answers from saved session turns", async () => {
+    const { app } = fixture([], "", [file]);
+    api.getTask.mockResolvedValue({ task_id: "saved-task", objective: "", attachments: [file], status: "COMPLETED" });
+    api.getSession.mockResolvedValue({ turns: [{ task_id: "saved-task", intent_updates: [{ text: "", attachments: [file], question_id: "q1" }] }] });
+    await app.restoreTask({ taskId: "saved-task", sessionId: "saved-session", objective: file.name,
+      gatewayUrl: app.gatewayUrl, workspaceRoot: "D:/repo", createdAt: "2026-10-06", status: "COMPLETED" });
+    expect(app.activeAttachments).toEqual([file]);
+    expect(renderMessageAttachments).toHaveBeenCalledWith(app.objectiveDisplay.parentElement, [file]);
+    expect(app.streamView.userNote).toHaveBeenCalledWith("", [], [file]);
+  });
+
+  it("blocks file-only submission and queueing until reading completes", async () => {
+    const { app, composerImages } = fixture([], "", [file]);
+    composerImages.isReading.mockReturnValue(true);
+    await app.runAgent();
+    app.enqueue();
+    expect(api.createTask).not.toHaveBeenCalled();
+    expect(app.queued).toEqual([]);
+    expect(composerImages.attachmentsSnapshot()).toEqual([file]);
   });
 });

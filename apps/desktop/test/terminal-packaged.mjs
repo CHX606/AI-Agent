@@ -18,6 +18,107 @@ async function typeLine(command, evaluate, text) {
   }
 }
 
+async function currentPrompt(evaluate) {
+  return evaluate(`(() => {
+    const terminal=document.querySelector('${current}'), cursor=terminal.querySelector('.xterm-cursor');
+    if (!cursor) return null;
+    const lines=[...terminal.querySelectorAll('.xterm-rows > div')];
+    const index=lines.findIndex(line=>line.contains(cursor));
+    return lines.slice(0,index+1).map(line=>line.textContent.replace(/\\u00a0/g,' ')).join('').trimEnd();
+  })()`);
+}
+
+async function verifyPlainPrompt(command, evaluate, check, cwd) {
+  await typeLine(command, evaluate, "Clear-Host");
+  const expected = `PS ${cwd}>`;
+  await check(async () => await currentPrompt(evaluate) === expected, `提示符不是简洁的 PS 路径>：${expected}`);
+  const parent = cwd.replace(/\\[^\\]+\\?$/u, "");
+  await typeLine(command, evaluate, "Set-Location -LiteralPath '..'; Clear-Host");
+  await check(async () => await currentPrompt(evaluate) === `PS ${parent}>`, "cd 到上级后提示符没有显示真实路径");
+  const quoted = cwd.replaceAll("'", "''");
+  await typeLine(command, evaluate, `Set-Location -LiteralPath '${quoted}'; Clear-Host`);
+  await check(async () => await currentPrompt(evaluate) === expected, "cd 回工作区后提示符路径不对");
+  return { initial:expected, afterCd:`PS ${parent}>`, restored:expected, plain:true, pathFollowsCd:true };
+}
+
+async function verifyBarCursor(evaluate, check) {
+  let observed = null;
+  await check(async () => {
+    observed = await evaluate(`(() => {
+      const cursor=document.querySelector('${current} .xterm-cursor');
+      if (!cursor) return null;
+      const style=getComputedStyle(cursor), offsets=style.boxShadow.match(/-?[\\d.]+px/g) ?? [];
+      return { bar:cursor.classList.contains('xterm-cursor-bar'), block:cursor.classList.contains('xterm-cursor-block'),
+        outline:cursor.classList.contains('xterm-cursor-outline'), shadow:style.boxShadow,
+        strokeWidth:parseFloat(offsets[0]), vertical:parseFloat(offsets[1])===0 && parseFloat(offsets[2])===0,
+        background:style.backgroundColor };
+    })()`);
+    return observed?.bar && !observed.block && !observed.outline && observed.vertical
+      && observed.strokeWidth > 0 && observed.strokeWidth <= 2;
+  }, "实际终端光标不是 1–2px 的细竖线");
+  return observed;
+}
+
+async function verifyInputColors(command, evaluate, check) {
+  const input = 'Write-Output "ready"';
+  await command("Input.insertText", { text:input });
+  await check(() => evaluate(`${rows}.includes(${JSON.stringify(input)})`), "简洁终端截图没有显示实际输入的命令");
+  let colors = [];
+  await check(async () => {
+    colors = await evaluate(`[...document.querySelectorAll('${current} .xterm-rows span')]
+      .filter(span=>span.textContent.trim() && !span.classList.contains('xterm-cursor')).map(span=>getComputedStyle(span).color)`);
+    return new Set(colors).size > 1;
+  }, "真实输入的 PowerShell 命令没有语法颜色");
+  return { input, colors:[...new Set(colors)] };
+}
+
+const positionKey = "bit-agent.terminal-position.v1";
+const positionDialog = "dialog[open][data-view=terminal], dialog[open][data-panel=terminal]";
+
+/** 通过个人中心里的真实设置切换位置，布局验收复用同一入口。 */
+export async function setTerminalPosition(evaluate, check, position) {
+  await evaluate("if(document.querySelector('#profile-menu').hidden)document.querySelector('#profile-button').click()");
+  await evaluate("document.querySelector('#terminal-settings').click()");
+  await check(() => evaluate(`Boolean(document.querySelector('${positionDialog}')?.querySelector('select[name=terminalPosition]'))`),
+    "个人中心没有打开终端设置");
+  const values = await evaluate(`[...document.querySelector('${positionDialog}').querySelector('select[name=terminalPosition]').options].map(option=>option.value)`);
+  assert.deepEqual(values, ["right", "bottom"], "终端位置选项不对");
+  await evaluate(`(() => { const select=document.querySelector('${positionDialog}').querySelector('select[name=terminalPosition]');
+    select.value=${JSON.stringify(position)}; select.dispatchEvent(new Event('change',{bubbles:true})); })()`);
+  await check(() => evaluate(`document.querySelector('#terminal-panel').dataset.position===${JSON.stringify(position)}
+    && localStorage.getItem(${JSON.stringify(positionKey)})===${JSON.stringify(position)}`), "终端位置没有立即应用并保存");
+  await evaluate(`document.querySelector('${positionDialog}').querySelector('[aria-label="关闭弹窗"]').click()`);
+}
+
+async function verifyPosition(evaluate, position) {
+  const geometry = await evaluate(`(() => {
+    const panel=document.querySelector('#terminal-panel'), handle=panel.querySelector('.terminal-resize');
+    const box=panel.getBoundingClientRect(), grip=handle.getBoundingClientRect();
+    return { position:panel.dataset.position, parent:panel.parentElement.className, containerParent:panel.parentElement.parentElement.className,
+      column:getComputedStyle(panel.parentElement).gridColumnStart,
+      orientation:handle.getAttribute('aria-orientation'), edge:${JSON.stringify(position)}==='right' ? Math.abs(grip.left-box.left) : Math.abs(grip.top-box.top),
+      paddingLeft:parseFloat(getComputedStyle(panel.querySelector('.terminal-host')).paddingLeft) };
+  })()`);
+  assert.equal(geometry.position, position, `终端位置不对：${JSON.stringify(geometry)}`);
+  assert.equal(geometry.orientation, position === "right" ? "vertical" : "horizontal", "终端拖动边方向不对");
+  assert(geometry.edge <= 8, `终端拖动边没有贴在正确边缘：${JSON.stringify(geometry)}`);
+  assert(geometry.paddingLeft <= 8, `终端还有多余的左侧缩进：${JSON.stringify(geometry)}`);
+  if (position === "right") {
+    assert(geometry.parent.split(" ").includes("tools-pane") && geometry.containerParent.split(" ").includes("shell") && geometry.column === "3", `右侧终端没有放在第三列：${JSON.stringify(geometry)}`);
+  }
+}
+
+async function verifyBrowserSeparation(evaluate) {
+  const geometry = await evaluate(`(() => {
+    const terminal=document.querySelector('#terminal-panel').getBoundingClientRect(), browser=document.querySelector('#browser-pane').getBoundingClientRect();
+    const overlap=Math.max(0,Math.min(terminal.right,browser.right)-Math.max(terminal.left,browser.left))
+      * Math.max(0,Math.min(terminal.bottom,browser.bottom)-Math.max(terminal.top,browser.top));
+    const titlebar=document.querySelector('.window-titlebar').getBoundingClientRect().bottom;
+    return { overlap, terminalTop:terminal.top, browserTop:browser.top, titlebar }; })()`);
+  assert(geometry.overlap <= 1 && geometry.terminalTop >= geometry.titlebar - 1 && geometry.browserTop >= geometry.titlebar - 1,
+    `终端和浏览器重叠或伸进标题栏：${JSON.stringify(geometry)}`);
+}
+
 /** 内置终端：打开、运行命令、配色生效（CSP 下的样式镜像）、隐藏后保留、重新启动。 */
 export async function verifyTerminal({ command, evaluate, check, screenshot, main }) {
   const shots = [];
@@ -30,6 +131,7 @@ export async function verifyTerminal({ command, evaluate, check, screenshot, mai
   assert.equal(await evaluate("document.querySelector('#terminal-panel').hidden"), true, "终端默认应隐藏");
   await evaluate("document.querySelector('#terminal-toggle').click()");
   await check(() => evaluate(`/PS [^\\n]*>/.test(${rows})`), "终端没有出现 PowerShell 提示符");
+  await verifyPosition(evaluate, "right");
   const opened = await evaluate(`(() => {
     const panel=document.querySelector('#terminal-panel'), rowsElement=panel.querySelector('.xterm-rows');
     const span=rowsElement.querySelector('span');
@@ -50,6 +152,27 @@ export async function verifyTerminal({ command, evaluate, check, screenshot, mai
   const expected = `rgb(${parseInt(hex.slice(0, 2), 16)}, ${parseInt(hex.slice(2, 4), 16)}, ${parseInt(hex.slice(4, 6), 16)})`;
   assert.equal(opened.color, expected, "终端文字没有使用主题颜色");
   assert.equal(opened.viewportBackground, opened.panelBackground, "终端底层视口没有使用主题背景（底部会露出黑边）");
+  const font = await evaluate(`(() => {
+    const fontFamily=getComputedStyle(document.querySelector('${current} .xterm-rows')).fontFamily;
+    const loaded=[...document.fonts].some(face=>face.family.includes('Meslo') && face.status==='loaded');
+    return { fontFamily, loaded }; })()`);
+  assert(font.loaded && font.fontFamily.includes("Meslo"), `真实终端没有使用加载完成的字体：${JSON.stringify(font)}`);
+  // 清屏后直接量真实提示符、cd 和光标；不读取内部 Terminal 实例。
+  const simplePrompt = await verifyPlainPrompt(command, evaluate, check, opened.cwd);
+  await evaluate(`document.querySelector('${current} .xterm-helper-textarea').focus()`);
+  const inputColors = await verifyInputColors(command, evaluate, check);
+  const barCursor = await verifyBarCursor(evaluate, check);
+  await capture("terminal-simple-prompt-right.png");
+  // 撤掉截图中的未提交输入，再继续执行功能验收。
+  await key(command, { key:"c", code:"KeyC", windowsVirtualKeyCode:67, modifiers:2 });
+  await typeLine(command, evaluate, "Clear-Host");
+  await check(async () => await currentPrompt(evaluate) === simplePrompt.restored, "截图输入清理后没有恢复简洁提示符");
+  const glyphLine = "glyph-check ABC 中文 \ue0b0\uf17a\uf07c";
+  await typeLine(command, evaluate, "Write-Output ('glyph-check ABC 中文 ' + [char]0xe0b0 + [char]0xf17a + [char]0xf07c)");
+  await check(() => evaluate(`${lineList}.includes(${JSON.stringify(glyphLine)})`), "终端没有显示完整的中文和三个图标字符输出");
+  await capture("terminal-glyphs-right.png");
+  // 长工作区路径在右侧会软折行；原有物理行 cwd 校验在宽底部运行。
+  await setTerminalPosition(evaluate, check, "bottom");
   await typeLine(command, evaluate, "Write-Output (\"bitagent-\" + (6*7)); (Get-Location).Path");
   // 输出行是 bitagent-42，下一行是 Get-Location 的结果。ConPTY 会整屏重绘，所以等它稳定。
   let lines = [];
@@ -62,6 +185,12 @@ export async function verifyTerminal({ command, evaluate, check, screenshot, mai
     await check(outputThenCwd, "终端命令没有输出结果");
   } catch (error) {
     throw new Error(`终端输出或工作目录不对：${JSON.stringify({ cwd:opened.cwd, lines:lines.filter(Boolean) })}`, { cause:error });
+  }
+  // 两个位置只移动同一个面板，原终端进程和输出应保留；原有底部行为随后继续验收。
+  for (const position of ["bottom", "right", "bottom"]) {
+    await setTerminalPosition(evaluate, check, position);
+    await verifyPosition(evaluate, position);
+    await check(() => evaluate(`${rows}.includes('bitagent-42')`), "切换终端位置后原会话内容丢失");
   }
   for (const theme of ["light", "dark"]) {
     await evaluate(`if(document.documentElement.dataset.theme!==${JSON.stringify(theme)})document.querySelector('#theme-toggle').click()`);
@@ -131,6 +260,13 @@ export async function verifyTerminal({ command, evaluate, check, screenshot, mai
   await check(() => evaluate(`document.querySelector('.shell').dataset.browserOpen==='true'
     && [...document.querySelectorAll('#browser-pane .browser-tab')].some(tab=>tab.title.includes(${JSON.stringify(linkUrl)}))`),
   "Ctrl+点击终端里的网址没有在内置浏览器打开");
+  for (const position of ["right", "bottom"]) {
+    await setTerminalPosition(evaluate, check, position);
+    await verifyPosition(evaluate, position);
+    await verifyBrowserSeparation(evaluate);
+    assert(await evaluate(`${rows}.includes('needle-one')`), "浏览器同时打开时切换终端位置丢失了输出");
+    await capture(`terminal-${position}-browser-1280.png`);
+  }
   // 收拾：关掉这个标签页和浏览器，后面的浏览器验收从空白开始。
   await evaluate("document.querySelectorAll('#browser-pane .browser-tab .browser-tab-close').forEach(button=>button.click())");
   await check(() => evaluate("!document.querySelector('#browser-pane .browser-tab')"), "没有关掉终端链接打开的标签页");
@@ -159,6 +295,19 @@ export async function verifyTerminal({ command, evaluate, check, screenshot, mai
 
   await evaluate("document.querySelector('#terminal-toggle').click()");
   assert.equal(await evaluate("document.querySelector('#terminal-panel').hidden"), true);
-  return { result:{ prompt:true, commandOutput:true, cwd:opened.cwd, themedByConstructedSheets:true, keptWhenHidden:true, restart:true,
-    appZoom:true, find:true, quoteToConversation:true, linkOpensBrowser:true, multipleTerminals:true, followsRepositoryView:true }, shots };
+  // 设置在页面重载后仍保持；终端默认右侧，后续浏览器和布局验收从这个状态开始。
+  await setTerminalPosition(evaluate, check, "right");
+  await evaluate("location.reload()");
+  await check(() => evaluate("document.readyState==='complete' && Boolean(window.bitAgent && document.querySelector('#terminal-panel[data-position=right]'))"),
+    "页面重载后没有恢复右侧终端设置");
+  assert.equal(await evaluate(`localStorage.getItem(${JSON.stringify(positionKey)})`), "right", "重载后终端位置偏好丢失");
+  await evaluate("document.querySelector('#nav-tasks').click(); document.querySelector('#terminal-toggle').click()");
+  await check(() => evaluate(`/PS [^\\n]*>/.test(${rows})`), "重载后右侧终端不能运行");
+  await verifyPosition(evaluate, "right");
+  await evaluate("document.querySelector('#terminal-toggle').click()");
+  await setTerminalPosition(evaluate, check, "bottom");
+  return { result:{ prompt:true, commandOutput:true, cwd:opened.cwd, fontLoaded:font.loaded, fontFamily:font.fontFamily,
+    glyphs:{ output:glyphLine, screenshot:"terminal-glyphs-right.png" }, simplePrompt, barCursor,
+    syntaxColors:inputColors, simpleScreenshot:"terminal-simple-prompt-right.png", themedByConstructedSheets:true, keptWhenHidden:true, restart:true,
+    appZoom:true, find:true, quoteToConversation:true, linkOpensBrowser:true, multipleTerminals:true, followsRepositoryView:true, defaultRight:true, positionSettings:true, positionsPreserveSession:true, positionPersistedAfterReload:true, browserSeparation:true, compactLeftInset:true }, shots };
 }

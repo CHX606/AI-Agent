@@ -1,0 +1,174 @@
+/* 标签栏：标签可以收窄到 92px，再多就横向滚动。 */
+.browser-tabbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 8px 0;
+  background: var(--bg-rail);
+}
+
+.browser-tabs {
+  display: flex;
+  flex: 0 1 auto;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.browser-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.browser-tab {
+  display: flex;
+  flex: 0 1 190px;
+  align-items: center;
+  gap: 7px;
+  min-width: 92px;
+  height: 30px;
+  padding: 0 4px 0 10px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: default;
+  user-select: none;
+}
+
+.browser-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-soft);
+}
+
+.browser-tab[aria-selected="true"] {
+  border-color: var(--border);
+  background: var(--bg-sidebar);
+  color: var(--text);
+}
+
+.browser-tab:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.browser-tab-icon {
+  display: grid;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  color: var(--text-faint);
+}
+
+.browser-tab-icon img,
+.browser-tab-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.browser-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: browser-spin 0.8s linear infinite;
+}
+
+@keyframes browser-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Agent 正在用的标签页：标题前有一个小标记。 */
+.browser-tab[data-agent="true"] .browser-tab-title::before {
+  margin-right: 5px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  content: "Agent";
+}
+
+.browser-tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 关闭按钮浮在标签右端，不占位置：没悬停的后台标签，标题能用满整个宽度。 */
+.browser-tab {
+  position: relative;
+  padding-right: 8px;
+}
+
+.browser-tab-close {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0;
+  transform: translateY(-50%);
+}
+
+.browser-tab:hover .browser-tab-title,
+.browser-tab[aria-selected="true"] .browser-tab-title,
+.browser-tab:focus-within .browser-tab-title {
+  margin-right: 18px;
+}
+
+.browser-tab-close svg {
+  width: 12px;
+  height: 12px;
+}
+
+.browser-tab:hover .browser-tab-close,
+.browser-tab[aria-selected="true"] .browser-tab-close,
+.browser-tab-close:focus-visible {
+  opacity: 1;
+}
+
+/* 没显示时也点不到，免得误关后台标签。 */
+.browser-tab:not(:hover, [aria-selected="true"], :focus-within) .browser-tab-close {
+  pointer-events: none;
+}
+
+.browser-tab-close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.browser-tabbar .browser-new-tab {
+  display: grid;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  margin-bottom: 3px;
+  place-items: center;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.browser-tabbar .browser-new-tab svg {
+  width: 15px;
+  height: 15px;
+}
+
+.browser-tabbar .browser-new-tab:hover,
+.browser-tabbar .browser-new-tab:focus-visible {
+  background: var(--bg-hover);
+  color: var(--text);
+}

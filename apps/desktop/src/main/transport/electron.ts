@@ -67,7 +67,7 @@ async function initializeDesktop(services: DesktopServices, currentDirectory: st
   registerMemoryIpc(services, handle);
   registerClipboardIpc(handle);
   registerTerminalIpc(services, handle);
-  registerBrowserIpc(services, handle);
+  registerBrowserIpc(handle);
   watches.register();
   const attachZoom = registerDesktopZoom(services);
   const createWindow = () => {

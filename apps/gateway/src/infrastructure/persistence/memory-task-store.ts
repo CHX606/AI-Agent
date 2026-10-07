@@ -116,6 +116,7 @@ export class MemoryTaskStore implements TaskStore {
       status: "QUEUED",
       objective: input.objective,
       ...(input.images?.length ? { images: structuredClone(input.images) } : {}),
+      ...(input.attachments?.length ? { attachments: structuredClone(input.attachments) } : {}),
       workspace_root: input.workspace_root,
       max_tool_rounds: input.max_tool_rounds ?? DEFAULT_MAX_TOOL_ROUNDS,
       created_at: now,

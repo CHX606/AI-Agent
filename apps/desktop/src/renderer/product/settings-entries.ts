@@ -3,6 +3,8 @@ import { showDiagnostics } from "./diagnostics.js";
 import type { ProductDialog } from "./dialog.js";
 import { showMemories } from "./memory.js";
 import { showModelSettings } from "./model.js";
+import { showTerminalSettings } from "./terminal-settings.js";
+import "./terminal-settings.css";
 
 // 每个入口一个图标：模型（芯片）、诊断（心电线）；执行设置的图标在 execution-settings.ts。
 const modelIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/></svg>`;
@@ -36,6 +38,9 @@ export function mountSettingsEntries(dialog: ProductDialog,
   diagnostics.after(memory);
   const tools = settingButton("mcp-settings", `${toolsIcon}<span>外部工具</span>`);
   memory.after(tools);
+  const terminal = settingButton("terminal-settings", `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg><span>终端设置</span>`);
+  tools.after(terminal);
+  terminal.onclick = () => showTerminalSettings(dialog);
   model.addEventListener("click", () => { void showModelSettings(dialog); });
   diagnostics.onclick = () => { void showDiagnostics(dialog, diagnosticCurrent); };
   memory.onclick = () => { void showMemories(dialog, memoryCurrent); };

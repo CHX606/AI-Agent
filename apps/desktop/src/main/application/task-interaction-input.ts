@@ -1,12 +1,16 @@
 import type { TaskInteractionInput } from "../../shared/contracts.js";
 import { normalizeImages } from "../../shared/image-input.js";
+import { normalizeAttachments, validateUploadLimits } from "../../shared/attachment-input.js";
 import { UserFacingError } from "./errors.js";
 
 export function taskInteractionBody(input: TaskInteractionInput) {
   const images = normalizeImages(input.images);
+  const attachments = normalizeAttachments(input.attachments);
+  validateUploadLimits(images, attachments);
   const action = input.action;
   if (action === "pause" || action === "resume") {
     if (input.images !== undefined) throw new UserFacingError("暂停或继续操作不能包含图片");
+    if (input.attachments !== undefined) throw new UserFacingError("暂停或继续操作不能包含附件");
     return { action };
   }
   if (!["supplement", "replace", "answer"].includes(action)) throw new UserFacingError("不支持的任务操作");
@@ -14,12 +18,13 @@ export function taskInteractionBody(input: TaskInteractionInput) {
     throw new UserFacingError("补充要求不能超过 4000 字");
   }
   const text = input.text?.trim() ?? "";
-  if (!text && !images.length && !(action === "answer" && input.optionId)) throw new UserFacingError("请输入文字或添加图片");
+  if (!text && !images.length && !attachments.length && !(action === "answer" && input.optionId)) throw new UserFacingError("请输入文字或添加附件");
   if (action === "answer" && (typeof input.questionId !== "string" || !input.questionId.trim())) {
     throw new UserFacingError("回答缺少问题编号");
   }
   return { action, ...(input.text !== undefined || action !== "answer" ? { text } : {}),
     ...(images.length ? { images } : {}),
+    ...(attachments.length ? { attachments } : {}),
     ...(input.questionId !== undefined ? { question_id: input.questionId } : {}),
     ...(input.optionId !== undefined ? { option_id: input.optionId } : {}) };
 }

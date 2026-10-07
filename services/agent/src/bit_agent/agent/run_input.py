@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from bit_agent.attachments import validate_attachments, validate_upload_limits
 from bit_agent.context.summarizer import limit_summary_tokens, reconcile_context_summary
 from bit_agent.images import readable_objective, user_message, validate_images
 
@@ -17,7 +18,7 @@ class RunInput:
         memory = self.memory_tracker.memory
         replacing = update["kind"] == "replace"
         if replacing:
-            memory.objective = readable_objective(update["text"])
+            memory.objective = readable_objective(update["text"], update.get("attachments"))
             memory.constraints = []
         elif update["text"] and update["text"] not in memory.constraints:
             memory.constraints = [*memory.constraints, update["text"]]
@@ -41,11 +42,13 @@ class RunInput:
             if update["id"] in self.applied_interaction_ids:
                 continue
             images = validate_images(update.get("images"))
+            attachments = validate_attachments(update.get("attachments"))
+            validate_upload_limits(images, attachments)
             replacing = self._update_requirements(update)
             label = (
                 "[用户修改目标，原目标和原计划作废]" if replacing else "[用户补充要求，保留原目标]"
             )
-            message = user_message(label + "\n" + update["text"], images)
+            message = user_message(label + "\n" + update["text"], images, attachments)
             self.conversation.append(message)
             await self.archive([message])
             self.applied_interaction_ids.add(update["id"])

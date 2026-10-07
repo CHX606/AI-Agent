@@ -11,11 +11,12 @@ type PreviousTurnOptions
 import { type FileDiff,type StreamView } from "../stream-view";
 import { type TaskHistoryEntry } from "../task-history";
 import type { WorkspaceChooserControl } from "../workspace-chooser";
+import type { FileAttachment } from "../../shared/attachment-input";
 import type { ImageAttachment } from "../../shared/image-input";
 import type { ComposerImages } from "../attachments/composer-images";
 
 export type RunState = "send" | "running" | "stopped" | "paused" | "waiting" | "stopping";
-export interface ComposerMessage { text: string; images: ImageAttachment[]; }
+export interface ComposerMessage { text: string; images: ImageAttachment[]; attachments?: FileAttachment[]; }
 
 /** 当前桌面视图的状态与各功能控制器；由 main.ts 组装。 */
 export interface RendererApp {
@@ -77,6 +78,7 @@ export interface RendererApp {
   nextSessionOffset: number | null;
   activeObjective: string;
   activeImages: ImageAttachment[];
+  activeAttachments: FileAttachment[];
   composerImages: ComposerImages | null;
   /** 最后一轮有开始前的快照时，它的任务编号；只有这一轮能“编辑”或“重新生成”。 */
   rewindableTaskId: string | null;
@@ -153,7 +155,7 @@ export interface RendererApp {
   refreshSessions: (append?: boolean) => Promise<void>;
   prepareRun: (objective: string, title?: string) => void;
   steer: (mode: "supplement" | "answer") => Promise<void>;
-  runAgent: (text?: string | undefined, images?: ImageAttachment[]) => Promise<void>;
+  runAgent: (text?: string | undefined, images?: ImageAttachment[], attachments?: FileAttachment[]) => Promise<void>;
   restoreTask: (entry: TaskHistoryEntry) => Promise<void>;
   resetTask: () => void;
   setInspectorCollapsed: (collapsed: boolean) => void;
@@ -161,4 +163,3 @@ export interface RendererApp {
   browseWorkspace: () => Promise<void>;
   cyclePermission: () => void;
 }
-

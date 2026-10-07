@@ -1,6 +1,9 @@
+import { FILE_LIMITS, attachmentSize, normalizeAttachments, validateUploadLimits, type FileAttachment } from "../../shared/attachment-input";
 import { normalizeImages, type ImageAttachment } from "../../shared/image-input";
 import { errorText } from "../dom";
 import { pastedImageFiles, readImageFiles } from "./file-input";
+import { readAttachmentFiles } from "./attachment-file-input";
+import { attachmentCard, attachmentDetails } from "./attachment-card";
 import { previewOnClick } from "./image-preview";
 import "./attachments.css";
 
@@ -11,6 +14,7 @@ interface ComposerImageOptions {
 
 export class ComposerImages {
   private images: ImageAttachment[] = [];
+  private attachments: FileAttachment[] = [];
   private epoch = 0;
   private loading = 0;
   private readonly input = document.createElement("input");
@@ -23,21 +27,20 @@ export class ComposerImages {
   constructor(card: HTMLElement, private readonly textarea: HTMLTextAreaElement, actions: HTMLElement,
     private readonly options: ComposerImageOptions) {
     this.input.type = "file";
-    this.input.accept = "image/png,image/jpeg,image/webp,image/gif";
     this.input.multiple = true;
     this.input.hidden = true;
     this.upload.type = "button";
     this.upload.className = "image-upload";
-    this.upload.setAttribute("aria-label", "上传图片");
-    this.upload.title = "上传图片（也可 Ctrl+V 粘贴截图）";
-    this.upload.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 3-3 5 5"/></svg>';
+    this.upload.setAttribute("aria-label", "上传附件");
+    this.upload.title = "上传附件（最多 5 个、合计 20 MiB；Ctrl+V 粘贴截图）";
+    this.upload.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
     this.panel.className = "composer-images";
     this.list.className = "composer-image-list";
     this.error.className = "composer-image-error";
     this.error.setAttribute("role", "alert");
     this.progress.className = "composer-image-progress";
     this.progress.setAttribute("role", "status");
-    this.progress.textContent = "正在读取图片…";
+    this.progress.textContent = "正在读取附件…";
     this.panel.append(this.list, this.progress, this.error, this.input);
     card.prepend(this.panel);
     actions.prepend(this.upload);
@@ -51,11 +54,16 @@ export class ComposerImages {
   }
 
   snapshot(): ImageAttachment[] { return this.images.map(image => ({ ...image })); }
+  attachmentsSnapshot(): FileAttachment[] { return this.attachments.map(item => ({ ...item })); }
   isReading(): boolean { return this.loading > 0; }
 
-  set(images: ImageAttachment[]): void {
+  set(images: ImageAttachment[], attachments: FileAttachment[] = []): void {
     this.epoch += 1;
-    this.images = normalizeImages(images);
+    const nextImages = normalizeImages(images);
+    const nextAttachments = normalizeAttachments(attachments);
+    validateUploadLimits(nextImages, nextAttachments);
+    this.images = nextImages;
+    this.attachments = nextAttachments;
     this.loading = 0;
     this.error.textContent = "";
     this.render();
@@ -91,9 +99,13 @@ export class ComposerImages {
     this.render();
     this.options.changed();
     try {
-      const images = await readImageFiles(files);
+      const selected = await this.readFiles(files);
       if (epoch !== this.epoch) return;
-      this.images = normalizeImages([...this.images, ...images]);
+      const images = normalizeImages([...this.images, ...selected.images]);
+      const attachments = normalizeAttachments([...this.attachments, ...selected.attachments]);
+      validateUploadLimits(images, attachments);
+      this.images = images;
+      this.attachments = attachments;
     } catch (error) {
       if (epoch === this.epoch) this.error.textContent = errorText(error);
     } finally {
@@ -105,6 +117,34 @@ export class ComposerImages {
     }
   }
 
+  private async readFiles(files: File[]): Promise<{ images: ImageAttachment[]; attachments: FileAttachment[] }> {
+    if (this.images.length + this.attachments.length + files.length > FILE_LIMITS.maxCount) throw new Error("每次最多发送 5 个图片或附件");
+    const stored = [...this.images, ...this.attachments].reduce((total, file) => total + attachmentSize(file), 0);
+    if (stored + files.reduce((total, file) => total + file.size, 0) > FILE_LIMITS.maxTotalBytes) {
+      throw new Error("图片与附件总大小不能超过 20 MiB");
+    }
+    const pictureFiles = files.filter(file => file.type.startsWith("image/"));
+    const documentFiles = files.filter(file => !file.type.startsWith("image/"));
+    return { images: await readImageFiles(pictureFiles), attachments: await readAttachmentFiles(documentFiles) };
+  }
+
+  private fileCard(file: FileAttachment, index: number): HTMLElement {
+    const card = attachmentCard(attachmentDetails(file)!);
+    card.classList.add("composer-attachment");
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "attachment-remove";
+    remove.setAttribute("aria-label", `移除附件：${file.name}`);
+    remove.textContent = "×";
+    remove.addEventListener("click", () => {
+      this.attachments.splice(index, 1);
+      this.error.textContent = "";
+      this.render();
+      this.options.changed();
+    });
+    card.append(remove);
+    return card;
+  }
   private thumbnail(image: ImageAttachment, index: number): HTMLElement {
     const figure = document.createElement("figure");
     figure.className = "composer-image";
@@ -130,10 +170,11 @@ export class ComposerImages {
   }
 
   private render(): void {
-    this.list.replaceChildren(...this.images.map((image, index) => this.thumbnail(image, index)));
+    this.list.replaceChildren(...this.images.map((image, index) => this.thumbnail(image, index)),
+      ...this.attachments.map((file, index) => this.fileCard(file, index)));
     this.progress.hidden = !this.isReading();
     this.error.hidden = !this.error.textContent;
-    this.panel.hidden = !this.images.length && !this.isReading() && this.error.hidden;
+    this.panel.hidden = !this.images.length && !this.attachments.length && !this.isReading() && this.error.hidden;
     this.refresh();
   }
 }

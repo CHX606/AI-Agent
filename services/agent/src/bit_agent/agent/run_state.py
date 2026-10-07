@@ -24,6 +24,7 @@ class RunState:
     def _configure_identity(self, options: dict[str, Any]) -> None:
         self.prompt = options["prompt"]
         self.images = options["images"]
+        self.attachments = options["attachments"]
         self.root = options["root"]
         self.max_tool_rounds = options["max_tool_rounds"]
         self.response_client = options["response_client"]
@@ -49,7 +50,7 @@ class RunState:
         self.memory_project_id = options["memory_project_id"]
         self.memory_user_id = options["memory_user_id"]
         self.memory_tracker = WorkingMemoryTracker.create(
-            readable_objective(self.working_memory_objective or self.prompt),
+            readable_objective(self.working_memory_objective or self.prompt, self.attachments),
             thread_id=self.thread_id,
         )
         self.memory_warnings: list[str] = []

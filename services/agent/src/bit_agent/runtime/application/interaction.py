@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from bit_agent.attachments import attachment_metadata
 from bit_agent.images import image_metadata
 from bit_agent.runtime.application.capacity import ExecutionSlot
 from bit_agent.runtime.application.ports import StoragePort
@@ -107,24 +108,36 @@ class TaskInteraction(InteractionRequests, InteractionQuestions):
                 "status": task["status"],
                 "question": task.get("question"),
                 "last_answer": self._public_answer(task.get("last_answer")),
-                **self._intent_image_metadata(event, task),
+                **self._intent_upload_metadata(event, task),
             },
         )
         return task
 
     @staticmethod
-    def _intent_image_metadata(event: str, task: dict[str, Any]) -> dict[str, Any]:
+    def _intent_upload_metadata(event: str, task: dict[str, Any]) -> dict[str, Any]:
         if event != "TASK_INTENT_UPDATED":
             return {}
         updates = task.get("intent_updates", [])
-        images = updates[-1].get("images", []) if updates else []
-        return {"images": image_metadata(images)} if images else {}
+        upload = updates[-1] if updates else {}
+        images, attachments = upload.get("images", []), upload.get("attachments", [])
+        return {
+            **({"images": image_metadata(images)} if images else {}),
+            **({"attachments": attachment_metadata(attachments)} if attachments else {}),
+        }
 
     @staticmethod
     def _public_answer(answer: dict[str, Any] | None) -> dict[str, Any] | None:
-        if not answer or not answer.get("images"):
+        if not answer:
             return answer
-        return {**answer, "images": image_metadata(answer["images"])}
+        return {
+            **answer,
+            **({"images": image_metadata(answer["images"])} if answer.get("images") else {}),
+            **(
+                {"attachments": attachment_metadata(answer["attachments"])}
+                if answer.get("attachments")
+                else {}
+            ),
+        }
 
     @asynccontextmanager
     async def waiting(self):

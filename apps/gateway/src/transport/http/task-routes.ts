@@ -8,7 +8,7 @@ function registerTaskWrites(app: FastifyInstance, taskStore: TaskStore): void {
   app.post("/v1/tasks", { bodyLimit: IMAGE_LIMITS.maxRequestBytes }, async (request, reply) => {
     const parsed = createTaskBodySchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_REQUEST", details: parsed.error.issues,
-      user_message: "请输入任务描述或添加有效图片，并检查工作区与图片大小" });
+      user_message: "请输入任务描述或添加有效附件，并检查工作区与附件大小" });
     if (!isAbsolute(parsed.data.workspace_root)) return reply.code(400).send({ error: "INVALID_WORKSPACE_ROOT",
       message: "workspace_root 必须是绝对路径" });
     return reply.code(202).send(await taskStore.createTask(parsed.data));
@@ -17,7 +17,7 @@ function registerTaskWrites(app: FastifyInstance, taskStore: TaskStore): void {
     { bodyLimit: IMAGE_LIMITS.maxRequestBytes }, async (request, reply) => {
       const parsed = taskInteractionSchema.safeParse(request.body);
       if (!parsed.success) return reply.code(400).send({ error: "INVALID_INTERACTION", details: parsed.error.issues,
-        user_message: "任务操作或附件不正确，请填写文字、选择答案或添加有效图片" });
+        user_message: "任务操作或附件不正确，请填写文字、选择答案或添加有效附件" });
       return taskStore.interactTask(request.params.taskId, parsed.data);
     });
 }

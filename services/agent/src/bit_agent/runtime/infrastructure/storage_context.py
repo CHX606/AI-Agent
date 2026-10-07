@@ -99,6 +99,7 @@ class ContextRecords:
                     "objective": task["objective"],
                     "updates": self._task_inputs(task),
                     **({"images": task["images"]} if task.get("images") else {}),
+                    **({"attachments": task["attachments"]} if task.get("attachments") else {}),
                 }
             )
         return {"user_requests": requirements}
@@ -143,5 +144,7 @@ class ContextRecords:
     def _answer_applied(self, row: Any, answered: set[str], applied: set[str]) -> bool:
         update = json.loads(row["data"])
         return update["id"] in applied or (
-            not update.get("images") and row["question_id"] in answered
+            not update.get("images")
+            and not update.get("attachments")
+            and row["question_id"] in answered
         )

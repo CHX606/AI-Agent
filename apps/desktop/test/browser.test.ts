@@ -84,7 +84,7 @@ it("keeps app shortcuts working while the page has focus", () => {
 
 it("validates browser IPC input before reaching the view", async () => {
   // 和真实的 ipcMain.handle 一样，同步抛出的错误变成被拒绝的 Promise。
-  registerBrowserIpc({ detectLocalServers: async () => [5173] } as any,
+  registerBrowserIpc(
     (channel, listener) => electron.handle.set(channel, async (...args: any[]) => listener(...(args as [any])) ));
   const event = { sender: {} };
   await electron.handle.get("browser:show")!(event, { x: 10, y: 20, width: 300, height: 200 }, "");
@@ -99,5 +99,4 @@ it("validates browser IPC input before reaching the view", async () => {
   expect(pane.find).toHaveBeenLastCalledWith("x".repeat(500), { forward: false, next: true });
   await electron.handle.get("browser:hide")!(event, "yes");
   expect(pane.hide).toHaveBeenLastCalledWith(false);
-  expect(await electron.handle.get("browser:local-servers")!(event)).toEqual([5173]);
 });

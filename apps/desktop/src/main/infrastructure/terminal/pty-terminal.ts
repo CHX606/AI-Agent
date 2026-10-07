@@ -23,12 +23,18 @@ export function terminalEnvironment(source: NodeJS.ProcessEnv = process.env): Re
   return environment;
 }
 
+// 先让 PowerShell 正常加载用户 profile，再仅替换本会话的提示符。
+// -Command 启动的交互会话显式加载 PSReadLine，保留已有模块的颜色与编辑设置。
+const SHELL_STARTUP = [
+  'function global:prompt { "PS $($executionContext.SessionState.Path.CurrentLocation)> " }',
+  'if (-not (Get-Module PSReadLine)) { Import-Module PSReadLine }',
+].join("; ");
 export function spawnTerminal(input: { cwd: string; cols: number; rows: number }): TerminalProcess {
   const shell = pickShell();
   const cwd = input.cwd || homedir();
   // useConptyDll：用 node-pty 自带的新版 ConPTY（conpty.dll + OpenConsole.exe）。重绘更可靠；
   // 关闭时也不需要 fork 一个子进程去枚举控制台进程（那个子进程在 Electron 里会报 AttachConsole failed）。
-  const pty = spawn(shell, ["-NoLogo"], {
+  const pty = spawn(shell, ["-NoLogo", "-NoExit", "-Command", SHELL_STARTUP], {
     name: "xterm-256color", cols: input.cols, rows: input.rows, cwd, env: terminalEnvironment(), useConptyDll: true,
   });
   return {

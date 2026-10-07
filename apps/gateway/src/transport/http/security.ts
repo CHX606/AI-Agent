@@ -16,7 +16,7 @@ export function registerHttpSecurity(app: FastifyInstance, diagnostics: Diagnost
       method: request.method, status_code: err.statusCode ?? 500,
     });
     const userMessage = typeof err.userMessage === "string" ? err.userMessage
-      : err.statusCode === 413 ? "请求过大，请减少图片数量或大小" : undefined;
+      : err.statusCode === 413 ? "请求过大，请减少图片或附件的数量或大小" : undefined;
     return reply.code(err.statusCode ?? 500).send({ error: "REQUEST_FAILED", diagnostic_id: id,
       message: publicError(id, userMessage ?? "请求未完成，请检查输入和本地运行服务"),
       ...(userMessage ? { user_message: userMessage } : {}) });

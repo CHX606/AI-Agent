@@ -76,6 +76,7 @@ class TurnCheckpoints:
         return {
             "objective": task["objective"],
             "images": task.get("images") or [],
+            **({"attachments": task["attachments"]} if task.get("attachments") else {}),
             "workspace_root": task["workspace_root"],
             "session_deleted": remaining is None,
         }
