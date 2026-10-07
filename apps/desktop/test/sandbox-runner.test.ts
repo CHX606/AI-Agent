@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
@@ -192,7 +192,7 @@ it("keeps batch commands in the encoded PowerShell branch with an explicit cwd",
     { encoding: "utf8", shell: false, windowsHide: true });
   if (result.error) throw result.error;
   expect(result.status, result.stderr).toBe(0);
-  expect(result.stdout.trim()).toBe(workspace);
+  expect(realpathSync(result.stdout.trim())).toBe(realpathSync(workspace));
 });
 
 it("grants only trusted runtime reads before official WFP initialization and releases them on failure", async () => {

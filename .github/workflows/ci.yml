@@ -9,6 +9,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
 # 项目面向 Windows（便携 exe、PowerShell 脚本），pnpm-workspace.yaml 的 storeDir 也是 D: 盘绝对路径，
 # 所以 CI 同样跑在 Windows 上。Docker、PostgreSQL 和真实模型相关测试会按原有条件自动跳过。
 jobs:

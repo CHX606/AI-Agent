@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from bit_agent.sandbox import SandboxResult
+from bit_agent.sandbox import SandboxResult, sandbox_status
 from bit_agent.tools import run_checks
 from bit_agent.tools.context import ToolContext
 from bit_agent.tools.models import ToolStatus
@@ -238,6 +238,10 @@ async def test_build_rejects_multiple_or_file_targets(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_real_os_runs_python_quality_checks(tmp_path: Path) -> None:
+    status = await sandbox_status()
+    if not status["available"]:
+        pytest.skip(status["message"])
+
     source = tmp_path / "src" / "demo_package"
     source.mkdir(parents=True)
     module = source / "__init__.py"
@@ -260,6 +264,10 @@ async def test_real_os_runs_python_quality_checks(tmp_path: Path) -> None:
 @pytest.mark.parametrize("check", ["build", "typecheck"])
 @pytest.mark.asyncio
 async def test_real_missing_module_is_unverified(tmp_path: Path, check: str) -> None:
+    status = await sandbox_status()
+    if not status["available"]:
+        pytest.skip(status["message"])
+
     module = {"build": "build", "typecheck": "mypy"}[check]
     if importlib.util.find_spec(module) is not None:
         pytest.skip(f"当前环境已安装 {module}，缺失模块路径由独立回归覆盖")
