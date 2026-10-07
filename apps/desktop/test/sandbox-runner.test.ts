@@ -192,7 +192,7 @@ it("keeps batch commands in the encoded PowerShell branch with an explicit cwd",
     { encoding: "utf8", shell: false, windowsHide: true });
   if (result.error) throw result.error;
   expect(result.status, result.stderr).toBe(0);
-  expect(realpathSync(result.stdout.trim())).toBe(realpathSync(workspace));
+  expect(realpathSync.native(result.stdout.trim())).toBe(realpathSync.native(workspace));
 });
 
 it("grants only trusted runtime reads before official WFP initialization and releases them on failure", async () => {
