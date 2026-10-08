@@ -1,66 +1,80 @@
 # Bit Agent
 
-Bit Agent 是一个帮你处理代码项目的 AI 助手。你告诉它“修复这个问题”，它会查看代码、调用模型分析、用工具修改文件，再根据测试和检查结果继续处理。
+[![CI](https://github.com/CHX606/AI-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/CHX606/AI-Agent/actions/workflows/ci.yml)
 
-当前已经有桌面界面、命令行、本地 Python 执行服务、多 Agent 调查、记忆和上下文管理等实现，会话保存在本地 SQLite 中。它仍处于开发阶段，“模块已经写出来”不代表所有使用场景都没有 bug。
+基于 OpenAI Agents SDK 的桌面编程助手。读取代码、执行修改，并结合测试与检查结果继续处理，把“定位问题 → 修改 → 验证”串成可审阅、可审批的本地工作流。
 
-模型与工具之间的循环由 [OpenAI Agents SDK](docs/SDK_RUNTIME.md) 完成；`bit_agent.runtime` 管桌面任务和本地保存，工具模块管具体操作。
+> 持续开发中，主要在 Windows 上开发与验证。
 
-## 第一次看这个项目，先读哪里
+## 核心能力
 
-1. [项目目录大白话指南](docs/PROJECT_STRUCTURE.md)：解释根目录、缓存、源码、测试和运行记录分别是什么。
-2. [SDK 主线与学习入口](docs/SDK_RUNTIME.md) 和 [本地运行](docs/LOCAL_RUNTIME.md)：一次任务在代码里怎样执行和保存。
-3. [桌面界面和命令行使用说明](docs/CLI_DESKTOP.md)：了解怎么启动、怎么提交任务。
-4. [Python Agent 目录说明](services/agent/README.md)：了解真正执行任务的代码放在哪里。
-5. [文档导航](docs/README.md)：按问题找到更深入的说明。
+| 能力 | 实现 |
+| --- | --- |
+| Agent 执行循环 | OpenAI Agents SDK Runner 负责模型与工具循环；产品代码负责权限、持久化、上下文和完成判定 |
+| 只读多 Agent | 关闭 / 开启 / 智能三种模式；子 Agent 只能列目录、读文件和搜索代码，每批 1–3 个，同一任务最多 3 个并发，累计批次不限，不可递归委派；主 Agent 汇总证据并统一修改 |
+| 上下文管理 | 默认在历史达到可用输入预算的 75% 时，以降至 60% 为压缩目标；工具调用与结果成对保留，大型工具输出外置并记录 SHA-256 |
+| 本地记忆 | 会话、工作记忆与长期经验保存于 SQLite；仅从通过独立验收的任务中提炼长期经验，新任务按关键词召回 |
+| 权限与改动审阅 | 支持只读、逐次确认和允许修改模式；确认模式在补丁落盘前展示差异，删除文件与修改验证配置仍需明确批准；任务改动可审阅、撤销或提交 |
+| OS 沙箱验证 | 测试、检查和独立验收命令由 Windows OS 沙箱执行；修改后的仓库验证在临时副本中运行，与修改前结果比较，只追究新增问题 |
+| 独立验收 | 支持自动、总是和关闭；默认自动模式在改动达到 60 行或涉及至少 3 个代码文件时，派生测试 Agent 编写并运行验收用例，通过结论须引用当前版本的执行证据 |
+| MCP 工具 | 接入 stdio / Streamable HTTP MCP Server，按权限模式和服务配置审批；支持在当前会话内批准同一服务的后续调用，敏感凭据使用系统加密存储 |
+| 内置浏览器 | 通过本机 MCP 服务提供页面快照、截图和交互工具；只读操作无需审批，打开、点击和输入默认请求授权，支持会话内按服务批准；拒绝密码框输入，将页面内容标记为不可信数据 |
+| 多模态与终端 | 支持图片附件与粘贴，通过 Responses / Chat Completions 原生图片块传递；桌面端内置 node-pty + xterm.js 终端 |
 
-目录分层、接口连接和强制依赖规则见 [软件架构说明](docs/ARCHITECTURE.md)；执行 `pnpm architecture:check` 验证架构边界。
-
-你前面看到的 `.npm-cache`、`.pnpm-store`、`.pytest_cache` 等目录，都在目录指南中单独解释。
-
-## 当前做到了什么
-
-| 部分 | 当前情况 | 用大白话解释 |
-| --- | --- | --- |
-| Desktop | 已有实现 | 用窗口选项目、发任务、看结果，也能浏览目录和预览文本文件。 |
-| CLI | 已有实现 | 不开窗口，直接在终端提交和查询任务。 |
-| Gateway + 本地运行库 | 已有实现，已通过本地验收 | Gateway 通过进程管道交给 Python，SQLite 保存任务和会话。 |
-| 代码工具和 OS 沙箱 | 已有实现 | 能列目录、读文件、搜索、打补丁、运行测试和白名单检查。 |
-| Multi-Agent | 三档模式已有实现，已通过本地验收 | 关闭、开启、智能；主 Agent 按模式调用只读调查工具，自己统一修改。 |
-| Working Memory / 会话 | 本地持久化已有实现，已通过本地验收 | 保存历史、摘要和任务进度，没有 24 小时自动过期。 |
-| 长期记忆 | 已接入桌面端，默认开启 | 独立验收通过的任务会提炼经验，存在本机 SQLite；新任务开始时按关键词召回本项目的相关经验，不需要数据库或向量服务；侧栏“长期记忆”可查看和删除。 |
-| Context Manager | 已接入运行循环 | 历史太长时保存大段结果、压缩旧内容，控制发给模型的输入量。 |
-| 修改后的验证 | 已有实现 | 失败时与修改前对比，只追究新问题；没法验证时如实显示“无法验证”；其他语言可在 `.bit-agent/verify.json` 配置命令。 |
-| 模型接入 | 已有实现 | 支持 Responses 和 Chat Completions 两种接口，“测试连接”自动检测；可选更便宜的辅助模型。 |
-| 项目说明与 Git | 已有实现 | 读取 `AGENTS.md`；审阅改动后只把本次任务的文件提交到 Git。 |
-| 外部工具（MCP） | 已有实现 | 接入你配置的 MCP Server，调用前按服务确认。 |
-| 用量与对话管理 | 已有实现 | 显示每个任务的 tokens 和估算费用；对话可搜索、重命名、删除；后台完成时系统通知。 |
-| 评测和事件记录 | 已有实现 | 保存做题过程、修改内容和验证结果，方便回头查问题。 |
-| 独立 Web 管理后台、生产级认证与配额 | 尚未提供完整方案 | 当前主要面向本地开发和验证。 |
-
-“已通过本地验收”指用本地假模型实际启动 Gateway、Python 执行进程和桌面程序走通了对应流程；真实在线模型不在其范围内；OS 沙箱的独立验收另行记录。每次验收做了什么、没做什么，见 [docs/validation](docs/validation/)。
-
-## 一次任务怎么流转
+## 架构
 
 ```text
-你在 Desktop 或 CLI 输入任务
-  -> Gateway 接收任务
-  -> 本机 Python AgentRuntime 接收任务
-  -> 按会话编号恢复历史与工作记忆
-  -> OpenAI Agents SDK Runner 执行主 Agent
-     -> 关闭：不提供子 Agent 工具
-     -> 开启：要求优先分工，不强造无意义子任务
-     -> 智能：模型自行决定是否调用只读子 Agent
-  -> SQLite 保存记录，大型工具结果另存文件
-  -> 结果与事件回到 Gateway
-  -> Desktop 或 CLI 展示给你
+Electron Desktop / CLI
+        │ HTTP + SSE（桌面端断线按游标续传）
+        ▼
+Fastify Gateway：请求校验、鉴权、事件推送
+        │ stdin / stdout JSON Lines RPC
+        ▼
+Python AgentRuntime
+  ├─ OpenAI Agents SDK Runner：主 Agent / 只读调查 Agent / 验收 Agent
+  ├─ 工具层：文件、搜索、补丁、测试、检查、MCP
+  ├─ Context Manager 与 Memory（SQLite）
+  └─ Verification → Windows OS Sandbox
 ```
 
-模型负责分析和提出工具调用；SDK 负责反复请求模型并调用工具；产品代码负责权限、保存和修改后的验证要求。
+模型提出分析和工具调用，SDK 执行模型与工具循环；产品代码控制权限、保存状态和验证结果。Python 使用 import-linter、JavaScript / TypeScript 使用 dependency-cruiser 检查分层依赖方向。
 
-普通对话是否需要工具由主 Agent 判断，不再单独跑一轮任务分类器。代码 Agent 修改代码后，当前框架要求测试通过，并且 Ruff lint 覆盖本轮修改文件。独立评测还有自己的验收步骤。具体规则见 [工具说明](docs/TOOLS.md)。
+## 关键设计
 
-当前验收边界：已覆盖代码修改、Python 依赖环境准备、沙盒测试和质量检查；尚未接入浏览器自动化或 Computer Use。任务状态 `COMPLETED` 不代表网页交互、真实在线服务和音频播放均已验收，这些环节仍需单独验证。浏览器验收暂不作为当前实习项目的必做功能，后续可通过 MCP 或工具接口扩展。
+- **并发调查、统一修改**：只读调查 Agent 的工具列表不包含写入工具；主 Agent 核对证据后修改，避免多个调查任务同时写入同一文件。
+- **客户端管理上下文**：按预算分段生成并校验摘要；默认模型摘要未完整生成或未通过结构校验时保留原历史，关键内容仍超过硬上限时明确停止。不依赖服务端保存 `previous_response_id`。
+- **检查区分新增与已有问题**：失败时在私有副本中恢复本轮文件的修改前内容，比较 pytest 失败编号与 Ruff 规则计数；缺少可运行检查时标记“无法验证”。
+- **默认本地运行**：Gateway 通过进程管道调用 Python，SQLite 保存会话与经验，无需 Redis、Docker 或独立数据库；模型调用和可选 MCP 仍依赖相应服务。
+- **验证失败如实报告**：沙箱初始化失败不回退普通进程。Windows 默认向所有用户开放的目录需要完成 ACL 加固；沙箱仅覆盖受控验证命令，具体读写范围和系统授权见 [沙箱说明](docs/ENVIRONMENT.md)。
+
+## 质量保障
+
+- **CI**：GitHub Actions 在 Windows 运行 Ruff lint / format、Python 分层契约和 pytest，以及 Node 类型检查、测试与依赖边界检查。
+- **历史回归记录**：2026-10-05 图片功能验收中，Python 697 项通过、6 项跳过；Desktop 353 项通过，Gateway 68 项通过、2 项跳过。数量对应当时版本，详见 [图片验收记录](docs/validation/IMAGE_INPUT_2026-10-05.md)。
+- **沙箱安全回归**：2026-10-04 完成 ACL 加固后的本机记录中，真实 sandbox SDK 13 项通过，覆盖并发隔离、验证配置保护与工作区外写入限制，见 [沙箱修复记录](docs/validation/SANDBOX_FIXES_2026-10-04.md)。
+- **便携版验收**：`scripts/accept-packaged.mjs` 启动真实 exe，检查流式回答、修改授权、图片输入、改动审阅、终端和浏览器；布局验收覆盖主题、窗口宽度、缩放与面板组合。
+
+打包验收使用本地模拟模型，不能据此推断在线模型效果；sandbox-runtime 的 Windows 支持仍为 alpha。各次验收条件、结果和未覆盖范围见 [验收记录](docs/validation/)。
+
+## 技术栈
+
+Python 3.12 · OpenAI Agents SDK · MCP · Pydantic · SQLite · TypeScript · Electron · Fastify · Zod · xterm.js / node-pty · Vite / Vitest · uv / pnpm
+
+## 文档
+
+| 主题 | 文档 |
+| --- | --- |
+| 项目目录 | [目录指南](docs/PROJECT_STRUCTURE.md) |
+| 架构与分层 | [架构说明](docs/ARCHITECTURE.md) |
+| SDK 执行主线 | [运行主线](docs/SDK_RUNTIME.md) |
+| 多 Agent | [多 Agent 说明](docs/MULTI_AGENT.md) |
+| 上下文管理 | [上下文说明](docs/CONTEXT.md) |
+| 本地记忆 | [记忆说明](docs/MEMORY.md) |
+| 修改后的验证 | [验证规则](docs/VERIFICATION.md) |
+| 沙箱与环境 | [沙箱说明](docs/ENVIRONMENT.md) |
+| MCP 与浏览器 | [MCP 说明](docs/MCP.md) |
+| 桌面与命令行 | [使用说明](docs/CLI_DESKTOP.md) |
+| 完整导航 | [文档导航](docs/README.md) |
 
 ## 主要目录
 
@@ -123,7 +137,7 @@ pnpm 的包仓库由 `pnpm-workspace.yaml` 的 `storeDir` 指定为项目目录�
 
 便携版在界面“模型设置”中填写，点“测试连接”会用一次真实请求检查地址、密钥和模型，并自动选中可用的接口类型。
 
-如果需要长期记忆，再按 [记忆说明](docs/MEMORY.md) 配置独立的向量服务和数据库。Ollama 是一种向量服务配置选择，不是普通任务必须启动的组件。
+默认长期记忆使用本机 SQLite 和关键词检索，无需独立数据库或向量服务。PostgreSQL 与 Embedding 是可选部署方式，详见 [记忆说明](docs/MEMORY.md)。
 
 ### 3. 启动桌面与本地后台
 

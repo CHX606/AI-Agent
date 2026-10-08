@@ -31,7 +31,7 @@ Python 项目的依赖和测试配置统一在根目录 `pyproject.toml`。不�
 | --- | --- |
 | `context` | 找相关代码、提取片段、整理和压缩模型输入。 |
 | `memory` | 记录任务进度，以及可选的长期经验存储和召回。 |
-| `sandbox` | 调用 Docker 运行隔离测试和检查。 |
+| `sandbox` | 调用 Windows OS 沙箱运行受控测试和检查。 |
 | `security` | 限制路径访问范围。 |
 | `tool_provider` | 在本地工具、MCP 和权限限制之间做适配。 |
 | `mcp_server` | 把工具作为 MCP 服务提供出去。 |
@@ -43,7 +43,7 @@ Python 项目的依赖和测试配置统一在根目录 `pyproject.toml`。不�
 ## 怎样启动
 
 本地执行进程由 Gateway 自动启动（`python -m bit_agent.runtime`），平时用根目录的 `pnpm desktop:dev` 即可，见 [本地运行](../../docs/LOCAL_RUNTIME.md)。
-执行测试和检查还需要 Docker 环境。
+执行测试和检查使用 Windows OS 沙箱，首次运行可能需要系统授权；依赖与工具链须预先准备，详见 [沙箱说明](../../docs/ENVIRONMENT.md)。
 
 默认不会启用 PostgreSQL 长期记忆和向量服务。具体接入见 [记忆说明](../../docs/MEMORY.md)。
 
