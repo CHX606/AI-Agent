@@ -188,12 +188,13 @@ it("keeps batch commands in the encoded PowerShell branch with an explicit cwd",
   const decoded = Buffer.from(invocation.command, "base64").toString("utf16le");
   expect(decoded).toContain("Set-Location -LiteralPath $task.workspace");
   expect(decoded).toContain("$ProgressPreference='SilentlyContinue'");
+  // Windows CI 冷启动 PowerShell 可能超过默认 5 秒；进程超时仍限制真实挂起。
   const result = spawnSync(invocation.shell.exe, [...invocation.shell.args, invocation.command],
-    { encoding: "utf8", shell: false, windowsHide: true });
+    { encoding: "utf8", shell: false, windowsHide: true, timeout: 15_000 });
   if (result.error) throw result.error;
   expect(result.status, result.stderr).toBe(0);
   expect(realpathSync.native(result.stdout.trim())).toBe(realpathSync.native(workspace));
-});
+}, 20_000);
 
 it("grants only trusted runtime reads before official WFP initialization and releases them on failure", async () => {
   mocks.initialize.mockRejectedValueOnce(new Error("WFP probe rejected"));
